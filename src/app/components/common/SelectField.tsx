@@ -1,6 +1,10 @@
 import React from "react";
 import AsyncSelect from "react-select/async";
-import { FormatOptionLabelMeta, StylesConfig } from "react-select";
+import {
+  FormatOptionLabelMeta,
+  InputActionMeta,
+  StylesConfig,
+} from "react-select";
 
 type OptionType = {
   label: string;
@@ -8,7 +12,7 @@ type OptionType = {
   firstName?: string;
   lastName?: string;
   phone?: number;
-  
+  patientName?: string;
 };
 
 interface SelectFieldProps {
@@ -26,6 +30,8 @@ interface SelectFieldProps {
     data: OptionType,
     context: FormatOptionLabelMeta<OptionType>
   ) => React.ReactNode;
+  inputValue?: string;
+  onInputChange?: (value: string, actionMeta: InputActionMeta) => void;
   // onAddNew?: () => void;
 }
 
@@ -91,8 +97,12 @@ const SelectField: React.FC<SelectFieldProps> = ({
   isDisabled = false,
   defaultOptions,
   formatOptionLabel,
+  inputValue,
+  onInputChange,
   // onAddNew,
 }) => {
+  const hasValue = Boolean(value) || Boolean(inputValue);
+
   return (
     <div className="relative w-full">
       <AsyncSelect
@@ -101,6 +111,8 @@ const SelectField: React.FC<SelectFieldProps> = ({
         defaultOptions={defaultOptions || []}
         value={value}
         onChange={onChange}
+        inputValue={inputValue}
+        onInputChange={onInputChange}
         isClearable={isClearable}
         isDisabled={isDisabled}
         placeholder=" "
@@ -125,7 +137,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
       <label
         className={`absolute left-3 top-0 -translate-y-1/2 bg-white px-1 text-gray-500 text-xs transition-all
           ${
-            value
+            hasValue
               ? "top-0 -translate-y-1/2 text-xs px-1 text-purple-950"
               : "peer-placeholder-shown:top-1/2 peer-placeholder-shown:-translate-y-1/2 peer-placeholder-shown:text-xs"
           }

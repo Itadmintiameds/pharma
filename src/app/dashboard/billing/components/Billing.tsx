@@ -6,10 +6,11 @@ import Table from "@/app/components/common/Table";
 import { BillingData, BillingItemData } from "@/app/types/BillingData";
 import { ClipboardList, Plus } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { InputActionMeta } from "react-select";
 import { BsThreeDotsVertical } from "react-icons/bs";
 import Patient from "../../patient/components/Patient";
 import ItemDropdown from "@/app/components/common/ItemDropdown";
-import { getPatient } from "@/app/services/PatientService";
+import { getPatient, maxPatientId } from "@/app/services/PatientService";
 import { PatientData } from "@/app/types/PatientData";
 import SelectField from "@/app/components/common/SelectField";
 import { getInventoryDetails } from "@/app/services/InventoryService";
@@ -41,13 +42,50 @@ type OptionType = {
 interface PatientOption {
   label: string;
   value: string;
-  firstName: string;
-  lastName: string;
+  patientName: string;
   gender: string;
   patientId: string;
   patientId1: string;
   phone: number;
+  patientAddress?: string;
+  patientCity?: string;
 }
+
+const editablePatientFields = [
+  "patientName",
+  "gender",
+  "patientAddress",
+] as const;
+
+type EditablePatientField = (typeof editablePatientFields)[number];
+
+const isEditablePatientField = (
+  field: string
+): field is EditablePatientField => {
+  return editablePatientFields.includes(field as EditablePatientField);
+};
+
+const getIncrementedPatientId = (currentId: string): string => {
+  if (!currentId) {
+    return "";
+  }
+
+  const digitMatch = currentId.match(/(\d+)(?!.*\d)/);
+
+  if (!digitMatch || digitMatch.index === undefined) {
+    return currentId;
+  }
+
+  const digits = digitMatch[1];
+  const prefix = currentId.slice(0, digitMatch.index);
+  const suffix = currentId.slice(digitMatch.index + digits.length);
+
+  const incrementedNumber = (parseInt(digits, 10) + 1)
+    .toString()
+    .padStart(digits.length, "0");
+
+  return `${prefix}${incrementedNumber}${suffix}`;
+};
 
 const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
   const [showPatient, setShowPatient] = useState(false);
@@ -58,7 +96,9 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
   const [, setDoctorOptions] = useState<OptionType[]>([]);
   const [, setPharmacies] = useState<PharmacyData[]>([]);
   const [selectedMobile, setSelectedMobile] = useState<string | null>(null);
+  const [mobileInputValue, setMobileInputValue] = useState("");
   const [patientData, setPatientData] = useState<Partial<PatientData>>({});
+  const [nextPatientId, setNextPatientId] = useState<string>("");
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
   const [modalSecondaryMessage, setModalSecondaryMessage] = useState("");
@@ -90,8 +130,12 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
     patientId: "",
     patientId1: "",
     patientName: "",
+    patientAddress: "",
+    patientCity: "",
+    gender: "",
     doctorId: "",
     patientType: "Walkin",
+    phone: 0,
     subTotal: 0,
     totalGst: 0,
     totalDiscount: 0,
@@ -461,14 +505,15 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
     try {
       const patients = await getPatient();
       const options = patients.map((p: PatientData) => ({
-        label: `${p.phone} - ${p.firstName} ${p.lastName}`,
+        label: `${p.phone} - ${p.patientName}`,
         value: `${p.phone}_${p.patientId}`,
         phone: p.phone,
-        firstName: p.firstName,
-        lastName: p.lastName,
+        patientName: p.patientName,
         gender: p.gender,
         patientId: p.patientId,
         patientId1: p.patientId1,
+        patientAddress: p.patientAddress,
+        patientCity: p.patientCity,
       }));
 
       setMobileOptions(options);
@@ -481,6 +526,37 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
     fetchMobileNumbers();
   }, []);
 
+  useEffect(() => {
+    const fetchNextPatientId = async () => {
+      try {
+        const maxId = await maxPatientId();
+        if (maxId) {
+          setNextPatientId(getIncrementedPatientId(maxId));
+        } else {
+          setNextPatientId("");
+        }
+      } catch (error) {
+        console.error("Failed to fetch next patient id", error);
+      }
+    };
+
+    fetchNextPatientId();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMobile && nextPatientId) {
+      setPatientData((prev) => ({
+        ...prev,
+        patientId1: nextPatientId,
+      }));
+
+      setFormData((prev) => ({
+        ...prev,
+        patientId1: nextPatientId,
+      }));
+    }
+  }, [nextPatientId, selectedMobile]);
+
   const loadMobileOptions = (
     inputValue: string,
     callback: (options: OptionType[]) => void
@@ -491,39 +567,26 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
         String(opt.value).toLowerCase().includes(inputValue.toLowerCase())
     );
 
-    const addNewOption = {
-      label: "+ Add New Patient",
-      value: "newPatient",
-    };
+    // const addNewOption = {
+    //   label: "+ Add New Patient",
+    //   value: "newPatient",
+    // };
 
-    callback([addNewOption, ...filtered]);
+    // callback([addNewOption, ...filtered]);
+    callback(filtered);
   };
 
   const handleMobileSelect = (
     selected: { label: string; value: string } | null
   ) => {
     if (!selected) {
-      setSelectedMobile(null);
-      setPatientData({
-        phone: 0,
-        firstName: "",
-        gender: "",
-      });
-      setFormData((prev) => ({
-        ...prev,
-        patientId1: "",
-        patientType: "",
-        doctorId: "",
-      }));
-      return;
-    }
-
-    if (selected.value === "newPatient") {
-      handlePatientDrawer();
+      clearPatientSelection();
+      setMobileInputValue("");
       return;
     }
 
     setSelectedMobile(selected.value);
+    setMobileInputValue("");
 
     const [phonePart, patientIdPart] = selected.value.split("_");
 
@@ -534,24 +597,24 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
     );
 
     if (found) {
-      const fullName = `${found.firstName} ${found.lastName}`;
-
       setPatientData({
         phone: Number(found.phone),
-        firstName: fullName,
+        patientName: found.patientName,
         gender: found.gender || "Not Available",
+        patientAddress: found.patientAddress || "Not Available",
+        patientCity: found.patientCity || "Not Available",
       });
 
       setFormData((prev) => ({
         ...prev,
         patientId: found.patientId,
         patientId1: found.patientId1 || "",
-        patientName: fullName,
+        patientName: found.patientName,
         phone: Number(found.phone),
         gender: found.gender || "",
+        patientAddress: found.patientAddress || "",
+        patientCity: found.patientCity || "",
       }));
-    } else {
-      handlePatientDrawer();
     }
   };
 
@@ -670,6 +733,97 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
       modalCancelCallback();
     }
     setShowModal(false);
+  };
+
+  const resetPatientDetails = () => {
+    setPatientData({
+      phone: 0,
+      patientName: "",
+      gender: "",
+      patientAddress: "",
+      patientCity: "",
+      patientId1: nextPatientId || "",
+    });
+  };
+
+  const getClearedPatientFormFields = () => ({
+    patientId: "",
+    patientId1: nextPatientId || "",
+    patientName: "",
+    patientAddress: "",
+    patientCity: "",
+    gender: "",
+    phone: 0,
+  });
+
+  const handlePatientDetailsChange =
+    (field: EditablePatientField) =>
+    (
+      e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
+      const { value } = e.target;
+
+      setPatientData((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    };
+
+  const clearPatientSelection = () => {
+    setSelectedMobile(null);
+    resetPatientDetails();
+    setFormData((prev) => ({
+      ...prev,
+      patientType: "",
+      doctorId: "",
+      ...getClearedPatientFormFields(),
+    }));
+  };
+
+  const handleMobileInputChange = (
+    value: string,
+    actionMeta: InputActionMeta
+  ) => {
+    if (actionMeta.action === "set-value") {
+      setMobileInputValue(value);
+      return;
+    }
+
+    if (
+      actionMeta.action === "input-blur" ||
+      actionMeta.action === "menu-close"
+    ) {
+      return;
+    }
+
+    setMobileInputValue(value);
+
+    if (actionMeta.action === "input-change") {
+      const numericPhone = value ? Number(value) : 0;
+
+      if (selectedMobile) {
+        clearPatientSelection();
+      }
+
+      setPatientData((prev) => ({
+        ...prev,
+        phone: numericPhone,
+      }));
+
+      setFormData((prev) => ({
+        ...prev,
+        phone: numericPhone,
+      }));
+    }
+
+    if (!value) {
+      clearPatientSelection();
+    }
   };
 
   const handlePatientDrawer = () => {
@@ -881,7 +1035,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
             Basic Details
           </div>
 
-          <div className="relative mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+          <div className="relative mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2">
             {[
               {
                 id: "phone",
@@ -890,7 +1044,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                 readOnly: false,
               },
               {
-                id: "firstName",
+                id: "patientName",
                 label: "Patient Name",
                 type: "text",
                 readOnly: true,
@@ -901,31 +1055,73 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                 type: "text",
                 readOnly: true,
               },
-            ].map(({ id, label, type, readOnly }) =>
-              id === "phone" ? (
-                <div key={id} className="relative w-full z-50">
-                  <SelectField
-                    value={
-                      mobileOptions.find(
-                        (opt) => opt.value === selectedMobile
-                      ) || null
-                    }
-                    onChange={handleMobileSelect}
-                    label="Mobile Number"
-                    loadOptions={loadMobileOptions}
-                    formatOptionLabel={(data, { context }) => {
-                      // Handle the special case of "+ Add New Patient"
-                      if (data.value === "newPatient") {
-                        return data.label;
+              {
+                id: "patientAddress",
+                label: "Address",
+                type: "text",
+                readOnly: true,
+              },
+            ].map(({ id, label, type, readOnly }) => {
+              if (id === "phone") {
+                return (
+                  <div key={id} className="relative w-full z-50">
+                    <SelectField
+                      value={
+                        mobileOptions.find(
+                          (opt) => opt.value === selectedMobile
+                        ) || null
                       }
+                      onChange={handleMobileSelect}
+                      label="Mobile Number"
+                      loadOptions={loadMobileOptions}
+                      inputValue={mobileInputValue}
+                      onInputChange={handleMobileInputChange}
+                      formatOptionLabel={(data, { context }) => {
+                        const option = data as PatientOption;
 
-                      return context === "value"
-                        ? data.phone
-                        : `${data.phone} - ${data.firstName} ${data.lastName}`;
-                    }}
-                  />
-                </div>
-              ) : (
+                        return context === "value"
+                          ? option.phone
+                          : `${option.phone} - ${option.patientName}`;
+                      }}
+                    />
+                  </div>
+                );
+              }
+
+              if (id === "gender" && !selectedMobile) {
+                return (
+                  <div key={id} className="relative w-full">
+                    <label
+                      htmlFor={id}
+                      className="absolute left-3 top-0 -translate-y-1/2 bg-white px-1 text-gray-500 text-xs transition-all"
+                    >
+                      {label}
+                    </label>
+                    <select
+                      id={id}
+                      name={id}
+                      value={patientData.gender?.toString() ?? ""}
+                      onChange={handlePatientDetailsChange("gender")}
+                      className="peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none focus:border-purple-900 focus:ring-0"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                );
+              }
+
+              const isEditable = isEditablePatientField(id);
+              const computedReadOnly = isEditable
+                ? Boolean(selectedMobile)
+                : readOnly;
+              const changeHandler = isEditable
+                ? handlePatientDetailsChange(id)
+                : undefined;
+
+              return (
                 <div key={id} className="relative w-full">
                   <label
                     htmlFor={id}
@@ -937,7 +1133,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                     id={id}
                     name={id}
                     type={type}
-                    readOnly={readOnly}
+                    readOnly={computedReadOnly}
                     value={
                       patientData[id as keyof typeof patientData] instanceof
                       Date
@@ -948,20 +1144,21 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                             id as keyof typeof patientData
                           ]?.toString() || ""
                     }
+                    onChange={changeHandler}
                     className="peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none focus:border-purple-900 focus:ring-0"
                   />
                 </div>
-              )
-            )}
+              );
+            })}
           </div>
 
-          <div className="relative mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+          <div className="relative mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-2">
             {[
               {
                 id: "patientId1",
                 label: "Patient ID",
                 type: "text",
-                readOnly: false,
+                readOnly: true,
               },
               {
                 id: "patientType",
@@ -972,6 +1169,12 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
               {
                 id: "doctorId",
                 label: "Doctor Referred",
+                type: "text",
+                readOnly: false,
+              },
+              {
+                id: "patientCity",
+                label: "City",
                 type: "text",
                 readOnly: false,
               },
@@ -1027,7 +1230,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                     id={id}
                     name={id}
                     type={type}
-                    readOnly={readOnly}
+                    readOnly={id === "patientId1" ? true : readOnly}
                     value={
                       id === "doctorId"
                         ? formData.doctorName || ""
@@ -1035,7 +1238,11 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                           ""
                     }
                     onChange={handleInputChange}
-                    className="peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none focus:border-purple-900 focus:ring-0"
+                    className={`peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none ${
+                      id === "patientId1"
+                        ? "cursor-not-allowed bg-gray-100"
+                        : "focus:border-purple-900 focus:ring-0"
+                    }`}
                   />
                 )}
               </div>

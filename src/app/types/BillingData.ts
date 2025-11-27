@@ -24,6 +24,9 @@ export interface BillingItemData {
     patientId: string;
     patientId1?: string;
     patientName?: string;
+    patientAddress?: string;
+    patientCity?: string;
+  gender?: string;
     doctorId: string;
     doctorName?: string;
     patientType:string;

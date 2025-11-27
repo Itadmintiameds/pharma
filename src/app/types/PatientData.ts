@@ -1,12 +1,13 @@
 export interface PatientData {
     patientId: string;
     patientId1: string;
-    firstName: string;
-    lastName: string;
+    // firstName: string;
+    // lastName: string;
+    patientName: string;
     email: string;
     phone: number;
-    address: string;
-    city: string;
+    patientAddress: string;
+    patientCity: string;
     state: string;
     zip: string;
     bloodGroup: string;

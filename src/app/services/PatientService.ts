@@ -99,3 +99,18 @@ export const checkDuplicate = async (data: {firstName: string; phone: number;}):
     }
   }
 };
+
+
+  export const maxPatientId = async () => {
+    try {
+        const response = await api.get('pharma/patient/maxPatientId');
+        return response.data.data;
+    } catch (error: unknown) {
+        console.error('Error fetching Max PatientId:', error);
+        if (error instanceof Error) {
+            throw new Error(`Error fetching Max PatientId: ${error.message}`);
+        } else {
+            throw new Error('An unknown error occurred while fetching Max PatientId.');
+        }
+    }
+  };
