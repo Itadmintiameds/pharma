@@ -80,6 +80,7 @@ export const navigation: NavigationItem[] = [
     children: [
       { name: "Supplier Master", href: "/dashboard/supplier", icon: IoPeople, current: true },
       { name: "Item Master", href: "/dashboard/item", icon: RiMedicineBottleFill, current: true },
+      { name: "Variant Master", href: "/dashboard/variant", icon: RiMedicineBottleFill, current: true }
 
     ],
   },
