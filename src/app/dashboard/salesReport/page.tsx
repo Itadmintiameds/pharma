@@ -44,6 +44,8 @@ const Page = () => {
     const [netBillCount, setNetBillCount] = useState<number>(0);
     const [paymentFilter, setPaymentFilter] = useState<string>("all");
 
+    const [selectedMonth, setSelectedMonth] = useState<Date | null>(null);
+
     const toggleMenu = (billId?: string) => {
         setOpenMenuId((prev) => (prev === billId ? null : billId || null));
     };
@@ -684,12 +686,22 @@ const Page = () => {
                 setEndDate(new Date(endDateParam));
                 setIsCustomRangeApplied(true);
             }
+            else if (dateFilterParam === 'customMonth' && startDateParam) {
+                // Handle custom month from main code - set the month picker
+                const monthDate = new Date(startDateParam);
+                setStartDate(monthDate);
+                setSelectedMonth(monthDate); // Set the selected month for the picker
+                setIsCustomRangeApplied(true);
+                setShowDatePicker(false);
+            }
             else {
                 setStartDate(null);
                 setEndDate(null);
+                setSelectedMonth(null);
                 setIsCustomRangeApplied(false);
             }
         }
+
         if (paymentFilterParam) {
             setPaymentFilter(paymentFilterParam);
         }
@@ -827,7 +839,7 @@ const Page = () => {
                                                     ) : datePickerMode === "month" ? (
                                                         <div className="flex items-center border rounded-md p-2">
                                                             <DatePicker
-                                                                selected={startDate}
+                                                                selected={selectedMonth}
                                                                 onChange={(date) => setStartDate(date)}
                                                                 maxDate={new Date()}
                                                                 className="w-full focus:outline-none text-gray-900 text-sm"
