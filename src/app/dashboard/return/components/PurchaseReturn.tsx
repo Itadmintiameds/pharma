@@ -16,7 +16,7 @@ import {
   PurchaseReturnData,
   PurchaseReturnItem,
 } from "@/app/types/PurchaseReturnData";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import AsyncSelect from "react-select/async";
@@ -31,6 +31,7 @@ import { dropdown } from "@/app/components/common/Dropdown";
 
 // ADDED delete icon import as requested
 import { MdDelete } from "react-icons/md";
+import AddItemRow1 from "@/app/components/common/AddItemRow1";
 
 interface PurchaseReturnProps {
   setShowPurchaseReturn: (value: boolean) => void;
@@ -44,7 +45,7 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
 
   const [modalConfirmCallback, setModalConfirmCallback] = useState<
     () => Promise<void> | void
-  >(() => {});
+  >(() => { });
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
   const [modalSecondaryMessage, setModalSecondaryMessage] = useState("");
@@ -201,8 +202,8 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
           ...currentItem,
           [field]:
             field === "returnQuantity" ||
-            field === "purchasePrice" ||
-            field === "gstPercentage"
+              field === "purchasePrice" ||
+              field === "gstPercentage"
               ? Number(value)
               : value,
         };
@@ -579,7 +580,7 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
                     htmlFor={`purchaseBillNo-${idx}`}
                     className="absolute left-3 top-0 -translate-y-1/2 bg-white px-1 text-gray-500 text-xs transition-all z-10"
                   >
-                    Bill Number
+                    Invoice Number
                   </label>
 
                   <div className="peer w-full px-3 py-[6px] border border-gray-400 rounded-md bg-transparent text-black outline-none focus-within:border-purple-900 focus-within:ring-0">
@@ -695,8 +696,8 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
                     value={
                       row.supplierId
                         ? row.purchaseBillOptions?.find(
-                            (opt) => opt.supplierId === row.supplierId
-                          )?.supplierName || ""
+                          (opt) => opt.supplierId === row.supplierId
+                        )?.supplierName || ""
                         : ""
                     }
                     readOnly
@@ -793,13 +794,7 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
         ))}
 
         <div>
-          <Button
-            onClick={() => addNewRow()}
-            label="Add Item Row"
-            value=""
-            className="w-44 bg-gray h-11"
-            icon={<Plus size={15} />}
-          ></Button>
+          <AddItemRow1 onClick={addNewRow} />
         </div>
 
         <div className="border h-full w-lg border-Gray rounded-xl p-6 space-y-6 ml-auto font-normal text-sm">
@@ -820,11 +815,10 @@ const PurchaseReturn: React.FC<PurchaseReturnProps> = ({
           ].map(({ label, value, isTotal }, index) => (
             <div
               key={index}
-              className={`flex justify-between ${
-                isTotal
-                  ? "font-semibold text-base bg-gray1 h-8 p-1 items-center rounded-lg"
-                  : ""
-              }`}
+              className={`flex justify-between ${isTotal
+                ? "font-semibold text-base bg-gray1 h-8 p-1 items-center rounded-lg"
+                : ""
+                }`}
             >
               <div>{label}</div>
               <div>₹{value}</div>

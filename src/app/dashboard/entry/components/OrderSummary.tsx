@@ -136,9 +136,9 @@ const OrderSummary = () => {
             <div className="border border-gray w-96 h-64 rounded-lg p-6 flex">
               <div>
                 {[
-                  { label: "Bill No", value: purchaseEntryData.purchaseBillNo },
+                  { label: "Invoice No.", value: purchaseEntryData.purchaseBillNo },
                   {
-                    label: "Bill Date",
+                    label: "Invoice Date",
                     value: String(purchaseEntryData.purchaseDate ?? "N/A"),
                   },
                   {

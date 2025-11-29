@@ -1,7 +1,7 @@
 "use client";
 import Button from "@/app/components/common/Button";
 import React, { useEffect, useRef, useState } from "react";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import Table from "@/app/components/common/Table";
 import {
   PurchaseEntryData,
@@ -39,6 +39,7 @@ import {
   purchaseEntryItemSchema,
   purchaseEntrySchema,
 } from "@/app/schema/PurchaseEntrySchema";
+import AddItemRow1 from "@/app/components/common/AddItemRow1";
 
 interface PurchaseEntryProps {
   setShowPurchaseEntry: (value: boolean) => void;
@@ -781,7 +782,7 @@ const PurchaseEntry: React.FC<PurchaseEntryProps> = ({
     setSubTotal(newSubTotal);
     setGstTotal(newGstTotal);
     setTotalDiscountAmount(newDiscountAmount);
-    setGrandTotal(newGrandTotal);
+    setGrandTotal(Math.round(newGrandTotal));
   }, [purchaseRows, totalDiscountPercentage]);
 
   const handleShowModal = (options: ModalOptions) => {
@@ -805,12 +806,13 @@ const PurchaseEntry: React.FC<PurchaseEntryProps> = ({
   };
 
   const addPurchase = async () => {
-    if (Number(formData.invoiceAmount) !== grandTotal) {
-      toast.error(
-        "Invoice amount must match the grand total before confirming."
-      );
-      return;
-    }
+    const roundedGrandTotal = grandTotal;
+    if (Number(formData.invoiceAmount) !== roundedGrandTotal) {
+    toast.error(
+      "Invoice amount must match the grand total before confirming."
+    );
+    return;
+  }
 
      try {
     const billExists = await checkBillNoExists(
@@ -850,7 +852,7 @@ const PurchaseEntry: React.FC<PurchaseEntryProps> = ({
       totalSgst: gstTotal,
       totalDiscountPercentage: totalDiscountPercentage,
       totalDiscountAmount: totalDiscountAmount,
-      grandTotal: grandTotal,
+      grandTotal: roundedGrandTotal,
       stockItemDtos: purchaseRows.map((row) => ({
         itemId: row.itemId,
         batchNo: row.batchNo,
@@ -1035,7 +1037,7 @@ const PurchaseEntry: React.FC<PurchaseEntryProps> = ({
               { id: "orderId", label: "Order ID" },
               { id: "pharmacyName", label: "Pharmacy" },
               { id: "purchaseBillNo", label: "Invoice Number" },
-              { id: "billDate", label: "Bill Date", type: "date" },
+              { id: "billDate", label: "Invoice Date", type: "date" },
             ].map(({ id, label, type }) => (
               <div key={id} className="relative w-full">
                 {id === "orderId" ? (
@@ -1335,13 +1337,7 @@ const PurchaseEntry: React.FC<PurchaseEntryProps> = ({
         />
 
         <div>
-          <Button
-            onClick={() => addNewRow()}
-            label="Add Item Row"
-            value=""
-            className="w-44 bg-gray h-11"
-            icon={<Plus size={15} />}
-          ></Button>
+          <AddItemRow1 onClick={addNewRow} />
         </div>
 
         <div className="border h-full w-lg border-Gray rounded-xl p-6 space-y-4 ml-auto font-normal text-sm">

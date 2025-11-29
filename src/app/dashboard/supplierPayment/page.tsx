@@ -129,23 +129,27 @@ const Page = () => {
     fetchSupplierPayments();
   }, [fetchSupplierPayments]);
 
-  const handleRowSelect = (index: number) => {
-    const newSelectedRows = new Set(selectedRows);
+const handleRowSelect = useCallback((index: number) => {
+  setSelectedRows(prev => {
+    const newSelectedRows = new Set(prev);
     if (newSelectedRows.has(index)) {
       newSelectedRows.delete(index);
     } else {
       newSelectedRows.add(index);
     }
-    setSelectedRows(newSelectedRows);
-  };
+    return newSelectedRows;
+  });
+}, []);
 
-  const handleSelectAll = () => {
-    if (selectedRows.size === purchaseEntry.length) {
-      setSelectedRows(new Set());
+const handleSelectAll = useCallback(() => {
+  setSelectedRows(prev => {
+    if (prev.size === purchaseEntry.length) {
+      return new Set();
     } else {
-      setSelectedRows(new Set(purchaseEntry.map((_, index) => index)));
+      return new Set(purchaseEntry.map((_, index) => index));
     }
-  };
+  });
+}, [purchaseEntry]);
 
   const openSupplierPaymentDrawer = () => setShowSupplierPayment(true);
   const closeSupplierPaymentDrawer = () => setShowSupplierPayment(false);
@@ -165,7 +169,7 @@ const Page = () => {
       className?: string;
     }[] = [
       {
-        header: "Bill Number",
+        header: "Invoice Number",
         accessor: "purchaseBillNo",
         className: "text-left",
       },
@@ -246,7 +250,7 @@ const Page = () => {
       },
 
       {
-        header: "Bill Amount",
+        header: "Invoice Amount",
         accessor: (row: PurchaseEntryData) => {
           return row.grandTotal ? `₹${row.grandTotal.toLocaleString()}` : "";
         },
@@ -283,7 +287,7 @@ const Page = () => {
     }
 
     return base;
-  }, [activeTab, purchaseEntry.length, selectedRows]);
+  }, [activeTab, purchaseEntry.length, selectedRows, handleRowSelect, handleSelectAll]);
 
   return (
     <>

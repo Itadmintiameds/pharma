@@ -262,8 +262,8 @@ const Page = () => {
       "GRN No": item.grnNo,
       "Supplier Name": item.supplierName,
       "Purchase Date": formatDate(item.purchaseDate),
-      "Bill No": item.purchaseBillNo,
-      "Bill Amount": item.grandTotal || 0,
+      "Invoice No": item.purchaseBillNo,
+      "Invoice Amount": item.grandTotal || 0,
       "Due Status": item.dueStatus,
       "Payment Status": item.paymentStatus
     }));
@@ -319,8 +319,8 @@ const Page = () => {
             "GRN No": "GRN Number",
             "Supplier Name": "Supplier Name",
             "Purchase Date": "Purchase Date",
-            "Bill No": "Bill Number",
-            "Bill Amount": "Bill Amount (Rs.)",
+            "Invoice No": "Invoice Number",
+            "Invoice Amount": "Invoice Amount (Rs.)",
             "Due Status": "Due Status",
             "Payment Status": "Payment Status"
           },
@@ -425,7 +425,7 @@ const Page = () => {
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => handleSort("purchaseBillNo")}
         >
-          <span>Bill No</span>
+          <span>Invoice No</span>
           {sortConfig.key === "purchaseBillNo" ? (
             sortConfig.direction === "asc" ? (
               <FaArrowUp />
@@ -445,7 +445,7 @@ const Page = () => {
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => handleSort("grandTotal")}
         >
-          <span>Bill Amount</span>
+          <span>Invoice Amount</span>
           {sortConfig.key === "grandTotal" ? (
             sortConfig.direction === "asc" ? (
               <FaArrowUp />

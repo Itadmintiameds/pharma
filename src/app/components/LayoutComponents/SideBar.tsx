@@ -34,7 +34,7 @@ const SideBar = ({ isOpen, setIsOpen }: SideBarProps) => {
 
   return (
     <aside
-      className={`sidebar fixed inset-y-0 left-0   m-1 py-8 px-4 rounded-lg bg-primaryPurple text-gray shadow-lg transform transition-transform duration-300 ease-in-out ${
+      className={`sidebar fixed inset-y-0 left-0 m-1 py-8 px-1 rounded-lg bg-primaryPurple text-gray shadow-lg transform transition-transform duration-300 ease-in-out overflow:auto ${
         isOpen ? "w-60" : "w-20"
       }`}
     >
@@ -77,7 +77,7 @@ const SideBar = ({ isOpen, setIsOpen }: SideBarProps) => {
               )}
             </div>
           </div>
-          <nav className="mt-4 overflow-y-auto h-full">
+          <nav className="mt-4 overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar">
             <ul className="space-y-2">
               {navigation.map((item) => (
                 <li key={item.name}>

@@ -13,7 +13,7 @@ import {
   PurchaseOrderItem,
 } from "@/app/types/PurchaseOrderData";
 import { SupplierData } from "@/app/types/SupplierData";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import AddItem from "../../item/components/AddItem";
 import AddSupplier from "../../supplier/component/AddSupplier";
@@ -37,6 +37,7 @@ import { customSelectStyles } from "@/app/components/common/DropdownStyle";
 import EllipsisTooltip from "@/app/components/common/EllipsisTooltip";
 import { components } from "react-select";
 import SelectField from "@/app/components/common/SelectField";
+import AddItemRow1 from "@/app/components/common/AddItemRow1";
 
 interface PurchaseOrderProps {
   setShowPurchasOrder: (value: boolean) => void;
@@ -60,11 +61,11 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
   const [showSupplier, setShowSupplier] = useState(false);
   const [showItem, setShowItem] = useState(false);
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
- 
+
 
   const [modalConfirmCallback, setModalConfirmCallback] = useState<
     () => Promise<void> | void
-  >(() => {});
+  >(() => { });
   const [showModal, setShowModal] = useState(false);
   const [modalMessage, setModalMessage] = useState("");
   const [modalSecondaryMessage, setModalSecondaryMessage] = useState("");
@@ -75,7 +76,7 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
     { label: "+ Add New Supplier", value: "newSupplier" },
   ];
 
-  
+
   interface ModalOptions {
     message: string;
     secondaryMessage?: string;
@@ -251,111 +252,111 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
   const columns: {
     header: string;
     accessor:
-      | keyof PurchaseOrderItem
-      | ((row: PurchaseOrderItem, index: number) => React.ReactNode);
+    | keyof PurchaseOrderItem
+    | ((row: PurchaseOrderItem, index: number) => React.ReactNode);
     className?: string;
   }[] = [
-    {
-      header: "Item Name",
-      accessor: (row: PurchaseOrderItem, index: number) => (
-        <AsyncSelect
-          cacheOptions
-          defaultOptions={defaultItemOptions}
-          loadOptions={loadItemOptions}
-          isClearable={true}
-          value={
-            row.itemId
-              ? {
+      {
+        header: "Item Name",
+        accessor: (row: PurchaseOrderItem, index: number) => (
+          <AsyncSelect
+            cacheOptions
+            defaultOptions={defaultItemOptions}
+            loadOptions={loadItemOptions}
+            isClearable={true}
+            value={
+              row.itemId
+                ? {
                   label: row.itemName || "",
                   value: row.itemId,
                 }
-              : null
-          }
-          onChange={(selectedOption) => handleItemSelect(selectedOption, index)}
-          placeholder="Select or search item"
-          className="text-left w-full"
-          classNamePrefix="react-select"
-          styles={customSelectStyles<OptionType>()}
-          formatOptionLabel={(data, { context }) =>
-            context === "menu" ? (
-              <div className="flex flex-col font-medium leading-5 w-full">
+                : null
+            }
+            onChange={(selectedOption) => handleItemSelect(selectedOption, index)}
+            placeholder="Select or search item"
+            className="text-left w-full"
+            classNamePrefix="react-select"
+            styles={customSelectStyles<OptionType>()}
+            formatOptionLabel={(data, { context }) =>
+              context === "menu" ? (
+                <div className="flex flex-col font-medium leading-5 w-full">
+                  <EllipsisTooltip text={data.label} className="w-full" />
+                </div>
+              ) : (
                 <EllipsisTooltip text={data.label} className="w-full" />
-              </div>
-            ) : (
-              <EllipsisTooltip text={data.label} className="w-full" />
-            )
-          }
-          components={{
-            SingleValue: (props) => (
-              <components.SingleValue {...props}>
-                <EllipsisTooltip text={props.data.label} className="w-full" />
-              </components.SingleValue>
-            ),
-          }}
-        />
-      ),
-    },
-    {
-      header: "Order Qty",
-      accessor: (row: PurchaseOrderItem, index: number) => (
-        <input
-          type="number"
-          name="packageQuantity"
-          value={row.packageQuantity === 0 ? "" : row.packageQuantity}
-          onKeyDown={restrictInvalidNumberKeys}
-          onChange={handleNumericChange((e) => handleChange(e, index))}
-          className="border border-gray-300 p-2 rounded w-24 text-left outline-none focus:ring-0 focus:outline-none"
-        />
-      ),
-      className: "text-left",
-    },
+              )
+            }
+            components={{
+              SingleValue: (props) => (
+                <components.SingleValue {...props}>
+                  <EllipsisTooltip text={props.data.label} className="w-full" />
+                </components.SingleValue>
+              ),
+            }}
+          />
+        ),
+      },
+      {
+        header: "Order Qty",
+        accessor: (row: PurchaseOrderItem, index: number) => (
+          <input
+            type="number"
+            name="packageQuantity"
+            value={row.packageQuantity === 0 ? "" : row.packageQuantity}
+            onKeyDown={restrictInvalidNumberKeys}
+            onChange={handleNumericChange((e) => handleChange(e, index))}
+            className="border border-gray-300 p-2 rounded w-24 text-left outline-none focus:ring-0 focus:outline-none"
+          />
+        ),
+        className: "text-left",
+      },
 
-    {
-      header: "Manufacturer",
-      accessor: "manufacturer",
-      className: "text-left",
-    },
+      {
+        header: "Manufacturer",
+        accessor: "manufacturer",
+        className: "text-left",
+      },
 
-    {
-      header: "Variant Type",
-      accessor: "variantName",
-      className: "text-left",
-    },
-    { header: "Unit Type", accessor: "unitName", className: "text-left" },
-    {
-      header: "Purchase Price",
-      accessor: "purchasePrice",
-      className: "text-left",
-    },
+      {
+        header: "Variant Type",
+        accessor: "variantName",
+        className: "text-left",
+      },
+      { header: "Unit Type", accessor: "unitName", className: "text-left" },
+      {
+        header: "Purchase Price",
+        accessor: "purchasePrice",
+        className: "text-left",
+      },
 
-    { header: "Estimated Amount", accessor: "amount", className: "text-left" },
-    {
-      header: "Action",
-      accessor: (row: PurchaseOrderItem, index) => (
-        <div className="relative group">
-          <button className="p-2 rounded-full hover:bg-gray-200 cursor-pointer">
-            <BsThreeDotsVertical size={18} />
-          </button>
-
-          <div className="absolute right-0 mt-2 w-32 bg-white shadow-xl rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <button
-              onClick={() => handleItemDrawer(row.itemId)}
-              className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg whitespace-nowrap"
-            >
-              Edit Item Details
+      { header: "Estimated Amount", accessor: "amount", className: "text-left" },
+      {
+        header: "Action",
+        accessor: (row: PurchaseOrderItem, index) => (
+          <div className="relative group">
+            <button className="p-2 rounded-full hover:bg-gray-200 cursor-pointer">
+              <BsThreeDotsVertical size={18} />
             </button>
 
-            <button
-              onClick={() => handleDeleteRow(index)}
-              className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg"
-            >
-              Delete
-            </button>
+            <div className="absolute right-0 mt-2 w-32 bg-white shadow-xl rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+              <button
+                onClick={() => handleItemDrawer(row.itemId)}
+                className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg whitespace-nowrap"
+              >
+                Edit Item Details
+              </button>
+
+              <button
+                onClick={() => handleDeleteRow(index)}
+                className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg"
+              >
+                Delete
+              </button>
+            </div>
           </div>
-        </div>
-      ),
-    },
-  ];
+        ),
+      },
+    ];
 
   const handleChange = async (
     e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>,
@@ -376,16 +377,16 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
           prev.map((row, i) =>
             i === index
               ? {
-                  ...row,
-                  itemId: selectedItem.itemId,
-                  itemName: selectedItem.itemName,
-                  manufacturer: selectedItem.manufacturer || "",
-                  variantTypeId: selectedItem.variantId,
-                  unitTypeId: selectedItem.unitId,
-                  purchasePrice: selectedItem.purchasePrice || 0,
-                  variantName: variantDetails?.variantName || "",
-                  unitName: matchedUnit?.unitName || "",
-                }
+                ...row,
+                itemId: selectedItem.itemId,
+                itemName: selectedItem.itemName,
+                manufacturer: selectedItem.manufacturer || "",
+                variantTypeId: selectedItem.variantId,
+                unitTypeId: selectedItem.unitId,
+                purchasePrice: selectedItem.purchasePrice || 0,
+                variantName: variantDetails?.variantName || "",
+                unitName: matchedUnit?.unitName || "",
+              }
               : row
           )
         );
@@ -397,15 +398,15 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
         prev.map((row, i) =>
           i === index
             ? {
-                ...row,
-                [name]: value,
-                amount:
-                  name === "packageQuantity"
-                    ? parseFloat(value) * (row.purchasePrice || 0)
-                    : name === "purchasePrice"
+              ...row,
+              [name]: value,
+              amount:
+                name === "packageQuantity"
+                  ? parseFloat(value) * (row.purchasePrice || 0)
+                  : name === "purchasePrice"
                     ? (row.packageQuantity || 0) * parseFloat(value)
                     : row.amount,
-              }
+            }
             : row
         )
       );
@@ -813,9 +814,9 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
                       value={
                         formData.supplierId && formData.supplierName
                           ? {
-                              label: formData.supplierName,
-                              value: formData.supplierId,
-                            }
+                            label: formData.supplierName,
+                            value: formData.supplierId,
+                          }
                           : null
                       }
                       onChange={(selected) => {
@@ -871,23 +872,23 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
                       id === "intendedDeliveryDate"
                         ? undefined
                         : id === "orderedDate"
-                        ? new Date().toISOString().split("T")[0]
-                        : undefined
+                          ? new Date().toISOString().split("T")[0]
+                          : undefined
                     }
                     value={
                       id === "orderedDate"
                         ? new Date().toISOString().split("T")[0] // Always today's date
                         : id === "intendedDeliveryDate"
-                        ? typeof formData[id as keyof PurchaseOrderData] ===
-                          "string"
-                          ? (formData[id as keyof PurchaseOrderData] as string)
-                          : formData[id as keyof PurchaseOrderData] instanceof
-                            Date
-                          ? (formData[id as keyof PurchaseOrderData] as Date)
-                              .toISOString()
-                              .split("T")[0]
-                          : ""
-                        : formData[id as keyof PurchaseOrderData]?.toString() ??
+                          ? typeof formData[id as keyof PurchaseOrderData] ===
+                            "string"
+                            ? (formData[id as keyof PurchaseOrderData] as string)
+                            : formData[id as keyof PurchaseOrderData] instanceof
+                              Date
+                              ? (formData[id as keyof PurchaseOrderData] as Date)
+                                .toISOString()
+                                .split("T")[0]
+                              : ""
+                          : formData[id as keyof PurchaseOrderData]?.toString() ??
                           ""
                     }
                     onChange={(e) => {
@@ -898,8 +899,8 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
                         }));
                       }
                     }}
-                    readOnly={id === "orderedDate"} 
-                    disabled={id === "orderedDate"} 
+                    readOnly={id === "orderedDate"}
+                    disabled={id === "orderedDate"}
                   />
                 )}
               </div>
@@ -914,13 +915,7 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
         />
 
         <div>
-          <Button
-            onClick={() => addNewRow()}
-            label="Add Item Row"
-            value=""
-            className="w-44 bg-gray  h-11"
-            icon={<Plus size={15} />}
-          ></Button>
+          <AddItemRow1 onClick={addNewRow} />
         </div>
 
         <div className="border h-auto w-lg border-Gray rounded-xl p-6 space-y-6 ml-auto font-normal text-sm">
@@ -934,11 +929,10 @@ const PurchaseOrder: React.FC<PurchaseOrderProps> = ({
           ].map(({ label, value, isTotal }, index) => (
             <div
               key={index}
-              className={`flex justify-between ${
-                isTotal
+              className={`flex justify-between ${isTotal
                   ? "font-semibold text-base bg-gray h-8 p-1 items-center rounded-lg"
                   : ""
-              }`}
+                }`}
             >
               <div>{label}</div>
               <div>₹{value}</div>

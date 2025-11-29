@@ -186,9 +186,9 @@ const OrderSummaryClient = () => {
           <div className="border border-gray w-full h-64 rounded-lg p-6 flex">
             <div className="space-y-3">
               {[
-                { label: "Bill No", value: purchaseEntryData.purchaseBillNo },
+                { label: "Invoice No.", value: purchaseEntryData.purchaseBillNo },
                 {
-                  label: "Bill Date",
+                  label: "Invoice Date",
                   value: formatDate(purchaseEntryData.purchaseDate),
                 },
                 {
@@ -297,8 +297,8 @@ const OrderSummaryClient = () => {
           <section className="flex flex-row border-b border-gray-400">
             {/* Left Column: Bill Details */}
             <div className="flex-1 p-4 text-sm text-gray-700 space-y-2 tracking-wide border-r border-gray-400">
-              <p><span className="font-semibold text-gray-800">Bill No :</span> {purchaseEntryData?.purchaseBillNo || "N/A"}</p>
-              <p><span className="font-semibold text-gray-800">Bill Date :</span> {formatDate(purchaseEntryData?.purchaseDate)}</p>
+              <p><span className="font-semibold text-gray-800">Invoice No :</span> {purchaseEntryData?.purchaseBillNo || "N/A"}</p>
+              <p><span className="font-semibold text-gray-800">Invoice Date :</span> {formatDate(purchaseEntryData?.purchaseDate)}</p>
               <p><span className="font-semibold text-gray-800">Payment Due Date :</span> {formatDate(purchaseEntryData?.paymentDueDate)}</p>
               <p><span className="font-semibold text-gray-800">GRN No :</span> {purchaseEntryData?.grnNo || "N/A"}</p>
               <p><span className="font-semibold text-gray-800">Order Status :</span> {purchaseEntryData?.goodStatus || "N/A"}</p>

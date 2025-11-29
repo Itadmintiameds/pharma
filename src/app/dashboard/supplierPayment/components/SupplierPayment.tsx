@@ -53,6 +53,31 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
   }>({});
   const [, setLoading] = useState(false);
 
+  // Get reference label based on payment mode
+  const getReferenceLabel = () => {
+    switch (paymentMode?.value) {
+      case "Cash":
+        return "Voucher No";
+      case "UPI":
+        return "UTR No";
+      case "Card":
+        return "Card No";
+      case "Cheque":
+        return "Cheque No";
+      case "IMPS":
+      case "NEFT":
+      case "RTGS":
+        return "Transaction ID";
+      default:
+        return "Reference No";
+    }
+  };
+
+  // Check if reference number is required based on payment mode
+  const isReferenceRequired = () => {
+    return paymentMode?.value !== "Cash";
+  };
+
   const paymentModeOptions: OptionType[] = useMemo(() => {
     const options: OptionType[] = [
       { label: "Cash", value: "Cash" },
@@ -77,29 +102,60 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
   };
 
   const handleSave = async () => {
-    // ✅ validate first
-    const validation = supplierPaymentSchema.safeParse({
-      paymentMode: paymentMode?.value ?? "",
-      referenceNo,
-      amountPayable: enteredTotalAmount,
-    });
+    // For Cash payments, skip reference number validation if empty
+    if (paymentMode?.value === "Cash" && !referenceNo.trim()) {
+      // Skip reference number validation for Cash when empty
+      const validationWithoutReference = supplierPaymentSchema.omit({ referenceNo: true }).safeParse({
+        paymentMode: paymentMode?.value ?? "",
+        amountPayable: enteredTotalAmount,
+      });
 
-    if (!validation.success) {
-      const fieldErrors: {
-        paymentMode?: string;
-        referenceNo?: string;
-        amountPayable?: string;
-      } = {};
-      for (const issue of validation.error.issues) {
-        const key = issue.path?.[0] as
-          | "paymentMode"
-          | "referenceNo"
-          | "amountPayable"
-          | undefined;
-        if (key) fieldErrors[key] = issue.message;
+      if (!validationWithoutReference.success) {
+        const fieldErrors: {
+          paymentMode?: string;
+          referenceNo?: string;
+          amountPayable?: string;
+        } = {};
+        for (const issue of validationWithoutReference.error.issues) {
+          const key = issue.path?.[0] as
+            | "paymentMode"
+            | "referenceNo"
+            | "amountPayable"
+            | undefined;
+          if (key) {
+            fieldErrors[key] = issue.message;
+          }
+        }
+        setErrors(fieldErrors);
+        return;
       }
-      setErrors(fieldErrors);
-      return;
+    } else {
+      // For all other cases, validate normally
+      const validation = supplierPaymentSchema.safeParse({
+        paymentMode: paymentMode?.value ?? "",
+        referenceNo: referenceNo,
+        amountPayable: enteredTotalAmount,
+      });
+
+      if (!validation.success) {
+        const fieldErrors: {
+          paymentMode?: string;
+          referenceNo?: string;
+          amountPayable?: string;
+        } = {};
+        for (const issue of validation.error.issues) {
+          const key = issue.path?.[0] as
+            | "paymentMode"
+            | "referenceNo"
+            | "amountPayable"
+            | undefined;
+          if (key) {
+            fieldErrors[key] = issue.message;
+          }
+        }
+        setErrors(fieldErrors);
+        return;
+      }
     }
 
     setErrors({});
@@ -111,7 +167,10 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
         supplierId,
         paymentDate: new Date(),
         paymentMode: paymentMode?.value ?? "",
-        referenceNo,
+        // For Cash payments, allow empty reference number
+        referenceNo: paymentMode?.value === "Cash" && !referenceNo.trim() 
+          ? "" 
+          : referenceNo,
         amountPaid: parseFloat(enteredTotalAmount),
         remark,
         supplierPaymentDetailsDtos: bills.map((b) => ({
@@ -183,8 +242,8 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
         {showBills && (
           <div id="supplier-bills-table" className="border border-Gray rounded">
             <div className="grid grid-cols-2 font-medium text-base px-3 py-2 border-b border-Gray">
-              <div>Bill No</div>
-              <div className="text-right">Bill Amount</div>
+              <div>Invoice No</div>
+              <div className="text-right">Invoice Amount</div>
             </div>
             <div
               className={
@@ -204,7 +263,7 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
               ))}
             </div>
             <div className="grid grid-cols-2 px-3 py-2 border-t border-Gray font-semibold text-base">
-              <div>Total Bill Amount</div>
+              <div>Total Invoice Amount</div>
               <div className="text-right">₹{totalAmount.toLocaleString()}</div>
             </div>
           </div>
@@ -217,7 +276,7 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
                 value={paymentMode}
                 onChange={(val) => {
                   setPaymentMode(val);
-                  setErrors((e) => ({ ...e, paymentMode: undefined }));
+                  setErrors((e) => ({ ...e, paymentMode: undefined, referenceNo: undefined }));
                 }}
                 label={
                   <>
@@ -241,7 +300,8 @@ const SupplierPayment: React.FC<SupplierPaymentProps> = ({
                 id="referenceNo"
                 label={
                   <>
-                    Reference No <span className="text-tertiaryRed">*</span>
+                    {getReferenceLabel()}{" "}
+                    {isReferenceRequired() && <span className="text-tertiaryRed">*</span>}
                   </>
                 }
                 value={referenceNo}

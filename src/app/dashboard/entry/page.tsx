@@ -220,11 +220,11 @@ const Page = () => {
       accessor: (row: PurchaseEntryData) => formatDate(row.purchaseDate),
     },
     {
-      header: "Bill No",
+      header: "Invoice No.",
       accessor: "purchaseBillNo" as keyof PurchaseEntryData,
     },
     {
-      header: "Bill Amount",
+      header: "Invoice Amount",
       accessor: "grandTotal" as keyof PurchaseEntryData,
     },
     {

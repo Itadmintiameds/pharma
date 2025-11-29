@@ -166,7 +166,7 @@ const Page = () => {
 
                 <div className="grid">
                   <div className="font-normal text-sm text-gray mb-1">
-                    Bill Number
+                    Invoice Number
                   </div>
                   <div className="font-normal text-base">
                     {purchaseReturnData?.purchaseBillNo || "N/A"}
@@ -288,7 +288,7 @@ const Page = () => {
                     Batch Number
                   </th>
                   <th className="py-2 px-2 border border-gray-400 break-words">
-                    Bill Number
+                    Invoice No.
                   </th>
                   <th className="py-2 px-2 border border-gray-400 break-words">
                     Supplier

@@ -4,7 +4,7 @@ import Button from "@/app/components/common/Button";
 import Drawer from "@/app/components/common/Drawer";
 import Table from "@/app/components/common/Table";
 import { BillingData, BillingItemData } from "@/app/types/BillingData";
-import { ClipboardList, Plus } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { BsThreeDotsVertical } from "react-icons/bs";
 import Patient from "../../patient/components/Patient";
@@ -28,6 +28,7 @@ import { getPharmacy } from "@/app/services/PharmacyService";
 import { PharmacyData } from "@/app/types/PharmacyData";
 import { billingItemSchema, billingSchema } from "@/app/schema/BillingSchema";
 import { ZodError, ZodIssue } from "zod";
+import AddItemRow1 from "@/app/components/common/AddItemRow1";
 
 interface BillingProps {
   setShowBilling: (value: boolean) => void;
@@ -64,11 +65,11 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
   const [modalSecondaryMessage, setModalSecondaryMessage] = useState("");
   const [modalBgClass, setModalBgClass] = useState("");
   const [modalCancelCallback, setModalCancelCallback] = useState<() => void>(
-    () => {}
+    () => { }
   );
   const [modalConfirmCallback, setModalConfirmCallback] = useState<
     () => Promise<void> | void
-  >(() => {});
+  >(() => { });
 
   const defaultDoctorOptions = [
     { label: "+ Add New Doctor", value: "newDoctor" },
@@ -267,155 +268,155 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
   const columns: {
     header: string;
     accessor:
-      | keyof BillingItemData
-      | ((row: BillingItemData, index: number) => React.ReactNode);
+    | keyof BillingItemData
+    | ((row: BillingItemData, index: number) => React.ReactNode);
     className?: string;
   }[] = [
-    {
-      header: "Item Name",
-      accessor: (row: BillingItemData, index: number) => {
-        const selectedOption =
-          row.itemId && row.batchNo
-            ? {
+      {
+        header: "Item Name",
+        accessor: (row: BillingItemData, index: number) => {
+          const selectedOption =
+            row.itemId && row.batchNo
+              ? {
                 value: `${row.itemId}__${row.batchNo}`,
                 label: `${row.itemName}`,
                 batchNo: row.batchNo,
                 itemId: row.itemId,
                 packageQty: row.availableQuantity,
               }
-            : null;
+              : null;
 
-        return (
-          <ItemDropdown
-            selectedOption={selectedOption}
-            onChange={(selectedOption) => {
-              if (!selectedOption) {
-                const clearedRows = [...billingItemRows];
-                clearedRows[index] = clearBillingRow();
-                setBillingItemRows(clearedRows);
-                setBillingItems(clearedRows);
-                return;
+          return (
+            <ItemDropdown
+              selectedOption={selectedOption}
+              onChange={(selectedOption) => {
+                if (!selectedOption) {
+                  const clearedRows = [...billingItemRows];
+                  clearedRows[index] = clearBillingRow();
+                  setBillingItemRows(clearedRows);
+                  setBillingItems(clearedRows);
+                  return;
+                }
+
+                handleItemChange(index, selectedOption);
+              }}
+            />
+          );
+        },
+        className: "text-left outline-none focus:border-purple-900 focus:ring-0",
+      },
+
+      {
+        header: "Batch No.",
+        accessor: "batchNo",
+        className: "text-left",
+      },
+      {
+        header: "Expiry Date",
+        accessor: (row: BillingItemData) => {
+          if (!row.expiryDate || isNaN(new Date(row.expiryDate).getTime())) {
+            return "-";
+          }
+          return new Date(row.expiryDate).toLocaleDateString("en-GB"); // DD/MM/YYYY
+        },
+        className: "text-left",
+      },
+
+      {
+        header: "Pack Qty.",
+        accessor: (row: BillingItemData, index: number) => (
+          <div className="flex flex-col">
+            <input
+              type="number"
+              min="0"
+              value={row.packageQuantity === 0 ? "" : row.packageQuantity}
+              className="w-20 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-0 focus:outline-none"
+              onChange={(e) =>
+                handleBillingItemChange(
+                  index,
+                  "packageQuantity",
+                  Number(e.target.value)
+                )
               }
-
-              handleItemChange(index, selectedOption);
-            }}
-          />
-        );
+            />
+            <span className="text-xs text-gray-500 mt-1">
+              Available: {row.availableQuantity ?? 0}
+            </span>
+          </div>
+        ),
+        className: "text-left",
       },
-      className: "text-left outline-none focus:border-purple-900 focus:ring-0",
-    },
 
-    {
-      header: "Batch No.",
-      accessor: "batchNo",
-      className: "text-left",
-    },
-    {
-      header: "Expiry Date",
-      accessor: (row: BillingItemData) => {
-        if (!row.expiryDate || isNaN(new Date(row.expiryDate).getTime())) {
-          return "-";
-        }
-        return new Date(row.expiryDate).toLocaleDateString("en-GB"); // DD/MM/YYYY
+      {
+        header: "Price / Unit ",
+        accessor: "mrpSalePricePerUnit",
+        className: "text-left",
       },
-      className: "text-left",
-    },
-
-    {
-      header: "Pack Qty.",
-      accessor: (row: BillingItemData, index: number) => (
-        <div className="flex flex-col">
+      {
+        header: "Discount %",
+        accessor: (row: BillingItemData, index: number) => (
           <input
             type="number"
             min="0"
-            value={row.packageQuantity === 0 ? "" : row.packageQuantity}
+            value={row.discountPercentage === 0 ? "" : row.discountPercentage}
             className="w-20 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-0 focus:outline-none"
             onChange={(e) =>
               handleBillingItemChange(
                 index,
-                "packageQuantity",
+                "discountPercentage",
                 Number(e.target.value)
               )
             }
           />
-          <span className="text-xs text-gray-500 mt-1">
-            Available: {row.availableQuantity ?? 0}
-          </span>
-        </div>
-      ),
-      className: "text-left",
-    },
+        ),
+        className: "text-left",
+      },
+      {
+        header: "Discount",
+        accessor: "discountAmount",
+        className: "text-left",
+      },
+      {
+        header: "GST %",
+        accessor: "gstPercentage",
+        className: "text-left",
+      },
+      {
+        header: "GST",
+        accessor: "gstAmount",
+        className: "text-left",
+      },
+      {
+        header: "Gross",
+        accessor: "netTotal",
+        className: "text-left",
+      },
+      {
+        header: "Net",
+        accessor: "grossTotal",
+        className: "text-left",
+      },
 
-    {
-      header: "Price / Unit ",
-      accessor: "mrpSalePricePerUnit",
-      className: "text-left",
-    },
-    {
-      header: "Discount %",
-      accessor: (row: BillingItemData, index: number) => (
-        <input
-          type="number"
-          min="0"
-          value={row.discountPercentage === 0 ? "" : row.discountPercentage}
-          className="w-20 border border-gray-300 rounded px-2 py-1 outline-none focus:ring-0 focus:outline-none"
-          onChange={(e) =>
-            handleBillingItemChange(
-              index,
-              "discountPercentage",
-              Number(e.target.value)
-            )
-          }
-        />
-      ),
-      className: "text-left",
-    },
-    {
-      header: "Discount",
-      accessor: "discountAmount",
-      className: "text-left",
-    },
-    {
-      header: "GST %",
-      accessor: "gstPercentage",
-      className: "text-left",
-    },
-    {
-      header: "GST",
-      accessor: "gstAmount",
-      className: "text-left",
-    },
-    {
-      header: "Gross",
-      accessor: "netTotal",
-      className: "text-left",
-    },
-    {
-      header: "Net",
-      accessor: "grossTotal",
-      className: "text-left",
-    },
-
-    {
-      header: "Action",
-      accessor: (row: BillingItemData, index: number) => (
-        <div className="relative group">
-          <button className="p-2 rounded-full hover:bg-gray-200 cursor-pointer">
-            <BsThreeDotsVertical size={18} />
-          </button>
-
-          <div className="absolute right-0 mt-2 w-32 bg-white shadow-xl rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <button
-              onClick={() => handleDeleteRow(index)}
-              className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg"
-            >
-              Delete
+      {
+        header: "Action",
+        accessor: (row: BillingItemData, index: number) => (
+          <div className="relative group">
+            <button className="p-2 rounded-full hover:bg-gray-200 cursor-pointer">
+              <BsThreeDotsVertical size={18} />
             </button>
+
+            <div className="absolute right-0 mt-2 w-32 bg-white shadow-xl rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+              <button
+                onClick={() => handleDeleteRow(index)}
+                className="block w-full px-4 py-2 text-left text-gray-700 cursor-pointer hover:bg-purple-950 hover:text-white hover:rounded-lg"
+              >
+                Delete
+              </button>
+            </div>
           </div>
-        </div>
-      ),
-    },
-  ];
+        ),
+      },
+    ];
 
   const handleBillingItemChange = (
     index: number,
@@ -655,7 +656,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
     setModalBgClass(options.bgClassName || "");
     setModalConfirmCallback(() => options.onConfirmCallback);
 
-    setModalCancelCallback(() => options.onCancelCallback || (() => {}));
+    setModalCancelCallback(() => options.onCancelCallback || (() => { }));
 
     setShowModal(true);
   };
@@ -940,13 +941,13 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                     readOnly={readOnly}
                     value={
                       patientData[id as keyof typeof patientData] instanceof
-                      Date
+                        Date
                         ? (patientData[id as keyof typeof patientData] as Date)
-                            .toISOString()
-                            .split("T")[0]
+                          .toISOString()
+                          .split("T")[0]
                         : patientData[
-                            id as keyof typeof patientData
-                          ]?.toString() || ""
+                          id as keyof typeof patientData
+                        ]?.toString() || ""
                     }
                     className="peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none focus:border-purple-900 focus:ring-0"
                   />
@@ -1001,9 +1002,9 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                     value={
                       formData.doctorId && formData.doctorName
                         ? {
-                            label: formData.doctorName,
-                            value: formData.doctorId,
-                          }
+                          label: formData.doctorName,
+                          value: formData.doctorId,
+                        }
                         : null
                     }
                     onChange={(selected) => {
@@ -1032,7 +1033,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                       id === "doctorId"
                         ? formData.doctorName || ""
                         : formData[id as keyof typeof formData]?.toString() ??
-                          ""
+                        ""
                     }
                     onChange={handleInputChange}
                     className="peer w-full h-[49px] px-3 py-3 border border-Gray rounded-md bg-transparent text-black outline-none focus:border-purple-900 focus:ring-0"
@@ -1052,13 +1053,7 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
         />
 
         <div>
-          <Button
-            onClick={() => addNewRow()}
-            label="Add Item Row"
-            value=""
-            className="w-44 bg-gray h-11"
-            icon={<Plus size={15} />}
-          ></Button>
+          <AddItemRow1 onClick={addNewRow} />
         </div>
 
         <div className="flex flex-col space-y-4 px-4">
@@ -1089,11 +1084,10 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                       Payment Type
                     </label>
                     <select
-                      className={`w-60 h-10 p-2 border rounded-md bg-white text-black outline-none text-base ${
-                        formData.paymentStatus === "pending"
+                      className={`w-60 h-10 p-2 border rounded-md bg-white text-black outline-none text-base ${formData.paymentStatus === "pending"
                           ? "border-gray-300 bg-gray-100 cursor-not-allowed"
                           : "border-Gray focus:border-purple-900 focus:ring-0"
-                      }`}
+                        }`}
                       value={formData.paymentType}
                       onChange={handleInputChange}
                       name="paymentType"
@@ -1147,11 +1141,10 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                             type="number"
                             id="receivedAmount"
                             name="receivedAmount"
-                            className={`w-60 h-10 p-2 border rounded-md text-black outline-none text-base ${
-                              formData.paymentType !== "cash"
+                            className={`w-60 h-10 p-2 border rounded-md text-black outline-none text-base ${formData.paymentType !== "cash"
                                 ? "border-gray-300 bg-gray-100 cursor-not-allowed"
                                 : "border-Gray bg-white focus:border-purple-900 focus:ring-0"
-                            }`}
+                              }`}
                             value={
                               formData.receivedAmount === 0
                                 ? ""
@@ -1206,11 +1199,10 @@ const Billing: React.FC<BillingProps> = ({ setShowBilling }) => {
                             type="number"
                             id="balanceAmount"
                             name="balanceAmount"
-                            className={`w-60 h-10 p-2 border rounded-md text-black outline-none text-base ${
-                              formData.paymentType !== "cash"
+                            className={`w-60 h-10 p-2 border rounded-md text-black outline-none text-base ${formData.paymentType !== "cash"
                                 ? "border-gray-300 bg-gray-100 cursor-not-allowed"
                                 : "border-Gray bg-white focus:border-purple-900 focus:ring-0"
-                            }`}
+                              }`}
                             value={
                               formData.balanceAmount === 0
                                 ? ""

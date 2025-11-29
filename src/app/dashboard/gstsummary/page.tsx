@@ -366,7 +366,7 @@ const Page = () => {
           className="flex items-center gap-1 cursor-pointer"
           onClick={() => handleSort("purchaseBillNo")}
         >
-          <span>Bill No</span>
+          <span>Invoice No</span>
           {sortConfig.key === "purchaseBillNo" ? (
             sortConfig.direction === "asc" ? (
               <FaArrowUp size={12} />
@@ -567,7 +567,7 @@ const Page = () => {
   const prepareExportData = () => {
     return getSortedData().map(item => ({
       "Purchase Date": formatDate(item.purchaseDate),
-      "Bill No": item.purchaseBillNo,
+      "Invoice No": item.purchaseBillNo,
       "Supplier Name": item.supplierName,
       "Gross Amount": item.totalAmount || 0,
       "CGST": ((item.grandTotal || 0) - (item.totalAmount || 0)) / 2,
@@ -621,7 +621,7 @@ const Page = () => {
           filename: `purchase_gst_summary_${filenameSuffix}`,
           headers: {
             "Purchase Date": "Purchase Date",
-            "Bill No": "Bill Number",
+            "Invoice No": "Invoice Number",
             "Supplier Name": "Supplier Name",
             "Gross Amount": "Gross Amount (Rs.)",
             "CGST": "CGST (Rs.)",
