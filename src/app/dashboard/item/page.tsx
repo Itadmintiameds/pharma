@@ -322,43 +322,84 @@ const Page = () => {
   });
 
   // Fetch items with their variant information
-  const fetchItemsWithVariants = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const items = await getItem();
+//  const fetchItemsWithVariants = async () => {
+//     setLoading(true);
+//     setError(null);
+//     try {
+//       const items = await getItem();
+//       const itemsWithVariants = await Promise.all(
+//         items.map(async (item: ItemData) => {
+//           if (!item.variantId || !item.unitId) return item;
+//           try {
+//             const variantData = await getVariantById(item.variantId);
+//             const matchingUnit = variantData.unitDtos?.find(
+//               (unit: ItemData) => unit.unitId === item.unitId
+//             );
+//             return {
+//               ...item,
+//               variantName: variantData.variantName,
+//               unitName: matchingUnit?.unitName || "N/A",
+//             };
+//           } catch (err) {
+//             console.error("Error fetching variant for item:", item.itemId, err);
+//             return item;
+//           }
+//         })
+//       );
+//       setItemData(itemsWithVariants);
+//     } catch (error) {
+//       console.error("Failed to fetch items:", error);
+//       setError("Failed to load item data");
+//     } finally {
+//       setLoading(false);
+//     }
+//   };
 
-      const itemsWithVariants = await Promise.all(
-        items.map(async (item: ItemData) => {
-          if (!item.variantId || !item.unitId) return item;
 
-          try {
-            const variantData = await getVariantById(item.variantId);
 
-            const matchingUnit = variantData.unitDtos?.find(
-              (unit: ItemData) => unit.unitId === item.unitId
-            );
 
-            return {
-              ...item,
-              variantName: variantData.variantName,
-              unitName: matchingUnit?.unitName || "N/A",
-            };
-          } catch (err) {
-            console.error("Error fetching variant for item:", item.itemId, err);
-            return item;
-          }
-        })
-      );
+const fetchItemsWithVariants = async () => {
+  setLoading(true);
+  setError(null);
 
-      setItemData(itemsWithVariants);
-    } catch (error) {
-      console.error("Failed to fetch items:", error);
-      setError("Failed to load item data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const items = await getItem();
+
+    const itemsWithVariants = await Promise.all(
+      items.map(async (item: ItemData) => {
+        if (!item.variantId || !item.unitId) return item;
+
+        try {
+          const variantData = await getVariantById(item.variantId);
+
+          const matchingUnit = variantData.unitDtos?.find(
+            (unit) => unit.unitId === item.unitId
+          );
+
+          return {
+            ...item,
+            variantName: variantData.variantName,
+            unitName: matchingUnit?.unitName || "N/A",
+          };
+        } catch (err) {
+          console.error(
+            "Error fetching variant for item:",
+            item.itemId,
+            err
+          );
+          return item;
+        }
+      })
+    );
+
+    setItemData(itemsWithVariants);
+  } catch (error) {
+    console.error("Failed to fetch items:", error);
+    setError("Failed to load item data");
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Fetch items on component mount
   useEffect(() => {
