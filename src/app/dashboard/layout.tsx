@@ -14,8 +14,9 @@ export default function layout({
       <div className="flex flex-1 flex-col">
         <Navbar />
 
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-6 bg-pneutral-50">{children}</main>
       </div>
     </div>
   );
 }
+

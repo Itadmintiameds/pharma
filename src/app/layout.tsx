@@ -28,8 +28,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${notoSans.variable} ${workSans.variable} ${openSans.variable}`}>
-      <body>{children}</body>
+    <html lang="en" className={`${notoSans.variable} ${workSans.variable} ${openSans.variable} h-screen overflow-hidden`}>
+      <body className="h-screen overflow-hidden">{children}</body>
     </html>
   );
 }
+
