@@ -151,8 +151,8 @@
      FONT 
   ========================= */
 
-  --font-sans: var(--font-noto);
-  --font-heading: var(--font-work);
+  --font-noto-sans: var(--font-noto);
+  --font-work-sans: var(--font-work);
   --font-open-sans: var(--font-open-sans);
 
   /* =========================
@@ -257,17 +257,17 @@
   --text-display-lg: 64px;
   --text-display-lg--line-height: 72px;
   --text-display-lg--letter-spacing: 0;
-  --text-display-lg--font-family: var(--font-heading);
+  --text-display-lg--font-family: var(--font-work-sans);
 
   --text-display-md: 56px;
   --text-display-md--line-height: 64px;
   --text-display-md--letter-spacing: 0;
-  --text-display-md--font-family: var(--font-heading);
+  --text-display-md--font-family: var(--font-work-sans);
 
   --text-display-sm: 52px;
   --text-display-sm--line-height: 60px;
   --text-display-sm--letter-spacing: 0;
-  --text-display-sm--font-family: var(--font-heading);
+  --text-display-sm--font-family: var(--font-work-sans);
 
   /* =========================
      HEADINGS
@@ -276,32 +276,32 @@
   --text-h1: 44px;
   --text-h1--line-height: 52px;
   --text-h1--letter-spacing: 0;
-  --text-h1--font-family: var(--font-heading);
+  --text-h1--font-family: var(--font-work-sans);
 
   --text-h2: 36px;
   --text-h2--line-height: 44px;
   --text-h2--letter-spacing: 0;
-  --text-h2--font-family: var(--font-heading);
+  --text-h2--font-family: var(--font-work-sans);
 
   --text-h3: 32px;
   --text-h3--line-height: 40px;
   --text-h3--letter-spacing: 0;
-  --text-h3--font-family: var(--font-heading);
+  --text-h3--font-family: var(--font-work-sans);
 
   --text-h4: 28px;
   --text-h4--line-height: 36px;
   --text-h4--letter-spacing: 0;
-  --text-h4--font-family: var(--font-heading);
+  --text-h4--font-family: var(--font-work-sans);
 
   --text-h5: 24px;
   --text-h5--line-height: 32px;
   --text-h5--letter-spacing: 0;
-  --text-h5--font-family: var(--font-heading);
+  --text-h5--font-family: var(--font-work-sans);
 
   --text-h6: 20px;
   --text-h6--line-height: 28px;
   --text-h6--letter-spacing: 0;
-  --text-h6--font-family: var(--font-heading);
+  --text-h6--font-family: var(--font-work-sans);
 
   /* =========================
      PARAGRAPH
@@ -339,27 +339,27 @@
   --text-label-l5: 18px;
   --text-label-l5--line-height: 24px;
   --text-label-l5--letter-spacing: 0;
-  --text-label-l5--font-family: var(--font-heading);
+  --text-label-l5--font-family: var(--font-work-sans);
 
   --text-label-l4: 16px;
   --text-label-l4--line-height: 24px;
   --text-label-l4--letter-spacing: 0;
-  --text-label-l4--font-family: var(--font-heading);
+  --text-label-l4--font-family: var(--font-work-sans);
 
   --text-label-l3: 14px;
   --text-label-l3--line-height: 20px;
   --text-label-l3--letter-spacing: 0;
-  --text-label-l3--font-family: var(--font-heading);
+  --text-label-l3--font-family: var(--font-work-sans);
 
   --text-label-l2: 12px;
   --text-label-l2--line-height: 18px;
   --text-label-l2--letter-spacing: 0;
-  --text-label-l2--font-family: var(--font-heading);
+  --text-label-l2--font-family: var(--font-work-sans);
 
   --text-label-l1: 8px;
   --text-label-l1--line-height: 16px;
   --text-label-l1--letter-spacing: 0;
-  --text-label-l1--font-family: var(--font-heading);
+  --text-label-l1--font-family: var(--font-work-sans);
 
   /* =========================
      SPACING
@@ -410,7 +410,7 @@
   font-family: var(--font-noto);
 }
 
-@utility font-heading {
+@utility font-work-sans {
   font-family: var(--font-work);
 }
 
