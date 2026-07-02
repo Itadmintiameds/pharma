@@ -12,3 +12,12 @@ export interface VerifyOtpRequest {
   userEmail: string;
   otp: string;
 }
+
+export interface EmailOtpRequest {
+  email: string;
+}
+
+export interface EmailOtpVerifyRequest {
+  email: string;
+  otp: string;
+}

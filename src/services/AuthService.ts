@@ -1,4 +1,4 @@
-import { LoginRequest, RegisterRequest, VerifyOtpRequest } from "@/types/AuthData";
+import { EmailOtpRequest, EmailOtpVerifyRequest, LoginRequest, RegisterRequest, VerifyOtpRequest } from "@/types/AuthData";
 import api from "@/utils/api";
 import { handleApiError } from "@/utils/errorHandler";
 
@@ -36,5 +36,23 @@ export const logout = async () => {
     return response.data;
   } catch (error) {
     handleApiError(error, "Failed to logout.");
+  }
+};
+
+export const sendEmailOtp = async (data: EmailOtpRequest) => {
+  try {
+    const response = await api.post("/verification/sendOtp", data);
+    return response.data;
+  } catch (error) {
+    handleApiError(error, "Failed to send OTP.");
+  }
+};
+
+export const verifyEmailOtp = async (data: EmailOtpVerifyRequest) => {
+  try {
+    const response = await api.post("/verification/verifyOtp", data);
+    return response.data;
+  } catch (error) {
+    handleApiError(error, "Failed to verify OTP.");
   }
 };

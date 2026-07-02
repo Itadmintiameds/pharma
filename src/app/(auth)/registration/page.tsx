@@ -4,7 +4,7 @@ import Input from "@/app/components/common/Input";
 import React, { useRef, useState } from "react";
 import Image from "next/image";
 import Button from "@/app/components/common/Button";
-import { register } from "@/services/AuthService";
+import { register, sendEmailOtp, verifyEmailOtp } from "@/services/AuthService";
 import { useRouter } from "next/navigation";
 
 const page = () => {
@@ -22,6 +22,8 @@ const page = () => {
   const [userEmail, setUserEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [termsError, setTermsError] = useState("");
 
   const validatePassword = (password: string) => {
     const passwordRegex =
@@ -38,17 +40,47 @@ const page = () => {
     return "";
   };
 
-  const handleChange = (value: string, index: number) => {
+  const handleChange = async (value: string, index: number) => {
     // Only allow numeric input
     if (value && !/^\d+$/.test(value)) return;
 
     const newOtp = [...otp];
-    newOtp[index] = value.substring(value.length - 1); // Get last typed character
+    newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
 
     // Auto-focus next input field
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
+    }
+
+    // Auto verify OTP when all 6 digits are entered
+    const updatedOtp = [...newOtp];
+
+    if (updatedOtp.every((digit) => digit !== "")) {
+      try {
+        const response = await verifyEmailOtp({
+          email: userEmail,
+          otp: updatedOtp.join(""),
+        });
+
+        console.log("OTP Verified:", response);
+
+        setIsEmailVerified(true);
+        setShowOtp(false);
+
+        // Optional: Clear OTP after successful verification
+        setOtp(["", "", "", "", "", ""]);
+      } catch (error) {
+        if (error instanceof Error) {
+          console.error(error.message);
+
+          // Clear OTP on failure
+          setOtp(["", "", "", "", "", ""]);
+
+          // Focus first box again
+          inputRefs.current[0]?.focus();
+        }
+      }
     }
   };
 
@@ -62,27 +94,94 @@ const page = () => {
     }
   };
 
+  // const handleSubmit = async () => {
+  //   try {
+  //     const payload = {
+  //       userEmail,
+  //       password,
+  //     };
+
+  //     console.log(payload);
+
+  //     const response = await register(payload);
+
+  //     console.log("Registration Successful:", response);
+
+  //     // Redirect to Login page
+  //     router.push("/login");
+  //   } catch (error) {
+  //     if (error instanceof Error) {
+  //       console.error(error.message);
+
+  //       // Display error message here
+  //       // toast.error(error.message);
+  //     }
+  //   }
+  // };
+
   const handleSubmit = async () => {
+    let hasError = false;
+
+    // Reset previous errors
+    setEmailError("");
+    setPasswordError("");
+    setConfirmPasswordError("");
+    setTermsError("");
+
+    // Email validation
+    if (!userEmail.trim()) {
+      setEmailError("Email ID is required.");
+      hasError = true;
+    } else if (!isEmailVerified) {
+      setEmailError("Please verify your Email ID.");
+      hasError = true;
+    }
+
+    // Password validation
+    if (!password.trim()) {
+      setPasswordError("Password is required.");
+      hasError = true;
+    } else {
+      const passwordValidation = validatePassword(password);
+      if (passwordValidation) {
+        setPasswordError(passwordValidation);
+        hasError = true;
+      }
+    }
+
+    // Confirm password validation
+    if (!confirmPassword.trim()) {
+      setConfirmPasswordError("Confirm Password is required.");
+      hasError = true;
+    } else if (password !== confirmPassword) {
+      setConfirmPasswordError("Passwords did not match.");
+      hasError = true;
+    }
+
+    // Terms validation
+    if (!isChecked) {
+      setTermsError("Please accept the Terms & Conditions and Privacy Policy.");
+      hasError = true;
+    }
+
+    if (hasError) {
+      return;
+    }
+
     try {
       const payload = {
         userEmail,
         password,
       };
 
-      console.log(payload);
-
       const response = await register(payload);
 
       console.log("Registration Successful:", response);
 
-      // Redirect to Login page
       router.push("/login");
     } catch (error) {
       if (error instanceof Error) {
-        console.error(error.message);
-
-        // Display error message here
-        // toast.error(error.message);
+        setEmailError(error.message);
       }
     }
   };
@@ -116,6 +215,40 @@ const page = () => {
       setConfirmPasswordError("");
     }
   };
+
+  const handleSendOtp = async () => {
+    try {
+      const response = await sendEmailOtp({
+        email: userEmail,
+      });
+
+      console.log("OTP Sent:", response);
+
+      setShowOtp(true);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message);
+      }
+    }
+  };
+
+  // const handleVerifyOtp = async () => {
+  //   try {
+  //     const response = await verifyEmailOtp({
+  //       email: userEmail,
+  //       otp: otp.join(""),
+  //     });
+
+  //     console.log("OTP Verified:", response);
+
+  //     setIsEmailVerified(true);
+  //     setShowOtp(false);
+  //   } catch (error) {
+  //     if (error instanceof Error) {
+  //       console.error(error.message);
+  //     }
+  //   }
+  // };
 
   return (
     <>
@@ -221,6 +354,7 @@ const page = () => {
                 placeholder="abc@hospital.in"
                 value={userEmail}
                 onChange={(e) => setUserEmail(e.target.value)}
+                error={emailError}
                 leftIcon={
                   <Image
                     src="/Login&RegistrationIcons/EmailIcon.svg"
@@ -231,10 +365,16 @@ const page = () => {
                 }
                 rightIcon={
                   <button
-                    onClick={() => setShowOtp(true)}
-                    className="w-20 h-7 bg-pneutral-900 text-pneutral-50 font-medium text-label-l2 rounded-lg"
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={isEmailVerified}
+                    className={`w-20 h-7 rounded-lg font-medium text-label-l2 ${
+                      isEmailVerified
+                        ? "border border-success-900 rounded-xl bg-success-50 text-success-900 cursor-not-allowed"
+                        : "bg-pneutral-900 text-pneutral-50"
+                    }`}
                   >
-                    Send OTP
+                    {isEmailVerified ? "Verified" : "Send OTP"}
                   </button>
                 }
               />
@@ -351,13 +491,26 @@ const page = () => {
               </label>
             </div>
 
+            {termsError && (
+              <p className="text-error-600 text-p4 font-noto-sans">
+                {termsError}
+              </p>
+            )}
+
             <Button fullWidth onClick={handleSubmit}>
               Register
             </Button>
 
             <div className="flex justify-center gap-3 text-p3 font-noto-sans">
-              Already have an account?
-              <span className="font-semibold text-secondary-700 ">Login</span>
+              <span>Already have an account?</span>
+
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
+                className="font-semibold text-secondary-700 hover:underline cursor-pointer"
+              >
+                Login
+              </button>
             </div>
           </div>
         </div>
