@@ -1,17 +1,27 @@
 "use client";
 
 import Input from "@/app/components/common/Input";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Image from "next/image";
 import Button from "@/app/components/common/Button";
+import { register } from "@/services/AuthService";
+import { useRouter } from "next/navigation";
 
 const page = () => {
+  const router = useRouter();
+
   const [isChecked, setIsChecked] = useState(false);
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
+  const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [showOtp, setShowOtp] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validatePassword = (password: string) => {
     const passwordRegex =
@@ -27,9 +37,55 @@ const page = () => {
 
     return "";
   };
-const handleSubmit = () => {
-  // Registration API call
-};
+
+  const handleChange = (value: string, index: number) => {
+    // Only allow numeric input
+    if (value && !/^\d+$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value.substring(value.length - 1); // Get last typed character
+    setOtp(newOtp);
+
+    // Auto-focus next input field
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    index: number,
+  ) => {
+    // Move to previous field on backspace if current field is empty
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleSubmit = async () => {
+    try {
+      const payload = {
+        userEmail,
+        password,
+      };
+
+      console.log(payload);
+
+      const response = await register(payload);
+
+      console.log("Registration Successful:", response);
+
+      // Redirect to Login page
+      router.push("/login");
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(error.message);
+
+        // Display error message here
+        // toast.error(error.message);
+      }
+    }
+  };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -163,6 +219,8 @@ const handleSubmit = () => {
               <Input
                 label="Email ID"
                 placeholder="abc@hospital.in"
+                value={userEmail}
+                onChange={(e) => setUserEmail(e.target.value)}
                 leftIcon={
                   <Image
                     src="/Login&RegistrationIcons/EmailIcon.svg"
@@ -172,38 +230,73 @@ const handleSubmit = () => {
                   />
                 }
                 rightIcon={
-                  <button className="w-20 h-7 bg-pneutral-900 text-pneutral-50 font-medium text-label-l2 rounded-lg">
+                  <button
+                    onClick={() => setShowOtp(true)}
+                    className="w-20 h-7 bg-pneutral-900 text-pneutral-50 font-medium text-label-l2 rounded-lg"
+                  >
                     Send OTP
                   </button>
                 }
               />
-
-              <div className="w-full h-8 border-2 border-success-900 rounded-lg bg-success-50 flex items-center gap-2 px-3 text-p4 font-medium text-success-900">
-                <Image
-                  src="/Login&RegistrationIcons/VerifyIcon.svg"
-                  alt="Email"
-                  width={17}
-                  height={17}
-                />
-                Email verified successfully{" "}
-              </div>
+              {isEmailVerified && (
+                <div className="w-full h-8 border-2 border-success-900 rounded-lg bg-success-50 flex items-center gap-2 px-3 text-p4 font-medium text-success-900">
+                  <Image
+                    src="/Login&RegistrationIcons/VerifyIcon.svg"
+                    alt="Email"
+                    width={17}
+                    height={17}
+                  />
+                  Email verified successfully{" "}
+                </div>
+              )}
             </div>
+
+            {showOtp && (
+              <div className="flex flex-col gap-2.5 h-[78px] w-[348px]">
+                <label className="text-p3 font-normal text-[#4B5563] font-body leading-none">
+                  Enter OTP
+                </label>
+                <div className="flex justify-between gap-[12px] w-full">
+                  {otp.map((digit, index) => (
+                    <input
+                      key={index}
+                      type="text"
+                      maxLength={1}
+                      value={digit}
+                      onChange={(e) => handleChange(e.target.value, index)}
+                      onKeyDown={(e) => handleKeyDown(e, index)}
+                      ref={(el) => {
+                        inputRefs.current[index] = el;
+                      }}
+                      className="w-[42px] h-[48px] min-h-[48px] max-h-[52px] border border-pneutral-200 rounded-[8px] text-center font-bold text-lg focus:outline-none focus:border-secondary-500 focus:ring-1 focus:ring-secondary-500 font-body text-[#1A1F3A]"
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="w-full flex gap-4">
               <div className="flex-1">
                 <Input
                   label="Password"
                   placeholder="Enter password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={handlePasswordChange}
                   error={passwordError}
                   leftIcon={
-                    <Image
-                      src="/Login&RegistrationIcons/PasswordIcon.svg"
-                      alt="Password"
-                      width={20}
-                      height={20}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="flex items-center cursor-pointer"
+                    >
+                      <Image
+                        src="/Login&RegistrationIcons/PasswordIcon.svg"
+                        alt={showPassword ? "Hide Password" : "Show Password"}
+                        width={20}
+                        height={20}
+                      />
+                    </button>
                   }
                 />
               </div>
@@ -211,17 +304,27 @@ const handleSubmit = () => {
               <div className="flex-1">
                 <Input
                   label="Confirm Password"
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={handleConfirmPasswordChange}
                   error={confirmPasswordError}
                   leftIcon={
-                    <Image
-                      src="/Login&RegistrationIcons/PasswordIcon.svg"
-                      alt="Password"
-                      width={20}
-                      height={20}
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      className="flex items-center cursor-pointer"
+                    >
+                      <Image
+                        src="/Login&RegistrationIcons/PasswordIcon.svg"
+                        alt={
+                          showConfirmPassword
+                            ? "Hide Password"
+                            : "Show Password"
+                        }
+                        width={20}
+                        height={20}
+                      />
+                    </button>
                   }
                 />
               </div>
