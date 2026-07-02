@@ -7,6 +7,59 @@ import Button from "@/app/components/common/Button";
 
 const page = () => {
   const [isChecked, setIsChecked] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
+
+  const validatePassword = (password: string) => {
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=])[A-Za-z\d@$!%*?&#^()_\-+=]{8,20}$/;
+
+    if (!password) {
+      return "Password is required";
+    }
+
+    if (!passwordRegex.test(password)) {
+      return "Password must be 8-20 characters and include an uppercase letter, lowercase letter, number, and special character.";
+    }
+
+    return "";
+  };
+const handleSubmit = () => {
+  // Registration API call
+};
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    setPassword(value);
+    setPasswordError(validatePassword(value));
+
+    // Revalidate confirm password if it already has a value
+    if (confirmPassword) {
+      if (value !== confirmPassword) {
+        setConfirmPasswordError("Passwords did not match");
+      } else {
+        setConfirmPasswordError("");
+      }
+    }
+  };
+
+  const handleConfirmPasswordChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const value = e.target.value;
+
+    setConfirmPassword(value);
+
+    if (value !== password) {
+      setConfirmPasswordError("Passwords did not match");
+    } else {
+      setConfirmPasswordError("");
+    }
+  };
 
   return (
     <>
@@ -93,7 +146,7 @@ const page = () => {
           </div>
         </div>
 
-        <div className="flex-1 px-14 py-8 flex flex-col gap-7">
+        <div className="flex-1 px-14 py-14 flex flex-col gap-7 justify-center">
           <div className="flex flex-col gap-2">
             <div className="text-h5 font-semibold">Create Your Account</div>
             <div className="text-p3 font-normal font-noto-sans text-[#4B5563]">
@@ -103,49 +156,47 @@ const page = () => {
 
           <div className="flex flex-col gap-5">
             <div className="text-p4 font-semibold text-[#6C5CE7] font-noto-sans">
-              Healthcare Entity Details
+              User Details
             </div>
 
-            <div className="w-full flex gap-4">
-              <div className="flex-1">
-                <Input
-                  label="Healthcare Entity Name"
-                  placeholder="ABC Hospital"
-                />
-              </div>
+            <div className="space-y-2">
+              <Input
+                label="Email ID"
+                placeholder="abc@hospital.in"
+                leftIcon={
+                  <Image
+                    src="/Login&RegistrationIcons/EmailIcon.svg"
+                    alt="Email"
+                    width={20}
+                    height={20}
+                  />
+                }
+                rightIcon={
+                  <button className="w-20 h-7 bg-pneutral-900 text-pneutral-50 font-medium text-label-l2 rounded-lg">
+                    Send OTP
+                  </button>
+                }
+              />
 
-              <div className="flex-1">
-                <Input
-                  label="Healthcare Entity Type"
-                  placeholder="Select Entity Type"
-                />
-              </div>
-            </div>
-
-            <Input
-              label="Email ID"
-              placeholder="abc@hospital.in"
-              leftIcon={
+              <div className="w-full h-8 border-2 border-success-900 rounded-lg bg-success-50 flex items-center gap-2 px-3 text-p4 font-medium text-success-900">
                 <Image
-                  src="/Login&RegistrationIcons/EmailIcon.svg"
+                  src="/Login&RegistrationIcons/VerifyIcon.svg"
                   alt="Email"
-                  width={20}
-                  height={20}
+                  width={17}
+                  height={17}
                 />
-              }
-            />
-            <div className="text-p4 font-semibold text-[#6C5CE7] font-noto-sans">
-              Super Admin Details
+                Email verified successfully{" "}
+              </div>
             </div>
-
-            <Input label="User Name" placeholder="abchospital_admin" />
-
             <div className="w-full flex gap-4">
               <div className="flex-1">
                 <Input
                   label="Password"
                   placeholder="Enter password"
                   type="password"
+                  value={password}
+                  onChange={handlePasswordChange}
+                  error={passwordError}
                   leftIcon={
                     <Image
                       src="/Login&RegistrationIcons/PasswordIcon.svg"
@@ -161,6 +212,9 @@ const page = () => {
                 <Input
                   label="Confirm Password"
                   type="password"
+                  value={confirmPassword}
+                  onChange={handleConfirmPasswordChange}
+                  error={confirmPasswordError}
                   leftIcon={
                     <Image
                       src="/Login&RegistrationIcons/PasswordIcon.svg"
@@ -194,7 +248,9 @@ const page = () => {
               </label>
             </div>
 
-            <Button fullWidth>Register</Button>
+            <Button fullWidth onClick={handleSubmit}>
+              Register
+            </Button>
 
             <div className="flex justify-center gap-3 text-p3 font-noto-sans">
               Already have an account?
