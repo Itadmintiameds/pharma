@@ -7,6 +7,7 @@ import Login from "./Login";
 
 const page = () => {
   const [showOtp, setShowOtp] = useState(false);
+  const [email, setEmail] = useState("");
 
   return (
     <>
@@ -43,10 +44,13 @@ const page = () => {
 
       <div className="flex-1 flex items-center justify-center p-14">
         {showOtp ? (
-          <Otp onBack={() => setShowOtp(false)} />
+          <Otp email={email} onBack={() => setShowOtp(false)} />
         ) : 
         (
-          <Login onSubmit={() => setShowOtp(true)} />
+          <Login onSubmit={(userEmail) => {
+            setEmail(userEmail);
+            setShowOtp(true);
+          }} />
         )
         }
       </div>

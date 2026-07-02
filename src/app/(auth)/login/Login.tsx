@@ -2,33 +2,50 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
+import { login as loginService } from "@/services/AuthService";
 
 interface LoginProps {
-  onSubmit: () => void;
+  onSubmit: (email: string) => void;
 }
 
 const Login = ({ onSubmit }: LoginProps) => {
+  const [userEmail, setUserEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isChecked, setIsChecked] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // API Call here
-
-    // On success
-    onSubmit();
+  const handleLogin = async () => {
+    if (!userEmail || !password) {
+      alert("Please fill in all fields.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await loginService({ userEmail, password });
+      onSubmit(userEmail);
+    } catch (err: any) {
+      alert(err?.message || "Invalid email or password.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="w-97.75 h-[489px] border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9">
+    <div className="w-97.75 h-[489px] border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9 bg-white justify-between">
       <div className="text-h5 font-semibold">
         Login to Your Account
       </div>
 
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-5 flex-1 justify-center">
+
         <Input
-          label="User Name"
-          placeholder="abchospital_admin"
+          label="Email ID"
+          placeholder="abc@hospital.in"
+          value={userEmail}
+          onChange={(e) => setUserEmail(e.target.value)}
           leftIcon={
             <Image
               src="/Login&RegistrationIcons/UsernameIcon.svg"
@@ -43,6 +60,8 @@ const Login = ({ onSubmit }: LoginProps) => {
           <Input
             label="Password"
             type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             leftIcon={
               <Image
                 src="/Login&RegistrationIcons/LockIcon.svg"
@@ -79,7 +98,7 @@ const Login = ({ onSubmit }: LoginProps) => {
           </span>
         </div>
 
-        <Button size="lg" onClick={handleLogin}>
+        <Button size="lg" onClick={handleLogin} loading={loading}>
           Send OTP
         </Button>
 
@@ -87,9 +106,9 @@ const Login = ({ onSubmit }: LoginProps) => {
           <span className="text-pneutral-900">
             Don't have an account?
           </span>
-          <span className="text-secondary-700 cursor-pointer">
+          <Link href="/registration" className="text-secondary-700 cursor-pointer font-semibold hover:underline">
             Register
-          </span>
+          </Link>
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 import Input from "@/app/components/common/Input";
 import React, { useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import Button from "@/app/components/common/Button";
 import { register, sendEmailOtp, verifyEmailOtp } from "@/services/AuthService";
 import { useRouter } from "next/navigation";

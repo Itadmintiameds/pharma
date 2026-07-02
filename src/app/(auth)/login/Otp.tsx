@@ -3,14 +3,17 @@
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
+import { verifyOtp as verifyOtpService } from "@/services/AuthService";
 
 interface OtpProps {
+  email: string;
   onBack: () => void;
 }
 
-const Otp = ({ onBack }: OtpProps) => {
+const Otp = ({ email, onBack }: OtpProps) => {
   const router = useRouter();
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
+  const [loading, setLoading] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const handleChange = (value: string, index: number) => {
@@ -34,20 +37,27 @@ const Otp = ({ onBack }: OtpProps) => {
     }
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     const fullOtp = otp.join("");
     if (fullOtp.length < 6) {
       alert("Please enter a valid 6-digit OTP code.");
       return;
     }
     
-    // Simulate API Verification and Route to Dashboard
-    console.log("Verifying OTP:", fullOtp);
-    router.push("/dashboard");
+    setLoading(true);
+    try {
+      console.log("Verifying OTP for:", email, "with code:", fullOtp);
+      await verifyOtpService({ userEmail: email, otp: fullOtp });
+      router.push("/dashboard");
+    } catch (err: any) {
+      alert(err?.message || "Invalid OTP code.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="w-[391px] h-[370px] border border-pneutral-200 rounded-[14px] bg-white flex flex-col p-10 gap-[36px] select-none">
+    <div className="w-[391px] h-[370px] border border-pneutral-200 rounded-[14px] bg-white flex flex-col p-10 gap-[36px] select-none justify-between">
       {/* Title */}
       <h2 className="text-h5 font-semibold text-black font-heading leading-tight">
         Login to Your Account
@@ -78,7 +88,7 @@ const Otp = ({ onBack }: OtpProps) => {
 
       {/* Actions */}
       <div className="flex flex-col gap-4 mt-auto">
-        <Button size="lg" onClick={handleVerify}>
+        <Button size="lg" onClick={handleVerify} loading={loading}>
           Login
         </Button>
         <div className="flex font-noto-sans text-p3 font-normal gap-3 justify-center">

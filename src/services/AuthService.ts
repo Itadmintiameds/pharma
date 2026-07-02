@@ -23,7 +23,7 @@ export const login = async (data: LoginRequest) => {
 
 export const verifyOtp = async (data: VerifyOtpRequest) => {
   try {
-    const response = await api.post("/auth/verify-otp", data);
+    const response = await api.post("/auth/verifyOtp", data);
     return response.data;
   } catch (error) {
     handleApiError(error, "Failed to verify OTP.");
