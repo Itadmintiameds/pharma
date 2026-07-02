@@ -2,13 +2,24 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShieldAlert, User, LogOut, Plus } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { LayoutDashboard, ShieldAlert, User, LogOut } from 'lucide-react';
+import { logout } from '@/services/AuthService';
 
 import Image from 'next/image';
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+    router.replace("/login");
+  };
 
   const menuItems = [
     {
@@ -77,7 +88,7 @@ const Sidebar = () => {
 
         {/* Logout Button */}
         <button
-          onClick={() => console.log('Logout clicked')}
+          onClick={handleLogout}
           className="w-[176px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
         >
           <LogOut size={18} className="text-warning-500 shrink-0" />
