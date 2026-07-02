@@ -20,6 +20,7 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   return (
     <button
+      disabled={disabled || loading}
       className={clsx(
         "inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
 
@@ -40,6 +41,7 @@ const Button: React.FC<ButtonProps> = ({
 
         className,
       )}
+      {...props}
     >
       {children}
     </button>

@@ -80,7 +80,7 @@ const Login = ({ onSubmit }: LoginProps) => {
         </div>
 
         <Button size="lg" onClick={handleLogin}>
-          Login
+          Send OTP
         </Button>
 
         <div className="flex font-noto-sans text-p3 font-normal gap-3 justify-center">
