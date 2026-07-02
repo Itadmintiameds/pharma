@@ -2,11 +2,11 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import Input from "@/app/components/common/Input";
-import Button from "@/app/components/common/Button";
+import Otp from "./Otp";
+import Login from "./Login";
 
 const page = () => {
-  const [isChecked, setIsChecked] = useState(false);
+  const [showOtp, setShowOtp] = useState(false);
 
   return (
     <>
@@ -39,7 +39,19 @@ const page = () => {
             />
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center p-14">
+
+
+      <div className="flex-1 flex items-center justify-center p-14">
+        {showOtp ? (
+          <Otp onBack={() => setShowOtp(false)} />
+        ) : 
+        (
+          <Login onSubmit={() => setShowOtp(true)} />
+        )
+        }
+      </div>
+
+        {/* <div className="flex-1 flex items-center justify-center p-14">
           <div className="w-97.75 h-[489px] border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9">
             <div className="text-h5 font-semibold ">Login to Your Account</div>
 
@@ -101,7 +113,7 @@ const page = () => {
                 </div>
             </div>
           </div>
-        </div>
+        </div> */}
       </div>
     </>
   );
