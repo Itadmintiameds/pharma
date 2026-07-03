@@ -4,7 +4,6 @@ import { toast, Toaster, ToastOptions } from "react-hot-toast";
 import { CheckCircle, XCircle, AlertTriangle, Info } from "lucide-react";
 
 const commonStyle: ToastOptions = {
-  duration: 3000,
   position: "top-right",
   style: {
     borderRadius: "12px",
@@ -22,24 +21,28 @@ export const showToast = {
   success: (message: string) =>
     toast(message, {
       ...commonStyle,
+      duration: 3000,
       icon: <CheckCircle size={20} color="#16A34A" />,
     }),
 
   error: (message: string) =>
     toast(message, {
       ...commonStyle,
+      duration: 5000, // Error toast stays for 5 seconds
       icon: <XCircle size={20} color="#DC2626" />,
     }),
 
   warning: (message: string) =>
     toast(message, {
       ...commonStyle,
+      duration: 4000,
       icon: <AlertTriangle size={20} color="#F59E0B" />,
     }),
 
   info: (message: string) =>
     toast(message, {
       ...commonStyle,
+      duration: 3000,
       icon: <Info size={20} color="#2563EB" />,
     }),
 };

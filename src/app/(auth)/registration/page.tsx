@@ -26,6 +26,7 @@ const page = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [termsError, setTermsError] = useState("");
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const validatePassword = (password: string) => {
     const passwordRegex =
@@ -74,8 +75,8 @@ const page = () => {
         setOtp(["", "", "", "", "", ""]);
       } catch (error) {
         if (error instanceof Error) {
-          console.error(error.message);
-
+          showToast.error(error.message);
+          
           // Clear OTP on failure
           setOtp(["", "", "", "", "", ""]);
 
@@ -193,18 +194,34 @@ const page = () => {
   };
 
   const handleSendOtp = async () => {
+    if (!userEmail.trim()) {
+      setEmailError("Please enter your email address");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(userEmail)) {
+      setEmailError("Please enter a valid email address");
+      return;
+    }
+
+    setEmailError("");
+    setIsSendingOtp(true);
+
     try {
-      const response = await sendEmailOtp({
+      await sendEmailOtp({
         email: userEmail,
       });
 
-      console.log("OTP Sent:", response);
-
+      showToast.success("OTP Sent");
       setShowOtp(true);
     } catch (error) {
       if (error instanceof Error) {
-        console.error(error.message);
+        showToast.error(error.message);
       }
+    } finally {
+      setIsSendingOtp(false);
     }
   };
 
@@ -312,7 +329,14 @@ const page = () => {
                 label="Email ID"
                 placeholder="abc@hospital.in"
                 value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
+                maxLength={100}
+                onChange={(e) => {
+                  setUserEmail(e.target.value);
+
+                  if (emailError) {
+                    setEmailError("");
+                  }
+                }}
                 error={emailError}
                 leftIcon={
                   <Image
@@ -326,15 +350,33 @@ const page = () => {
                   <button
                     type="button"
                     onClick={handleSendOtp}
-                    disabled={isEmailVerified}
-                    className={`w-20 h-7 rounded-lg font-medium text-label-l2 ${
+                    disabled={isEmailVerified || isSendingOtp}
+                    className={`w-24 h-7 rounded-lg font-medium text-label-l2 flex items-center justify-center ${
                       isEmailVerified
-                        ? "border border-success-900 rounded-xl bg-success-50 text-success-900 cursor-not-allowed"
-                        : "bg-pneutral-900 text-pneutral-50"
+                        ? "border border-success-900 bg-success-50 text-success-900 cursor-not-allowed"
+                        : isSendingOtp
+                          ? "bg-pneutral-500 text-pneutral-50 cursor-wait"
+                          : "bg-pneutral-900 text-pneutral-50 hover:bg-pneutral-800"
                     }`}
                   >
-                    {isEmailVerified ? "Verified" : "Send OTP"}
+                    {isEmailVerified
+                      ? "Verified"
+                      : isSendingOtp
+                        ? "Sending..."
+                        : "Send OTP"}
                   </button>
+                  // <button
+                  //   type="button"
+                  //   onClick={handleSendOtp}
+                  //   disabled={isEmailVerified || isSendingOtp}
+                  //   className={`w-20 h-7 rounded-lg font-medium text-label-l2 ${
+                  //     isEmailVerified
+                  //       ? "border border-success-900 rounded-xl bg-success-50 text-success-900 cursor-not-allowed"
+                  //       : "bg-pneutral-900 text-pneutral-50"
+                  //   }`}
+                  // >
+                  //   {isEmailVerified ? "Verified" : "Send OTP"}
+                  // </button>
                 }
               />
               {isEmailVerified && (
@@ -429,32 +471,32 @@ const page = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 font-noto-sans">
-              <input
-                id="terms"
-                type="checkbox"
-                checked={isChecked}
-                onChange={(e) => setIsChecked(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-[#6C5CE7]"
-              />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-start gap-3 font-noto-sans">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={(e) => setIsChecked(e.target.checked)}
+                  className="mt-1 h-4 w-4 accent-[#6C5CE7]"
+                />
 
-              <label htmlFor="terms" className="text-p3">
-                I agree to the{" "}
-                <span className="font-semibold text-secondary-700">
-                  Terms & Conditions
-                </span>{" "}
-                and{" "}
-                <span className="font-semibold text-secondary-700">
-                  Privacy Policy.
-                </span>
-              </label>
+                <label htmlFor="terms" className="text-p3">
+                  I agree to the{" "}
+                  <span className="font-semibold text-secondary-700">
+                    Terms & Conditions
+                  </span>{" "}
+                  and{" "}
+                  <span className="font-semibold text-secondary-700">
+                    Privacy Policy.
+                  </span>
+                </label>
+              </div>
+
+              {termsError && (
+                <p className="ml-7 text-p2 text-warning-500">{termsError}</p>
+              )}
             </div>
-
-            {termsError && (
-              <p className="text-error-600 text-p4 font-noto-sans">
-                {termsError}
-              </p>
-            )}
 
             <Button fullWidth onClick={handleSubmit}>
               Register
