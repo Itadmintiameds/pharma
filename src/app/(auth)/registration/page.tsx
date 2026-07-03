@@ -66,8 +66,6 @@ const page = () => {
           otp: updatedOtp.join(""),
         });
 
-        console.log("OTP Verified:", response);
-
         setIsEmailVerified(true);
         setShowOtp(false);
 
@@ -76,7 +74,7 @@ const page = () => {
       } catch (error) {
         if (error instanceof Error) {
           showToast.error(error.message);
-          
+
           // Clear OTP on failure
           setOtp(["", "", "", "", "", ""]);
 
@@ -152,7 +150,7 @@ const page = () => {
 
       const response = await register(payload);
 
-      showToast.success("Login Successful");
+      showToast.success("Registration Successful");
 
       router.push("/login");
     } catch (error) {
@@ -222,6 +220,55 @@ const page = () => {
       }
     } finally {
       setIsSendingOtp(false);
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+
+    const pastedOtp = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+
+    if (!pastedOtp) return;
+
+    const newOtp = [...otp];
+
+    pastedOtp.split("").forEach((digit, index) => {
+      newOtp[index] = digit;
+    });
+
+    setOtp(newOtp);
+
+    // Focus last filled input
+    inputRefs.current[Math.min(pastedOtp.length - 1, 5)]?.focus();
+
+    // Auto verify if all digits are pasted
+    if (newOtp.every((digit) => digit !== "")) {
+      verifyOtp(newOtp);
+    }
+  };
+
+  const verifyOtp = async (updatedOtp: string[]) => {
+    try {
+      await verifyEmailOtp({
+        email: userEmail,
+        otp: updatedOtp.join(""),
+      });
+
+      setIsEmailVerified(true);
+      setShowOtp(false);
+      setOtp(["", "", "", "", "", ""]);
+
+      showToast.success("Email verified successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        showToast.error(error.message);
+
+        setOtp(["", "", "", "", "", ""]);
+        inputRefs.current[0]?.focus();
+      }
     }
   };
 
@@ -306,7 +353,6 @@ const page = () => {
               width={400}
               height={280}
               className="object-contain"
-              style={{ height: 'auto' }}
             />
           </div>
         </div>
@@ -365,18 +411,6 @@ const page = () => {
                         ? "Sending..."
                         : "Send OTP"}
                   </button>
-                  // <button
-                  //   type="button"
-                  //   onClick={handleSendOtp}
-                  //   disabled={isEmailVerified || isSendingOtp}
-                  //   className={`w-20 h-7 rounded-lg font-medium text-label-l2 ${
-                  //     isEmailVerified
-                  //       ? "border border-success-900 rounded-xl bg-success-50 text-success-900 cursor-not-allowed"
-                  //       : "bg-pneutral-900 text-pneutral-50"
-                  //   }`}
-                  // >
-                  //   {isEmailVerified ? "Verified" : "Send OTP"}
-                  // </button>
                 }
               />
               {isEmailVerified && (
@@ -406,6 +440,7 @@ const page = () => {
                       value={digit}
                       onChange={(e) => handleChange(e.target.value, index)}
                       onKeyDown={(e) => handleKeyDown(e, index)}
+                      onPaste={handlePaste}
                       ref={(el) => {
                         inputRefs.current[index] = el;
                       }}
