@@ -64,3 +64,8 @@ export const verifyEmailOtp = async (data: EmailOtpVerifyRequest) => {
     );
   }
 };
+
+export const refreshAccessToken = async () => {
+  const response = await api.post("/auth/refreshToken");
+  return response.data;
+};

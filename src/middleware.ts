@@ -11,7 +11,14 @@ export function middleware(request: NextRequest) {
     pathname === "/registration" ||
     pathname.startsWith("/forgot-password")
   ) {
-    return NextResponse.next();
+    const response = NextResponse.next();
+    
+    // Explicitly delete cookies on the client browser via Set-Cookie headers(Tempreray feat)
+    response.cookies.set("access_token", "", { path: "/", maxAge: 0 });
+    response.cookies.set("refresh_token", "", { path: "/", maxAge: 0 });
+    response.cookies.set("token", "", { path: "/", maxAge: 0 });
+    
+    return response;
   }
 
   // Protected Routes

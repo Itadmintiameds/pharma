@@ -1,13 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Otp from "./Otp";
 import Login from "./Login";
+import api from "@/utils/api";
 
 const page = () => {
   const [showOtp, setShowOtp] = useState(false);
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    // Auto-clear active sessions/cookies when mounting the login screen
+    const autoLogout = async () => {
+      try {
+        await api.post("/auth/logout");
+      } catch (err) {
+        // Silently swallow errors since there was no active session
+      }
+    };
+    autoLogout();
+  }, []);
 
   return (
     <>
@@ -44,11 +58,12 @@ const page = () => {
 
       <div className="flex-1 flex items-center justify-center p-14">
         {showOtp ? (
-          <Otp email={email} onBack={() => setShowOtp(false)} />
+          <Otp email={email} password={password} onBack={() => setShowOtp(false)} />
         ) : 
         (
-          <Login onSubmit={(userEmail) => {
+          <Login onSubmit={(userEmail, userPassword) => {
             setEmail(userEmail);
+            setPassword(userPassword || "");
             setShowOtp(true);
           }} />
         )

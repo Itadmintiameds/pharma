@@ -9,7 +9,7 @@ import { login as loginService } from "@/services/AuthService";
 import { showToast } from "@/app/components/common/Toast";
 
 interface LoginProps {
-  onSubmit: (email: string) => void;
+  onSubmit: (email: string, password?: string) => void;
 }
 
 const Login = ({ onSubmit }: LoginProps) => {
@@ -28,7 +28,7 @@ const Login = ({ onSubmit }: LoginProps) => {
     try {
       const res = await loginService({ userEmail, password });
       showToast.success("OTP sent successfully to your email.");
-      onSubmit(userEmail);
+      onSubmit(userEmail, password);
     } catch (err: any) {
       showToast.error(err?.message || "Invalid email or password.");
     } finally {
