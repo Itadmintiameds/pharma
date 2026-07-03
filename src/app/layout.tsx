@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Noto_Sans, Work_Sans, Open_Sans } from "next/font/google";
+import ToastProvider from "./components/common/Toast";
 
 const notoSans = Noto_Sans({
   subsets: ["latin"],
@@ -28,9 +29,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" className={`${notoSans.variable} ${workSans.variable} ${openSans.variable} h-screen overflow-hidden`}>
-      <body className="h-screen overflow-hidden">{children}</body>
+    <html
+      lang="en"
+      data-scroll-behavior="smooth"
+      className={`${notoSans.variable} ${workSans.variable} ${openSans.variable} h-screen overflow-hidden`}
+    >
+      <body className="h-screen overflow-hidden">
+        {children}
+        <ToastProvider />
+      </body>
     </html>
   );
 }
-
