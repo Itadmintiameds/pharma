@@ -66,8 +66,6 @@ const page = () => {
           otp: updatedOtp.join(""),
         });
 
-        console.log("OTP Verified:", response);
-
         setIsEmailVerified(true);
         setShowOtp(false);
 
@@ -152,7 +150,7 @@ const page = () => {
 
       const response = await register(payload);
 
-      showToast.success("Login Successful");
+      showToast.success("Registration Successful");
 
       router.push("/login");
     } catch (error) {
