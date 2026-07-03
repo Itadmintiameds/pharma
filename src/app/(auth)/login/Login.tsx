@@ -6,6 +6,7 @@ import Link from "next/link";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
 import { login as loginService } from "@/services/AuthService";
+import { showToast } from "@/app/components/common/Toast";
 
 interface LoginProps {
   onSubmit: (email: string) => void;
@@ -20,15 +21,16 @@ const Login = ({ onSubmit }: LoginProps) => {
 
   const handleLogin = async () => {
     if (!userEmail || !password) {
-      alert("Please fill in all fields.");
+      showToast.warning("Please fill in all fields.");
       return;
     }
     setLoading(true);
     try {
       const res = await loginService({ userEmail, password });
+      showToast.success("OTP sent successfully to your email.");
       onSubmit(userEmail);
     } catch (err: any) {
-      alert(err?.message || "Invalid email or password.");
+      showToast.error(err?.message || "Invalid email or password.");
     } finally {
       setLoading(false);
     }

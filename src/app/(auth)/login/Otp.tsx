@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
 import { verifyOtp as verifyOtpService } from "@/services/AuthService";
+import { showToast } from "@/app/components/common/Toast";
 
 interface OtpProps {
   email: string;
@@ -60,7 +61,7 @@ const Otp = ({ email, onBack }: OtpProps) => {
   const handleVerify = async () => {
     const fullOtp = otp.join("");
     if (fullOtp.length < 6) {
-      alert("Please enter a valid 6-digit OTP code.");
+      showToast.warning("Please enter a valid 6-digit OTP code.");
       return;
     }
     
@@ -68,9 +69,10 @@ const Otp = ({ email, onBack }: OtpProps) => {
     try {
       console.log("Verifying OTP for:", email, "with code:", fullOtp);
       await verifyOtpService({ userEmail: email, otp: fullOtp });
+      showToast.success("Successfully logged in! Redirecting...");
       router.push("/dashboard");
     } catch (err: any) {
-      alert(err?.message || "Invalid OTP code.");
+      showToast.error(err?.message || "Invalid OTP code.");
     } finally {
       setLoading(false);
     }

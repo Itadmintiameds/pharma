@@ -41,12 +41,12 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-[224px] h-screen bg-secondary-900 text-white p-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
+    <aside className="w-[244px] h-screen bg-secondary-900 text-white px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
       {/* Top Section: Logo & Navigation */}
       <div className="flex flex-col gap-8">
         {/* Logo Container */}
         <div 
-          className="w-[176px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none"
+          className="w-[204px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none"
         >
           <Image 
             src="/Logo/tiameds logo.svg" 
@@ -59,7 +59,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex flex-col gap-2">
+        <nav className="w-[204px] h-[116px] flex flex-col gap-[4px]">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path;
@@ -68,7 +68,7 @@ const Sidebar = () => {
               <Link
                 key={item.name}
                 href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-[10px] text-[14px] font-medium transition-all duration-200 ${
+                className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-secondary-200 text-secondary-900 shadow-sm font-semibold'
                     : 'text-secondary-200 hover:bg-secondary-800 hover:text-white'
@@ -90,7 +90,7 @@ const Sidebar = () => {
         {/* Logout Button */}
         <button
           onClick={handleLogout}
-          className="w-[176px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
+          className="w-[204px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
         >
           <LogOut size={18} className="text-warning-500 shrink-0" />
           <span>Logout</span>
