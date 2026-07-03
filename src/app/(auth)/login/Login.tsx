@@ -47,6 +47,9 @@ const Login = ({ onSubmit }: LoginProps) => {
           placeholder="abc@hospital.in"
           value={userEmail}
           onChange={(e) => setUserEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleLogin();
+          }}
           leftIcon={
             <Image
               src="/Login&RegistrationIcons/UsernameIcon.svg"
@@ -63,6 +66,9 @@ const Login = ({ onSubmit }: LoginProps) => {
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleLogin();
+            }}
             leftIcon={
               <Image
                 src="/Login&RegistrationIcons/LockIcon.svg"

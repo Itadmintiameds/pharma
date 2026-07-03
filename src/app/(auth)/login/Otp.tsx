@@ -31,10 +31,30 @@ const Otp = ({ email, onBack }: OtpProps) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    // Move to previous field on backspace if current field is empty
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleVerify();
+    } else if (e.key === "Backspace" && !otp[index] && index > 0) {
       inputRefs.current[index - 1]?.focus();
     }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData("text").trim();
+    if (!/^\d+$/.test(pastedData)) return; // Only allow numeric paste
+
+    const newOtp = [...otp];
+    for (let i = 0; i < 6; i++) {
+      if (pastedData[i]) {
+        newOtp[i] = pastedData[i];
+      }
+    }
+    setOtp(newOtp);
+
+    // Focus last filled input or the 6th input if full length is pasted
+    const focusIndex = Math.min(pastedData.length, 5);
+    inputRefs.current[focusIndex]?.focus();
   };
 
   const handleVerify = async () => {
@@ -77,6 +97,7 @@ const Otp = ({ email, onBack }: OtpProps) => {
               value={digit}
               onChange={(e) => handleChange(e.target.value, index)}
               onKeyDown={(e) => handleKeyDown(e, index)}
+              onPaste={handlePaste}
               ref={(el) => {
                 inputRefs.current[index] = el;
               }}
