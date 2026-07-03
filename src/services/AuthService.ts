@@ -43,8 +43,12 @@ export const sendEmailOtp = async (data: EmailOtpRequest) => {
   try {
     const response = await api.post("/verification/sendOtp", data);
     return response.data;
-  } catch (error) {
-    handleApiError(error, "Failed to send OTP.");
+  } catch (error: any) {
+    throw new Error(
+      error?.response?.data?.message ||
+      error?.response?.data ||
+      "Failed to send OTP."
+    );
   }
 };
 
@@ -52,7 +56,11 @@ export const verifyEmailOtp = async (data: EmailOtpVerifyRequest) => {
   try {
     const response = await api.post("/verification/verifyOtp", data);
     return response.data;
-  } catch (error) {
-    handleApiError(error, "Failed to verify OTP.");
+  } catch (error: any) {
+    throw new Error(
+      error?.response?.data?.message ||
+      error?.response?.data ||
+      "Invalid OTP"
+    );
   }
 };
