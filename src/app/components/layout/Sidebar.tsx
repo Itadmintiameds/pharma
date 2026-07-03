@@ -28,15 +28,16 @@ const Sidebar = () => {
       path: '/dashboard',
     },
     {
-      name: 'Profile',
-      icon: User,
-      path: '/dashboard/profile',
+      name: 'Setup Business',
+      icon: ShieldAlert,
+      path: '/dashboard/setupBusiness',
     },
     {
-      name: 'Compliance',
-      icon: ShieldAlert,
-      path: '/dashboard/compliance',
-    },
+      name: 'Settings',
+      icon: User,
+      path: '/dashboard/settings',
+    }
+    
   ];
 
   return (

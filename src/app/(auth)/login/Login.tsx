@@ -16,6 +16,7 @@ const Login = ({ onSubmit }: LoginProps) => {
   const [password, setPassword] = useState("");
   const [isChecked, setIsChecked] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!userEmail || !password) {
@@ -59,7 +60,7 @@ const Login = ({ onSubmit }: LoginProps) => {
         <div>
           <Input
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             leftIcon={
@@ -71,12 +72,18 @@ const Login = ({ onSubmit }: LoginProps) => {
               />
             }
             rightIcon={
-              <Image
-                src="/Login&RegistrationIcons/PasswordIcon.svg"
-                alt="Eye"
-                width={20}
-                height={20}
-              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="cursor-pointer focus:outline-none flex items-center justify-center"
+              >
+                <Image
+                  src="/Login&RegistrationIcons/PasswordIcon.svg"
+                  alt="Eye"
+                  width={20}
+                  height={20}
+                />
+              </button>
             }
           />
 

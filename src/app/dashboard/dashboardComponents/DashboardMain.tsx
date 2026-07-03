@@ -3,6 +3,7 @@
 import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Button from '@/app/components/common/Button';
 
 export default function DashboardMain() {
@@ -23,8 +24,9 @@ export default function DashboardMain() {
   ];
   */
 
-  const setupPercentage = 15; // Dynamic setup percentage
+  const setupPercentage = 0; // Dynamic setup percentage
   const applicationStep = 2; // Dynamic step status: 1 = Submitted, 2 = Under Review, 3 = Approved
+  const router = useRouter();
 
   return (
     <div className="flex flex-col select-none font-body w-full max-w-7xl gap-8">
@@ -43,6 +45,7 @@ export default function DashboardMain() {
 
         {/* Start Setup Button */}
         <Button 
+          onClick={() => router.push("/dashboard/setupBusiness")}
           variant="primary"
           className="w-[272px] h-[48px] rounded-[8px] font-work-sans font-medium text-[16px] leading-[32px] text-pneutral-50 whitespace-nowrap select-none shrink-0"
         >
