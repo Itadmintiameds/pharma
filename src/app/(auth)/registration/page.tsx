@@ -304,6 +304,7 @@ const page = () => {
               width={400}
               height={280}
               className="object-contain"
+              style={{ height: 'auto' }}
             />
           </div>
         </div>

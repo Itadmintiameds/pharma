@@ -2,13 +2,24 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShieldAlert, User, LogOut, Plus } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { LayoutDashboard, ShieldAlert, User, LogOut } from 'lucide-react';
+import { logout } from '@/services/AuthService';
 
 import Image from 'next/image';
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
+    router.replace("/login");
+  };
 
   const menuItems = [
     {
@@ -17,24 +28,25 @@ const Sidebar = () => {
       path: '/dashboard',
     },
     {
-      name: 'Profile',
-      icon: User,
-      path: '/dashboard/profile',
+      name: 'Setup Business',
+      icon: ShieldAlert,
+      path: '/dashboard/setupBusiness',
     },
     {
-      name: 'Compliance',
-      icon: ShieldAlert,
-      path: '/dashboard/compliance',
-    },
+      name: 'Settings',
+      icon: User,
+      path: '/dashboard/settings',
+    }
+    
   ];
 
   return (
-    <aside className="w-[224px] h-screen bg-secondary-900 text-white p-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
+    <aside className="w-[244px] h-screen bg-secondary-900 text-white px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
       {/* Top Section: Logo & Navigation */}
       <div className="flex flex-col gap-8">
         {/* Logo Container */}
         <div 
-          className="w-[176px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none"
+          className="w-[204px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none"
         >
           <Image 
             src="/Logo/tiameds logo.svg" 
@@ -47,7 +59,7 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="flex flex-col gap-2">
+        <nav className="w-[204px] h-[116px] flex flex-col gap-[4px]">
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.path;
@@ -56,7 +68,7 @@ const Sidebar = () => {
               <Link
                 key={item.name}
                 href={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-[10px] text-[14px] font-medium transition-all duration-200 ${
+                className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 ${
                   isActive
                     ? 'bg-secondary-200 text-secondary-900 shadow-sm font-semibold'
                     : 'text-secondary-200 hover:bg-secondary-800 hover:text-white'
@@ -77,8 +89,8 @@ const Sidebar = () => {
 
         {/* Logout Button */}
         <button
-          onClick={() => console.log('Logout clicked')}
-          className="w-[176px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
+          onClick={handleLogout}
+          className="w-[204px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
         >
           <LogOut size={18} className="text-warning-500 shrink-0" />
           <span>Logout</span>

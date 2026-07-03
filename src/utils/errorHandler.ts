@@ -7,9 +7,16 @@ export const handleApiError = (
   console.error(defaultMessage, error);
 
   if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+
+    // Handle plain string error responses directly
+    if (typeof data === "string" && data.trim().length > 0) {
+      throw new Error(data);
+    }
+
     throw new Error(
-      error.response?.data?.message ||
-      error.response?.data?.error ||
+      data?.message ||
+      data?.error ||
       defaultMessage
     );
   }

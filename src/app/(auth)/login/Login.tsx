@@ -6,9 +6,10 @@ import Link from "next/link";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
 import { login as loginService } from "@/services/AuthService";
+import { showToast } from "@/app/components/common/Toast";
 
 interface LoginProps {
-  onSubmit: (email: string) => void;
+  onSubmit: (email: string, password?: string) => void;
 }
 
 const Login = ({ onSubmit }: LoginProps) => {
@@ -16,18 +17,20 @@ const Login = ({ onSubmit }: LoginProps) => {
   const [password, setPassword] = useState("");
   const [isChecked, setIsChecked] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!userEmail || !password) {
-      alert("Please fill in all fields.");
+      showToast.warning("Please fill in all fields.");
       return;
     }
     setLoading(true);
     try {
       const res = await loginService({ userEmail, password });
-      onSubmit(userEmail);
+      showToast.success("OTP sent successfully to your email.");
+      onSubmit(userEmail, password);
     } catch (err: any) {
-      alert(err?.message || "Invalid email or password.");
+      showToast.error(err?.message || "Invalid email or password.");
     } finally {
       setLoading(false);
     }
@@ -46,6 +49,9 @@ const Login = ({ onSubmit }: LoginProps) => {
           placeholder="abc@hospital.in"
           value={userEmail}
           onChange={(e) => setUserEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleLogin();
+          }}
           leftIcon={
             <Image
               src="/Login&RegistrationIcons/UsernameIcon.svg"
@@ -59,9 +65,12 @@ const Login = ({ onSubmit }: LoginProps) => {
         <div>
           <Input
             label="Password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleLogin();
+            }}
             leftIcon={
               <Image
                 src="/Login&RegistrationIcons/LockIcon.svg"
@@ -71,12 +80,18 @@ const Login = ({ onSubmit }: LoginProps) => {
               />
             }
             rightIcon={
-              <Image
-                src="/Login&RegistrationIcons/PasswordIcon.svg"
-                alt="Eye"
-                width={20}
-                height={20}
-              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="cursor-pointer focus:outline-none flex items-center justify-center"
+              >
+                <Image
+                  src="/Login&RegistrationIcons/PasswordIcon.svg"
+                  alt="Eye"
+                  width={20}
+                  height={20}
+                />
+              </button>
             }
           />
 
