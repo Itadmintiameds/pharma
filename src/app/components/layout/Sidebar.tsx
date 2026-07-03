@@ -3,14 +3,28 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, ShieldAlert, User, LogOut } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  ShieldAlert, 
+  Settings, 
+  ShoppingCart, 
+  Package, 
+  Receipt, 
+  Box, 
+  Truck, 
+  Users, 
+  BarChart3, 
+  LogOut 
+} from 'lucide-react';
 import { logout } from '@/services/AuthService';
-
 import Image from 'next/image';
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
+
+  // Dynamic lock check - set to true once business setup registration is complete
+  const isBusinessRegistered = false;
 
   const handleLogout = async () => {
     try {
@@ -21,23 +35,92 @@ const Sidebar = () => {
     router.replace("/login");
   };
 
-  const menuItems = [
+  const navGroups = [
     {
-      name: 'Dashboard',
-      icon: LayoutDashboard,
-      path: '/dashboard',
+      category: 'MAIN MENU',
+      isHeaderHidden: true,
+      heightClass: 'h-[116px]',
+      items: [
+        {
+          name: 'Dashboard',
+          icon: LayoutDashboard,
+          path: '/dashboard',
+          isLocked: false,
+        },
+        {
+          name: 'Setup Business',
+          icon: ShieldAlert,
+          path: '/dashboard/setupBusiness',
+          isLocked: false,
+        },
+        {
+          name: 'Settings',
+          icon: Settings,
+          path: '/dashboard/settings',
+          isLocked: false,
+        }
+      ]
     },
     {
-      name: 'Setup Business',
-      icon: ShieldAlert,
-      path: '/dashboard/setupBusiness',
+      category: 'TRANSACTIONS',
+      heightClass: 'h-[144px]',
+      items: [
+        {
+          name: 'Purchase',
+          icon: ShoppingCart,
+          path: '/dashboard/purchase',
+          isLocked: !isBusinessRegistered,
+        },
+        {
+          name: 'Stock Management',
+          icon: Package,
+          path: '/dashboard/stockManagement',
+          isLocked: !isBusinessRegistered,
+        },
+        {
+          name: 'Sales / Billing',
+          icon: Receipt,
+          path: '/dashboard/salesBilling',
+          isLocked: !isBusinessRegistered,
+        }
+      ]
     },
     {
-      name: 'Settings',
-      icon: User,
-      path: '/dashboard/settings',
+      category: 'MASTERS',
+      heightClass: 'h-[144px]',
+      items: [
+        {
+          name: 'Products',
+          icon: Box,
+          path: '/dashboard/products',
+          isLocked: !isBusinessRegistered,
+        },
+        {
+          name: 'Suppliers',
+          icon: Truck,
+          path: '/dashboard/suppliers',
+          isLocked: !isBusinessRegistered,
+        },
+        {
+          name: 'User Management',
+          icon: Users,
+          path: '/dashboard/userManagement',
+          isLocked: !isBusinessRegistered,
+        }
+      ]
+    },
+    {
+      category: 'REPORTS',
+      heightClass: 'h-[64px]',
+      items: [
+        {
+          name: 'Reports',
+          icon: BarChart3,
+          path: '/dashboard/reports',
+          isLocked: !isBusinessRegistered,
+        }
+      ]
     }
-    
   ];
 
   return (
@@ -59,34 +142,56 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="w-[204px] h-[116px] flex flex-col gap-[4px]">
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = pathname === item.path;
+        <nav className="w-[204px] h-[516px] flex flex-col gap-[16px]">
+          {navGroups.map((group) => (
+            <div key={group.category} className={`w-[204px] ${group.heightClass} flex flex-col gap-[4px]`}>
+              {!group.isHeaderHidden && (
+                <div className="w-[120px] h-[24px] flex items-center text-[14px] font-medium font-work-sans text-[#F8F8F9] select-none tracking-wider">
+                  {group.category}
+                </div>
+              )}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = pathname === item.path;
 
-            return (
-              <Link
-                key={item.name}
-                href={item.path}
-                className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 ${
-                  isActive
-                    ? 'bg-secondary-200 text-secondary-900 shadow-sm font-semibold'
-                    : 'text-secondary-200 hover:bg-secondary-800 hover:text-white'
-                }`}
-              >
-                <Icon size={18} className="shrink-0" />
-                <span>{item.name}</span>
-              </Link>
-            );
-          })}
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.isLocked ? '#' : item.path}
+                    onClick={(e) => {
+                      if (item.isLocked) {
+                        e.preventDefault();
+                      }
+                    }}
+                    className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
+                      isActive
+                        ? 'bg-secondary-200 text-secondary-900 shadow-sm font-semibold'
+                        : item.isLocked
+                        ? 'text-pneutral-50 cursor-not-allowed'
+                        : 'text-pneutral-50 hover:bg-secondary-800 hover:text-white cursor-pointer'
+                    }`}
+                  >
+                    <Icon size={18} className="shrink-0" />
+                    <span className="truncate">{item.name}</span>
+                    {item.isLocked && (
+                      <Image 
+                        src="/sidebar/lock-icon.svg" 
+                        alt="Locked" 
+                        width={14} 
+                        height={14} 
+                        className="ml-auto shrink-0" 
+                      />
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
       </div>
 
       {/* Bottom Section: User & Logout */}
       <div className="flex flex-col gap-4">
-        {/* Divider */}
-       {/* <hr className="border-secondary-800" /> */}
-
         {/* Logout Button */}
         <button
           onClick={handleLogout}
