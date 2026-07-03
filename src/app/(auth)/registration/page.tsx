@@ -7,6 +7,7 @@ import Link from "next/link";
 import Button from "@/app/components/common/Button";
 import { register, sendEmailOtp, verifyEmailOtp } from "@/services/AuthService";
 import { useRouter } from "next/navigation";
+import { showToast } from "@/app/components/common/Toast";
 
 const page = () => {
   const router = useRouter();
@@ -95,35 +96,8 @@ const page = () => {
     }
   };
 
-  // const handleSubmit = async () => {
-  //   try {
-  //     const payload = {
-  //       userEmail,
-  //       password,
-  //     };
-
-  //     console.log(payload);
-
-  //     const response = await register(payload);
-
-  //     console.log("Registration Successful:", response);
-
-  //     // Redirect to Login page
-  //     router.push("/login");
-  //   } catch (error) {
-  //     if (error instanceof Error) {
-  //       console.error(error.message);
-
-  //       // Display error message here
-  //       // toast.error(error.message);
-  //     }
-  //   }
-  // };
-
   const handleSubmit = async () => {
     let hasError = false;
-
-    // Reset previous errors
     setEmailError("");
     setPasswordError("");
     setConfirmPasswordError("");
@@ -177,12 +151,13 @@ const page = () => {
 
       const response = await register(payload);
 
-      console.log("Registration Successful:", response);
+      showToast.success("Login Successful");
 
       router.push("/login");
     } catch (error) {
       if (error instanceof Error) {
         setEmailError(error.message);
+        showToast.error("Invalid Credentials");
       }
     }
   };
@@ -232,24 +207,6 @@ const page = () => {
       }
     }
   };
-
-  // const handleVerifyOtp = async () => {
-  //   try {
-  //     const response = await verifyEmailOtp({
-  //       email: userEmail,
-  //       otp: otp.join(""),
-  //     });
-
-  //     console.log("OTP Verified:", response);
-
-  //     setIsEmailVerified(true);
-  //     setShowOtp(false);
-  //   } catch (error) {
-  //     if (error instanceof Error) {
-  //       console.error(error.message);
-  //     }
-  //   }
-  // };
 
   return (
     <>
