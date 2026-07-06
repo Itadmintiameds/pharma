@@ -1,5 +1,5 @@
 import React from 'react';
-import SetupBusinessView from '../dashboardComponents/SetupBusiness';
+import SetupBusinessView from './components/SetupBusiness';
 
 export default function SetupBusinessPage() {
   return (

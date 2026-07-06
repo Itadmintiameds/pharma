@@ -1,5 +1,5 @@
 import React from 'react';
-import SettingsView from '../dashboardComponents/settings';
+import SettingsView from './components/settings';
 
 export default function SettingsPage() {
   return (
