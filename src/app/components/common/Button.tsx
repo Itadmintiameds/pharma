@@ -22,20 +22,20 @@ const Button: React.FC<ButtonProps> = ({
     <button
       disabled={disabled || loading}
       className={clsx(
-        "inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
+        "h-12 inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-200 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
 
         fullWidth && "w-full",
 
-        {
-          "h-10 px-4 text-sm": size === "sm",
-          "h-12 px-6 text-base": size === "md",
-          "h-11 text-label-l3": size === "lg",
-        },
+        // {
+        //   "w-35.25 px-4 text-sm": size === "sm",
+        //   "h-12 px-6 text-base": size === "md",
+        //   "h-11 text-label-l3": size === "lg",
+        // },
 
         {
-          "bg-secondary-700 text-white": variant === "primary",
-          "bg-gray-100 text-gray-800": variant === "secondary",
-          "border border-secondary-700 bg-white text-[#6C5CE7]":
+          "bg-secondary-700 text-white text-label-l4": variant === "primary",
+          "bg-info-500 text-white text-label-l4": variant === "secondary",
+          "border-2 border-pneutral-600 w-35.25 text-pneutral-600 text-label-l2":
             variant === "outline",
         },
 

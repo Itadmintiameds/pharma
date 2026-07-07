@@ -37,10 +37,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
+          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
             {label}
             {required && (
-              <span className="ml-1 text-warning-500">*</span>
+              <span className="ml-2 text-warning-500 font-semibold text-label-l2">*</span>
             )}
           </label>
         )}

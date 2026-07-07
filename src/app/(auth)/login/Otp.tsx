@@ -106,7 +106,7 @@ const Otp = ({ email, password, onBack }: OtpProps) => {
       {/* Actions */}
       <div className="flex flex-col gap-4 mt-auto">
         <Button 
-          size="lg" 
+          variant="primary"
           onClick={handleVerify} 
           loading={loading}
           disabled={attemptsLeft <= 0}

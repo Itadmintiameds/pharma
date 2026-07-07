@@ -113,7 +113,7 @@ const Login = ({ onSubmit }: LoginProps) => {
           </span>
         </div>
 
-        <Button size="lg" onClick={handleLogin} loading={loading}>
+        <Button variant="primary" onClick={handleLogin} loading={loading}>
           Send OTP
         </Button>
 
