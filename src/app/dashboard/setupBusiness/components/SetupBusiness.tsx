@@ -14,7 +14,7 @@ export default function SetupBusinessView() {
   const [locationType, setLocationType] = useState<"single" | "multiple">("single");
 
   return (
-    <div className="flex flex-col gap-6 w-full font-body select-none">
+    <div className="flex flex-col gap-6 w-full select-none">
       
       {/* Title */}
       <h1 className="font-work-sans font-semibold text-[24px] leading-[44px] text-pneutral-900">
@@ -22,58 +22,54 @@ export default function SetupBusinessView() {
       </h1>
 
       {/* Business Details Card */}
-      <div className="w-full bg-white p-[24px] rounded-[12px] border-[0.89px] border-pneutral-200 flex flex-col gap-[24px] shrink-0">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
         {/* Header Block */}
-        <div className="w-full flex flex-col gap-[4px]">
-          <h2 className="font-work-sans font-semibold text-[20px] leading-[28px] text-pneutral-900">
+        <div className="flex flex-col gap-1 text-pneutral-900">
+          <h2 className="text-h6 font-semibold">
             Business Details
           </h2>
-          <p className="font-body font-normal text-[16px] leading-[24px] text-pneutral-500">
+          <p className="text-p4 font-normal font-noto-sans text-pneutral-500">
             Enter your business information
           </p>
         </div>
 
         {/* Inputs Grid */}
-        <div className="grid grid-cols-2 gap-x-[24px] gap-y-[16px] w-full">
+        <div className="grid grid-cols-2 gap-6 w-full">
           <Input
             label="Business Name"
-            placeholder="e.g. MedPlus Healthcare"
+            placeholder="MedPlus Healthcare"
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
-            className="w-full h-[48px] min-h-[48px] max-h-[52px]"
           />
           <Input
             label="Ownership Type"
-            placeholder="e.g. Proprietorship"
+            placeholder="Proprietorship"
             value={ownershipType}
             onChange={(e) => setOwnershipType(e.target.value)}
-            className="w-full h-[48px] min-h-[48px] max-h-[52px]"
           />
           <Input
             label="PAN Number (Optional)"
-            placeholder="e.g. ASDF1212AS"
+            placeholder="ASDF1212AS"
             value={panNumber}
             onChange={(e) => setPanNumber(e.target.value)}
-            className="w-full h-[48px] min-h-[48px] max-h-[52px]"
           />
           <Input
             label="GST Number (Optional)"
-            placeholder="e.g. 46SSDSF123S556"
+            placeholder="46SSDSF123S556"
             value={gstNumber}
             onChange={(e) => setGstNumber(e.target.value)}
-            className="w-full h-[48px] min-h-[48px] max-h-[52px]"
           />
         </div>
       </div>
 
       {/* Location Details Card */}
-      <div className="w-full bg-white p-[24px] rounded-[12px] border-[0.89px] border-pneutral-200 flex flex-col gap-[24px] shrink-0">
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
         {/* Header Block */}
-        <div className="w-full flex flex-col gap-[4px]">
-          <h2 className="font-work-sans font-semibold text-[18px] leading-[28px] text-pneutral-900">
+        <div className="flex flex-col gap-1 text-pneutral-900">
+          <h2 className="text-h6 font-semibold">
             Location Details
           </h2>
-          <p className="font-body font-normal text-[16px] leading-[24px] text-pneutral-500">
+          <p className="text-p4 font-normal font-noto-sans text-pneutral-500">
             Select location type
           </p>
         </div>
@@ -103,16 +99,13 @@ export default function SetupBusinessView() {
               )}
             </div>
 
-            {/* Icon Block (Enlarged to 72px round container) */}
-            <div className="w-[72px] h-[72px] rounded-full bg-secondary-50/50 flex items-center justify-center shrink-0">
-              <Image 
-                src="/dashboard/setupBusiness/one-location.svg" 
-                alt="One Location" 
-                width={48} 
-                height={48} 
-                className="object-contain"
-              />
-            </div>
+            <Image 
+              src="/dashboard/setupBusiness/one-location.svg" 
+              alt="One Location" 
+              width={68} 
+              height={68} 
+              className="shrink-0 object-contain"
+            />
 
             {/* Description Text */}
             <div className="flex flex-col justify-center">
@@ -147,16 +140,13 @@ export default function SetupBusinessView() {
               )}
             </div>
 
-            {/* Icon Block (Enlarged to 72px round container) */}
-            <div className="w-[72px] h-[72px] rounded-full bg-secondary-50/50 flex items-center justify-center shrink-0">
-              <Image 
-                src="/dashboard/setupBusiness/multiple-location.svg" 
-                alt="Multiple Locations" 
-                width={48} 
-                height={48} 
-                className="object-contain"
-              />
-            </div>
+            <Image 
+              src="/dashboard/setupBusiness/multiple-location.svg" 
+              alt="Multiple Locations" 
+              width={68} 
+              height={68} 
+              className="shrink-0 object-contain"
+            />
 
             {/* Description Text */}
             <div className="flex flex-col justify-center">
