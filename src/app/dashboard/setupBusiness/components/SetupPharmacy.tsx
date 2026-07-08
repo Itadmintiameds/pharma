@@ -4,6 +4,9 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
+import UploadInput from "@/app/components/common/UploadInput";
+import ComplianceSuccessModal from "@/app/components/common/ComplianceSuccessModal";
+import { useRouter } from "next/navigation";
 
 const SetupPharmacy = () => {
   const [selected, setSelected] = useState("");
@@ -36,8 +39,32 @@ const SetupPharmacy = () => {
     },
   ];
 
+  const [manualFile, setManualFile] = useState<File | null>(null);
+  const [existingManualFile, setExistingManualFile] = useState<string | null>(
+    null,
+  );
+  const [open, setOpen] = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async () => {
+  try {
+    // await submitCompliance();
+
+    setOpen(true);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
   return (
     <>
+      <ComplianceSuccessModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        requestId="TMED-COMP-2025-000123"
+        onDashboard={() => router.push("/dashboard")}
+      />
+
       <div className="flex flex-col gap-5">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 h-115 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
@@ -138,16 +165,9 @@ const SetupPharmacy = () => {
               required
             />
 
-            <Input
-              label="Upload Drug License"
-              placeholder="Upload file"
-              type="text"
-              name="documentUrl"
-              id="documentUrl"
-              // value={password}
-              // onChange={handlePasswordChange}
-              // error={passwordError}
-              required
+            <UploadInput
+              onFileSelect={setManualFile}
+              existingFile={existingManualFile || undefined}
             />
 
             <Input
@@ -258,7 +278,7 @@ const SetupPharmacy = () => {
         <div className="flex gap-6">
           <Button variant="outline">Cancel</Button>
 
-          <Button variant="primary" className="w-[210px]">
+          <Button variant="primary" className="w-[210px]" onClick={handleSubmit}>
             Submit Compliance
           </Button>
         </div>
