@@ -64,7 +64,7 @@ const Otp = ({ email, password, onBack }: OtpProps) => {
     setLoading(true);
     setErrorMsg("");
     try {
-      console.log("Verifying OTP for:", email, "with code:", fullOtp);
+     // console.log("Verifying OTP for:", email, "with code:", fullOtp);   [kept for debugging]
       await verifyOtpService({ userEmail: email, otp: fullOtp });
       showToast.success("Successfully logged in! Redirecting...");
       router.push("/dashboard");
