@@ -9,8 +9,7 @@ import ComplianceSuccessModal from "@/app/components/common/ComplianceSuccessMod
 import { useRouter } from "next/navigation";
 
 const SetupPharmacy = () => {
-  const [selected, setSelected] = useState("");
-
+  const [selected, setSelected] = useState("pharmacy");
   const pharmacyTypes = [
     {
       id: "pharmacy",
@@ -39,6 +38,13 @@ const SetupPharmacy = () => {
     },
   ];
 
+  const documentLabel =
+    selected === "doctor"
+      ? "Medical Registration Certificate"
+      : ["hospital", "clinic", "nursingHome"].includes(selected)
+        ? "Clinical Establishment Certificate"
+        : "Drug License Number";
+
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [existingManualFile, setExistingManualFile] = useState<string | null>(
     null,
@@ -47,14 +53,14 @@ const SetupPharmacy = () => {
   const router = useRouter();
 
   const handleSubmit = async () => {
-  try {
-    // await submitCompliance();
+    try {
+      // await submitCompliance();
 
-    setOpen(true);
-  } catch (error) {
-    console.error(error);
-  }
-};
+      setOpen(true);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   return (
     <>
@@ -154,7 +160,7 @@ const SetupPharmacy = () => {
             />
 
             <Input
-              label="Drug License Number"
+              label={documentLabel}
               placeholder="46SSDSF123S556"
               type="text"
               name="documentNo"
@@ -168,6 +174,62 @@ const SetupPharmacy = () => {
             <UploadInput
               onFileSelect={setManualFile}
               existingFile={existingManualFile || undefined}
+            />
+
+            <Input
+              label="Issue Date"
+              type="date"
+              name="issueDate"
+              id="issueDate"
+              // value={password}
+              // onChange={handlePasswordChange}
+              // error={passwordError}
+              required
+            />
+
+            <Input
+              label="Issue Authority"
+              placeholder="John Doe"
+              type="text"
+              name="issueAuthority"
+              id="issueAuthority"
+              // value={password}
+              // onChange={handlePasswordChange}
+              // error={passwordError}
+              required
+            />
+
+            <Input
+              label="Expiry Date"
+              type="date"
+              name="expiryDate"
+              id="expiryDate"
+              // value={password}
+              // onChange={handlePasswordChange}
+              // error={passwordError}
+              required
+            />
+
+            <Input
+              label="PAN Number (Optional)"
+              placeholder="46SSDSF123S556"
+              type="text"
+              name="panNumber"
+              id="panNumber"
+              // value={password}
+              // onChange={handlePasswordChange}
+              // error={passwordError}
+            />
+
+            <Input
+              label="GST Number (Optional)"
+              placeholder="46SSDSF123S556"
+              type="text"
+              name="gstNumber"
+              id="gstNumber"
+              // value={password}
+              // onChange={handlePasswordChange}
+              // error={passwordError}
             />
 
             <Input
@@ -278,7 +340,11 @@ const SetupPharmacy = () => {
         <div className="flex gap-6">
           <Button variant="outline">Cancel</Button>
 
-          <Button variant="primary" className="w-[210px]" onClick={handleSubmit}>
+          <Button
+            variant="primary"
+            className="w-[210px]"
+            onClick={handleSubmit}
+          >
             Submit Compliance
           </Button>
         </div>

@@ -13,7 +13,7 @@ type Props = {
 export default function UploadInput({
   onFileSelect,
   existingFile,
-  label = "Upload Drug Licence Number",
+  label = "Upload Document",
   placeholder = "Upload the File",
   accept = "application/pdf",
   hasError = false,

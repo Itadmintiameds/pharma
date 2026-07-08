@@ -6,6 +6,8 @@ export interface PharmacyData {
     pharmacyType: string;
     pharmacyEmail: string;
     pharmacyPhone: number;
+    panNumber: string;
+    gstNumber: string;
     pharmacyBranch: string;
     pharmacyBuildingNo: string;
     pharmacyStreet: string;
@@ -24,6 +26,7 @@ export interface PharmacyDocumentData {
     documentNo: string;
     documentType: string;
     documentUrl: string;
+    issueDate: Date;
     issueAuthority: string;
     expiryDate: Date;
     isActive: boolean;
