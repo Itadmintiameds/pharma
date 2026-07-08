@@ -35,7 +35,7 @@ const Button: React.FC<ButtonProps> = ({
         {
           "bg-secondary-700 text-white text-label-l4": variant === "primary",
           "bg-info-500 text-white text-label-l4": variant === "secondary",
-          "border-2 border-pneutral-600 w-35.25 text-pneutral-600 text-label-l2":
+          "border-2 border-pneutral-600 w-35.25 text-pneutral-600 text-label-l4":
             variant === "outline",
         },
 
