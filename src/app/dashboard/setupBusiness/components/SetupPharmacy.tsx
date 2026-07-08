@@ -45,12 +45,79 @@ const SetupPharmacy = () => {
         ? "Clinical Establishment Certificate"
         : "Drug License Number";
 
+  const [address, setAddress] = useState({
+    pincode: "",
+    state: "",
+    district: "",
+    taluka: "",
+    city: "",
+  });
+
+  const [cities, setCities] = useState<string[]>([]);
+  const [loadingPincode, setLoadingPincode] = useState(false);
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [existingManualFile, setExistingManualFile] = useState<string | null>(
     null,
   );
   const [open, setOpen] = useState(false);
   const router = useRouter();
+
+  const resetAddress = (pincode = "") => {
+    setCities([]);
+
+    setAddress({
+      pincode,
+      state: "",
+      district: "",
+      taluka: "",
+      city: "",
+    });
+  };
+
+  const fetchAddressByPincode = async (pincode: string) => {
+    if (pincode.length !== 6) return;
+
+    try {
+      setLoadingPincode(true);
+
+      const response = await fetch(
+        `https://api.postalpincode.in/pincode/${pincode}`,
+      );
+
+      const data = await response.json();
+
+      if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
+        const offices = data[0].PostOffice;
+
+        const cityList = [
+          ...new Set<string>(
+            offices.map((office: any) => office.Name as string).filter(Boolean),
+          ),
+        ];
+
+        setCities(cityList);
+
+        const firstOffice = offices[0];
+
+        setCities(cityList);
+
+        setAddress({
+          pincode,
+          state: firstOffice.State || "",
+          district: firstOffice.District || "",
+          taluka: firstOffice.Block || "",
+          city: cityList[0] || "",
+        });
+      } else {
+        resetAddress(pincode);
+      }
+    } catch (error) {
+      console.error("Pincode lookup failed:", error);
+      resetAddress(pincode);
+    } finally {
+      setLoadingPincode(false);
+    }
+  };
 
   const handleSubmit = async () => {
     try {
@@ -233,14 +300,37 @@ const SetupPharmacy = () => {
             />
 
             <Input
+              label="Pin Code"
+              placeholder="Enter 6-digit pin code"
+              type="text"
+              name="pharmacyPincode"
+              id="pharmacyPincode"
+              value={address.pincode}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, "").slice(0, 6);
+
+                setAddress((prev) => ({
+                  ...prev,
+                  pincode: value,
+                }));
+
+                if (value.length === 6) {
+                  fetchAddressByPincode(value);
+                } else {
+                  resetAddress(value);
+                }
+              }}
+              required
+            />
+
+            <Input
               label="State"
               placeholder="Select State"
               type="text"
               name="pharmacyState"
               id="pharmacyState"
-              // value={password}
-              // onChange={handlePasswordChange}
-              // error={passwordError}
+              value={address.state}
+              readOnly
               required
             />
 
@@ -250,9 +340,8 @@ const SetupPharmacy = () => {
               type="text"
               name="pharmacyDistricts"
               id="pharmacyDistricts"
-              // value={password}
-              // onChange={handlePasswordChange}
-              // error={passwordError}
+              value={address.district}
+              readOnly
               required
             />
 
@@ -262,12 +351,11 @@ const SetupPharmacy = () => {
               type="text"
               name="pharmacyTaluka"
               id="pharmacyTaluka"
-              // value={password}
-              // onChange={handlePasswordChange}
-              // error={passwordError}
+              value={address.taluka}
+              readOnly
               required
             />
-
+            {/* 
             <Input
               label="City/Town/Village"
               placeholder="Enter city/town/village"
@@ -278,7 +366,35 @@ const SetupPharmacy = () => {
               // onChange={handlePasswordChange}
               // error={passwordError}
               required
-            />
+            /> */}
+
+            <div className="flex flex-col gap-1">
+              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
+                City/Town/Village
+                <span className="ml-2 text-warning-500">*</span>
+              </label>
+
+              <select
+                value={address.city}
+                onChange={(e) =>
+                  setAddress((prev) => ({
+                    ...prev,
+                    city: e.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
+              >
+                {cities.length === 0 ? (
+                  <option value="">Select City</option>
+                ) : (
+                  cities.map((city) => (
+                    <option key={city} value={city}>
+                      {city}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
 
             <Input
               label="Building No"
@@ -298,18 +414,6 @@ const SetupPharmacy = () => {
               type="text"
               name="pharmacyStreet"
               id="pharmacyStreet"
-              // value={password}
-              // onChange={handlePasswordChange}
-              // error={passwordError}
-              required
-            />
-
-            <Input
-              label="Pin Code"
-              placeholder="Enter 6-digit pin code"
-              type="text"
-              name="pharmacyPincode"
-              id="pharmacyPincode"
               // value={password}
               // onChange={handlePasswordChange}
               // error={passwordError}
