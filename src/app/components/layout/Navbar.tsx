@@ -1,15 +1,31 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
+import { getUserOrganization } from '@/services/SetupBusinessService';
 
 interface NavbarProps {
   hospitalName?: string;
   userRole?: string;
 }
 
-const Navbar = ({ hospitalName = 'ABC Hospital', userRole = 'Super Admin' }: NavbarProps) => {
+const Navbar = ({ hospitalName: initialHospitalName, userRole = 'Super Admin' }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [hospitalName, setHospitalName] = useState(initialHospitalName || 'ABC Hospital');
+
+  useEffect(() => {
+    const fetchOrg = async () => {
+      try {
+        const org = await getUserOrganization();
+        if (org && org.organizationName) {
+          setHospitalName(org.organizationName);
+        }
+      } catch (error) {
+        console.error("Failed to fetch organization for Navbar", error);
+      }
+    };
+    fetchOrg();
+  }, []);
 
   return (
     <header 
