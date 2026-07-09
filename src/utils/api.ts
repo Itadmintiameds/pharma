@@ -45,4 +45,36 @@ api.interceptors.response.use(
   }
 );
 
+export const adminApi = axios.create({
+  baseURL: process.env.NEXT_PUBLIC_ADMIN_API_URL || process.env.NEXT_PUBLIC_API_URL,
+  withCredentials: true,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+adminApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // Silently refresh token using the main auth client
+        await api.post("/auth/refreshToken");
+        return adminApi(originalRequest);
+      } catch (refreshError) {
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 export default api;

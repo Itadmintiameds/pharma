@@ -61,7 +61,7 @@ export default function ComplianceSuccessModal({
           </div>
 
           <div className="h-11 w-full rounded-[7px] border border-[#E5E7EB] bg-[#F9FAFB] flex items-center justify-center text-p4 font-bold text-[#111827]">
-            TMED-COMP-2025-000123
+            {requestId}
           </div>
 
           <div className="h-7 w-40.25 border border-danger-600 rounded-3xl bg-danger-50 text-label-l3 font-medium text-warning-600 flex items-center justify-center">
@@ -74,8 +74,8 @@ export default function ComplianceSuccessModal({
           </div>
 
           <div>
-            <Button variant="primary" className="w-[326px]">
-              Submit Compliance
+            <Button variant="primary" className="w-[326px]" onClick={onDashboard}>
+              Go to Dashboard
             </Button>
           </div>
         </div>

@@ -4,15 +4,31 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
 
-export default function SetupBusinessView() {
-  const [businessName, setBusinessName] = useState("");
-  const [ownershipType, setOwnershipType] = useState("");
-  const [panNumber, setPanNumber] = useState("");
-  const [gstNumber, setGstNumber] = useState("");
-  
-  // Location type selection: "single" or "multiple"
-  const [locationType, setLocationType] = useState<"single" | "multiple">("single");
+interface SetupBusinessViewProps {
+  businessName: string;
+  setBusinessName: (val: string) => void;
+  ownershipType: string;
+  setOwnershipType: (val: string) => void;
+  panNumber: string;
+  setPanNumber: (val: string) => void;
+  gstNumber: string;
+  setGstNumber: (val: string) => void;
+  locationType: "single" | "multiple";
+  setLocationType: (val: "single" | "multiple") => void;
+}
 
+export default function SetupBusinessView({
+  businessName,
+  setBusinessName,
+  ownershipType,
+  setOwnershipType,
+  panNumber,
+  setPanNumber,
+  gstNumber,
+  setGstNumber,
+  locationType,
+  setLocationType,
+}: SetupBusinessViewProps) {
   return (
     <div className="flex flex-col gap-6 w-full select-none">
       
@@ -52,12 +68,14 @@ export default function SetupBusinessView() {
             placeholder="ASDF1212AS"
             value={panNumber}
             onChange={(e) => setPanNumber(e.target.value)}
+            maxLength={10}
           />
           <Input
             label="GST Number (Optional)"
             placeholder="46SSDSF123S556"
             value={gstNumber}
             onChange={(e) => setGstNumber(e.target.value)}
+            maxLength={15}
           />
         </div>
       </div>
