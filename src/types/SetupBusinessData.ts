@@ -30,7 +30,7 @@ export interface PharmacyRegistrationRequest {
   userId: string;
   pharmacyName: string;
   pharmacyType: string;
-  pharmacyEmail: string;
+  pharmacyEmail?: string;
   pharmacyPhone: string;
   panNumber: string;
   gstNumber: string;
