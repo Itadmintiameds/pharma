@@ -29,6 +29,8 @@ export const getUserOrganization = async () => {
 
 // Fetch all pharmacy registrations from admin backend
 export const getPharmacyRegistrations = async (token?: string) => {
+    console.log("Base URL:", adminApi.defaults.baseURL);
+
   try {
     const response = await adminApi.get("/pharmacy-registration", {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined
