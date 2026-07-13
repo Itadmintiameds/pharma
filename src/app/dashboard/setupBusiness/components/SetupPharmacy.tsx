@@ -13,7 +13,7 @@ import {
   uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
 import { showToast } from "@/app/components/common/Toast";
-import { pharmacyDetailsSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
 
 interface SetupPharmacyProps {
   businessName: string;
@@ -244,17 +244,32 @@ const SetupPharmacy = ({
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    if (!hasOrganization) {
+      const businessResult = setupBusinessSchema.safeParse({
+        businessName,
+        ownershipType,
+        panNumber,
+        gstNumber,
+      });
+
+      if (!businessResult.success) {
+        showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       let orgResponse = existingOrg;
       if (!hasOrganization) {
         // Step 1: Hit Pharma Backend (create organization)
         orgResponse = await createOrganization({
-          organizationName: businessName || pharmacyName,
+          organizationName: businessName,
           organizationType: locationType === "single" ? "Single" : "Multiple",
-          ownershipType: ownershipType || "Proprietorship",
-          panNumber: panNumber || "PAN123456",
-          gstNumber: gstNumber || "GST123456789",
+          ownershipType: ownershipType,
+          panNumber: panNumber,
+          gstNumber: gstNumber,
         });
         console.log("Step 1 Success (Organization):", orgResponse);
       } else {

@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
+import { setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { z } from "zod";
 
 interface SetupBusinessViewProps {
   businessName: string;
@@ -29,6 +31,38 @@ export default function SetupBusinessView({
   locationType,
   setLocationType,
 }: SetupBusinessViewProps) {
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+
+  const validateField = <K extends keyof typeof setupBusinessSchema.shape>(
+    field: K,
+    value: string,
+  ) => {
+    const fieldSchema = setupBusinessSchema.shape[field];
+
+    const result = fieldSchema.safeParse(value);
+
+    setErrors((prev) => ({
+      ...prev,
+      [field]: result.success ? "" : (result.error.issues[0]?.message ?? ""),
+    }));
+  };
+
+  const handleFieldChange =
+    <K extends keyof typeof setupBusinessSchema.shape>(
+      field: K,
+      setter: (val: string) => void
+    ) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      if (field === "panNumber" || field === "gstNumber") {
+        setter(value.toUpperCase());
+        validateField(field, value.toUpperCase());
+      } else {
+        setter(value);
+        validateField(field, value);
+      }
+    };
+
   return (
     <div className="flex flex-col gap-6 w-full select-none">
       
@@ -55,27 +89,33 @@ export default function SetupBusinessView({
             label="Business Name"
             placeholder="MedPlus Healthcare"
             value={businessName}
-            onChange={(e) => setBusinessName(e.target.value)}
+            onChange={handleFieldChange("businessName", setBusinessName)}
+            error={errors.businessName}
+            required
           />
           <Input
             label="Ownership Type"
             placeholder="Proprietorship"
             value={ownershipType}
-            onChange={(e) => setOwnershipType(e.target.value)}
+            onChange={handleFieldChange("ownershipType", setOwnershipType)}
+            error={errors.ownershipType}
+            required
           />
           <Input
             label="PAN Number (Optional)"
             placeholder="ASDF1212AS"
             value={panNumber}
-            onChange={(e) => setPanNumber(e.target.value)}
+            onChange={handleFieldChange("panNumber", setPanNumber)}
             maxLength={10}
+            error={errors.panNumber}
           />
           <Input
             label="GST Number (Optional)"
             placeholder="46SSDSF123S556"
             value={gstNumber}
-            onChange={(e) => setGstNumber(e.target.value)}
+            onChange={handleFieldChange("gstNumber", setGstNumber)}
             maxLength={15}
+            error={errors.gstNumber}
           />
         </div>
       </div>

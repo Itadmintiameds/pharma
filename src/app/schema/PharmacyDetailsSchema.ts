@@ -117,4 +117,30 @@ export const pharmacyDetailsSchema = z.object({
         .optional()
         .or(z.literal("")),
 
+    pharmacyGstCertificate: z.any().optional(),
+});
+
+export const setupBusinessSchema = z.object({
+    businessName: z
+        .string()
+        .trim()
+        .min(1, "Business Name is required")
+        .max(50, "Business Name cannot exceed 50 characters")
+        .regex(
+            /^[a-zA-Z0-9\s\-&*#.!@"]+$/,
+            "Business Name contains invalid characters"
+        ),
+
+    ownershipType: z
+        .string()
+        .trim()
+        .min(1, "Ownership Type is required")
+        .max(50, "Ownership Type cannot exceed 50 characters")
+        .regex(
+            /^[a-zA-Z0-9\s\-&*#.!@"]+$/,
+            "Ownership Type contains invalid characters"
+        ),
+
+    panNumber: pharmacyDetailsSchema.shape.pharmacyPan,
+    gstNumber: pharmacyDetailsSchema.shape.pharmacyGst,
 });
