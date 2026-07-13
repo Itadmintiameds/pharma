@@ -7,12 +7,13 @@ import Button from "@/app/components/common/Button";
 import UploadInput from "@/app/components/common/UploadInput";
 import ComplianceSuccessModal from "@/app/components/common/ComplianceSuccessModal";
 import { useRouter } from "next/navigation";
-import { 
-  createOrganization, 
-  registerPharmacy, 
-  uploadPharmacyDocument 
+import {
+  createOrganization,
+  registerPharmacy,
+  uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
 import { showToast } from "@/app/components/common/Toast";
+import { pharmacyDetailsSchema } from "@/app/schema/PharmacyDetailsSchema";
 
 interface SetupPharmacyProps {
   businessName: string;
@@ -34,7 +35,7 @@ const SetupPharmacy = ({
   existingOrg = null,
 }: SetupPharmacyProps) => {
   const [selected, setSelected] = useState("");
-  
+
   // Form input state variables
   const [pharmacyName, setPharmacyName] = useState("");
   const [pharmacyPhone, setPharmacyPhone] = useState("");
@@ -83,6 +84,11 @@ const SetupPharmacy = ({
         ? "Clinical Establishment Certificate"
         : "Drug License Number";
 
+  const selectedBusinessType =
+    pharmacyTypes.find((type) => type.id === selected)?.label ?? "Pharmacy";
+
+  const pharmacyNameLabel = `${selectedBusinessType} Name`;
+
   const [address, setAddress] = useState({
     pincode: "",
     state: "",
@@ -101,6 +107,23 @@ const SetupPharmacy = ({
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const getFormData = () => ({
+    pharmacyType: selected,
+    pharmacyName,
+    pharmacyPhone,
+    documentNo,
+    issueDate,
+    issueAuthority,
+    expiryDate,
+    pharmacyPan,
+    pharmacyGst,
+    pharmacyPincode: address.pincode,
+    pharmacyBuildingNo,
+    pharmacyStreet,
+    pharmacyLandmark,
+  });
 
   const resetAddress = (pincode = "") => {
     setCities([]);
@@ -159,27 +182,61 @@ const SetupPharmacy = ({
     }
   };
 
+  const validateField = <K extends keyof typeof pharmacyDetailsSchema.shape>(
+    field: K,
+    value: string,
+  ) => {
+    const fieldSchema = pharmacyDetailsSchema.shape[field];
+
+    const result = fieldSchema.safeParse(value);
+
+    setErrors((prev) => ({
+      ...prev,
+      [field]: result.success ? "" : (result.error.issues[0]?.message ?? ""),
+    }));
+  };
+
+  const validateForm = () => {
+    const result = pharmacyDetailsSchema.safeParse(getFormData());
+
+    if (result.success) {
+      setErrors({});
+      return true;
+    }
+
+    const fieldErrors: Record<string, string> = {};
+
+    result.error.issues.forEach((issue) => {
+      const field = issue.path[0] as string;
+
+      if (!fieldErrors[field]) {
+        fieldErrors[field] = issue.message;
+      }
+    });
+
+    if (!manualFile && !existingManualFile) {
+      fieldErrors.documentFile = "Document is required";
+    }
+
+    setErrors(fieldErrors);
+
+    return false;
+  };
+
+  const handleFieldChange =
+    <K extends keyof typeof pharmacyDetailsSchema.shape>(
+      field: K,
+      setter: React.Dispatch<React.SetStateAction<string>>,
+    ) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+
+      setter(value);
+      validateField(field, value);
+    };
+
   const handleSubmit = async () => {
-    // Validate required fields
-    if (!pharmacyName || !pharmacyPhone || !documentNo || !address.state || !address.district || !address.taluka || !address.city || !pharmacyBuildingNo || !pharmacyStreet || !address.pincode) {
-      showToast.warning("Please fill in all required fields.");
-      return;
-    }
-
-    // Validate PAN Number length if provided
-    const finalPan = pharmacyPan || panNumber;
-    if (finalPan && finalPan.length !== 10) {
-      showToast.warning("PAN Number must be exactly 10 characters.");
-      return;
-    }
-
-    // Validate GST Number length if provided
-    const finalGst = pharmacyGst || gstNumber;
-    if (finalGst && finalGst.length !== 15) {
-      showToast.warning("GST Number must be exactly 15 characters.");
-      return;
-    }
-
+    if (!validateForm()) return;
     setLoading(true);
     try {
       let orgResponse = existingOrg;
@@ -190,7 +247,7 @@ const SetupPharmacy = ({
           organizationType: locationType === "single" ? "Single" : "Multiple",
           ownershipType: ownershipType || "Proprietorship",
           panNumber: panNumber || "PAN123456",
-          gstNumber: gstNumber || "GST123456789"
+          gstNumber: gstNumber || "GST123456789",
         });
         console.log("Step 1 Success (Organization):", orgResponse);
       } else {
@@ -205,57 +262,67 @@ const SetupPharmacy = ({
       const { userId, email, accessToken } = await userResponse.json();
 
       // Map document type
-      const docType = selected === "doctor"
-        ? "MEDICAL_REGISTRATION_CERTIFICATE"
-        : ["hospital", "clinic", "nursingHome"].includes(selected)
-          ? "CLINICAL_ESTABLISHMENT_CERTIFICATE"
-          : "DRUG_LICENSE";
+      const docType =
+        selected === "doctor"
+          ? "MEDICAL_REGISTRATION_CERTIFICATE"
+          : ["hospital", "clinic", "nursingHome"].includes(selected)
+            ? "CLINICAL_ESTABLISHMENT_CERTIFICATE"
+            : "DRUG_LICENSE";
 
       // Step 3: Register Pharmacy on Admin Backend
-      const regResponse = await registerPharmacy({
-        userId: String(userId),
-        pharmacyName: pharmacyName,
-        pharmacyType: selected.toUpperCase(),
-        pharmacyEmail: email ,
-        pharmacyPhone: pharmacyPhone,
-        panNumber: pharmacyPan || panNumber,
-        gstNumber: pharmacyGst || gstNumber,
-        pharmacyBranch: address.city,
-        pharmacyBuildingNo: pharmacyBuildingNo,
-        pharmacyStreet: pharmacyStreet,
-        pharmacyCity: address.city,
-        pharmacyTaluka: address.taluka,
-        pharmacyDistricts: address.district,
-        pharmacyPincode: Number(address.pincode),
-        pharmacyLandmark: pharmacyLandmark,
-        pharmacyState: address.state,
-        organizationId: orgResponse.organizationId,
-        organizationName: orgResponse.organizationName,
-        ownershipType: orgResponse.ownershipType,
-        organizationType: locationType === "single" ? "Single" : "Multiple",
-        organizationPanNumber: orgResponse.panNumber,
-        organizationGstNumber: orgResponse.gstNumber,
-        pharmacyRegistrationDocuments: [
-          {
-            documentNumber: documentNo,
-            documentType: docType,
-            issueDate: issueDate ? `${issueDate}T00:00:00` : undefined,
-            issueAuthority: issueAuthority,
-            expiryDate: expiryDate ? `${expiryDate}T00:00:00` : undefined
-          }
-        ]
-      }, accessToken);
-      
+      const regResponse = await registerPharmacy(
+        {
+          userId: String(userId),
+          pharmacyName: pharmacyName,
+          pharmacyType: selected.toUpperCase(),
+          pharmacyEmail: email,
+          pharmacyPhone: pharmacyPhone,
+          panNumber: pharmacyPan || panNumber,
+          gstNumber: pharmacyGst || gstNumber,
+          pharmacyBranch: address.city,
+          pharmacyBuildingNo: pharmacyBuildingNo,
+          pharmacyStreet: pharmacyStreet,
+          pharmacyCity: address.city,
+          pharmacyTaluka: address.taluka,
+          pharmacyDistricts: address.district,
+          pharmacyPincode: Number(address.pincode),
+          pharmacyLandmark: pharmacyLandmark,
+          pharmacyState: address.state,
+          organizationId: orgResponse.organizationId,
+          organizationName: orgResponse.organizationName,
+          ownershipType: orgResponse.ownershipType,
+          organizationType: locationType === "single" ? "Single" : "Multiple",
+          organizationPanNumber: orgResponse.panNumber,
+          organizationGstNumber: orgResponse.gstNumber,
+          pharmacyRegistrationDocuments: [
+            {
+              documentNumber: documentNo,
+              documentType: docType,
+              issueDate: issueDate ? `${issueDate}T00:00:00` : undefined,
+              issueAuthority: issueAuthority,
+              expiryDate: expiryDate ? `${expiryDate}T00:00:00` : undefined,
+            },
+          ],
+        },
+        accessToken,
+      );
+
       console.log("Step 2 Success (Pharmacy Registration):", regResponse);
 
       // Step 4: Upload File if provided
-      if (manualFile && regResponse.data?.pharmacyRegistrationDocuments && regResponse.data.pharmacyRegistrationDocuments.length > 0) {
-        const docId = regResponse.data.pharmacyRegistrationDocuments[0].registrationDocumentId;
+      if (
+        manualFile &&
+        regResponse.data?.pharmacyRegistrationDocuments &&
+        regResponse.data.pharmacyRegistrationDocuments.length > 0
+      ) {
+        const docId =
+          regResponse.data.pharmacyRegistrationDocuments[0]
+            .registrationDocumentId;
         const uploadResponse = await uploadPharmacyDocument(
           regResponse.data.pharmacyRegistrationId,
           docId,
           manualFile,
-          accessToken
+          accessToken,
         );
         console.log("Step 3 Success (Document Upload):", uploadResponse);
       }
@@ -286,7 +353,7 @@ const SetupPharmacy = ({
       />
 
       <div className="flex flex-col gap-5">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 h-115 flex flex-col gap-4">
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>
             <div className="text-p4 font-normal font-noto-sans">
@@ -311,13 +378,16 @@ const SetupPharmacy = ({
                     name="businessType"
                     value={item.id}
                     checked={isSelected}
-                    onChange={(e) => setSelected(e.target.value)}
+                    onChange={(e) => {
+                      setSelected(e.target.value);
+                      validateField("pharmacyType", e.target.value);
+                    }}
                     className="absolute left-4 top-4 h-5 w-5 accent-secondary-700"
                   />
 
                   <div className="flex flex-col items-center justify-center gap-2.5">
                     <div
-                      className={`flex h-[88px] w-[88px] items-center justify-center rounded-full
+                      className={`flex h-22 w-22 items-center justify-center rounded-full
                   ${isSelected ? "bg-[#EEE5FF]" : "bg-pneutral-100"}`}
                     >
                       <Image
@@ -336,6 +406,9 @@ const SetupPharmacy = ({
               );
             })}
           </div>
+          {errors.pharmacyType && (
+            <p className="mt-2 text-sm text-red-500">{errors.pharmacyType}</p>
+          )}
         </div>
 
         <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
@@ -350,13 +423,14 @@ const SetupPharmacy = ({
 
           <div className="grid grid-cols-2 gap-6">
             <Input
-              label="Pharmacy Name"
+              label={pharmacyNameLabel}
               placeholder="MedPlus Healthcare"
               type="text"
               name="pharmacyName"
               id="pharmacyName"
               value={pharmacyName}
-              onChange={(e) => setPharmacyName(e.target.value)}
+              onChange={handleFieldChange("pharmacyName", setPharmacyName)}
+              error={errors.pharmacyName}
               required
             />
 
@@ -367,7 +441,8 @@ const SetupPharmacy = ({
               name="pharmacyPhone"
               id="pharmacyPhone"
               value={pharmacyPhone}
-              onChange={(e) => setPharmacyPhone(e.target.value)}
+              onChange={handleFieldChange("pharmacyPhone", setPharmacyPhone)}
+              error={errors.pharmacyPhone}
               required
             />
 
@@ -378,7 +453,8 @@ const SetupPharmacy = ({
               name="documentNo"
               id="documentNo"
               value={documentNo}
-              onChange={(e) => setDocumentNo(e.target.value)}
+              onChange={handleFieldChange("documentNo", setDocumentNo)}
+              error={errors.documentNo}
               required
             />
 
@@ -393,7 +469,8 @@ const SetupPharmacy = ({
               name="issueDate"
               id="issueDate"
               value={issueDate}
-              onChange={(e) => setIssueDate(e.target.value)}
+              onChange={handleFieldChange("issueDate", setIssueDate)}
+              error={errors.issueDate}
               required
             />
 
@@ -404,7 +481,8 @@ const SetupPharmacy = ({
               name="issueAuthority"
               id="issueAuthority"
               value={issueAuthority}
-              onChange={(e) => setIssueAuthority(e.target.value)}
+              onChange={handleFieldChange("issueAuthority", setIssueAuthority)}
+              error={errors.issueAuthority}
               required
             />
 
@@ -414,7 +492,8 @@ const SetupPharmacy = ({
               name="expiryDate"
               id="expiryDate"
               value={expiryDate}
-              onChange={(e) => setExpiryDate(e.target.value)}
+              onChange={handleFieldChange("expiryDate", setExpiryDate)}
+              error={errors.expiryDate}
               required
             />
 
@@ -425,8 +504,8 @@ const SetupPharmacy = ({
               name="panNumber"
               id="panNumber"
               value={pharmacyPan}
-              onChange={(e) => setPharmacyPan(e.target.value)}
-              maxLength={10}
+              onChange={handleFieldChange("pharmacyPan", setPharmacyPan)}
+              error={errors.pharmacyPan}
             />
 
             <Input
@@ -436,8 +515,8 @@ const SetupPharmacy = ({
               name="gstNumber"
               id="gstNumber"
               value={pharmacyGst}
-              onChange={(e) => setPharmacyGst(e.target.value)}
-              maxLength={15}
+              onChange={handleFieldChange("pharmacyGst", setPharmacyGst)}
+              error={errors.pharmacyGst}
             />
 
             <Input
@@ -455,12 +534,15 @@ const SetupPharmacy = ({
                   pincode: value,
                 }));
 
+                validateField("pharmacyPincode", value);
+
                 if (value.length === 6) {
                   fetchAddressByPincode(value);
                 } else {
                   resetAddress(value);
                 }
               }}
+              error={errors.pharmacyPincode}
               required
             />
 
@@ -496,17 +578,6 @@ const SetupPharmacy = ({
               readOnly
               required
             />
-            {/* 
-            <Input
-              label="City/Town/Village"
-              placeholder="Enter city/town/village"
-              type="text"
-              name="pharmacyCity"
-              id="pharmacyCity"
-              value={pharmacyCity}
-              onChange={(e) => setPharmacyCity(e.target.value)}
-              required
-            /> */}
 
             <div className="flex flex-col gap-1">
               <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
@@ -543,7 +614,11 @@ const SetupPharmacy = ({
               name="pharmacyBuildingNo"
               id="pharmacyBuildingNo"
               value={pharmacyBuildingNo}
-              onChange={(e) => setPharmacyBuildingNo(e.target.value)}
+              onChange={handleFieldChange(
+                "pharmacyBuildingNo",
+                setPharmacyBuildingNo,
+              )}
+              error={errors.pharmacyBuildingNo}
               required
             />
 
@@ -554,7 +629,8 @@ const SetupPharmacy = ({
               name="pharmacyStreet"
               id="pharmacyStreet"
               value={pharmacyStreet}
-              onChange={(e) => setPharmacyStreet(e.target.value)}
+              onChange={handleFieldChange("pharmacyStreet", setPharmacyStreet)}
+              error={errors.pharmacyStreet}
               required
             />
 
@@ -565,7 +641,11 @@ const SetupPharmacy = ({
               name="pharmacyLandmark"
               id="pharmacyLandmark"
               value={pharmacyLandmark}
-              onChange={(e) => setPharmacyLandmark(e.target.value)}
+              onChange={handleFieldChange(
+                "pharmacyLandmark",
+                setPharmacyLandmark,
+              )}
+              error={errors.pharmacyLandmark}
             />
           </div>
         </div>
