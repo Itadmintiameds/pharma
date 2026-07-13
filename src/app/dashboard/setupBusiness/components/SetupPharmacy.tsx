@@ -25,6 +25,13 @@ interface SetupPharmacyProps {
   existingOrg?: any;
 }
 
+interface PostOffice {
+  Name: string;
+  Block: string;
+  District: string;
+  State: string;
+}
+
 const SetupPharmacy = ({
   businessName,
   ownershipType,
@@ -98,6 +105,7 @@ const SetupPharmacy = ({
   });
 
   const [cities, setCities] = useState<string[]>([]);
+  const [talukas, setTalukas] = useState<string[]>([]);
   const [loadingPincode, setLoadingPincode] = useState(false);
   const [manualFile, setManualFile] = useState<File | null>(null);
   const [existingManualFile, setExistingManualFile] = useState<string | null>(
@@ -127,6 +135,7 @@ const SetupPharmacy = ({
 
   const resetAddress = (pincode = "") => {
     setCities([]);
+    setTalukas([]);
 
     setAddress({
       pincode,
@@ -150,25 +159,23 @@ const SetupPharmacy = ({
       const data = await response.json();
 
       if (data[0]?.Status === "Success" && data[0]?.PostOffice?.length > 0) {
-        const offices = data[0].PostOffice;
 
-        const cityList = [
-          ...new Set<string>(
-            offices.map((office: any) => office.Name as string).filter(Boolean),
-          ),
-        ];
+        const offices: PostOffice[] = data[0].PostOffice;
+
+        const cityList = [...new Set(offices.map((office) => office.Name))];
+
+        const talukaList = [...new Set(offices.map((office) => office.Block))];
 
         setCities(cityList);
+        setTalukas(talukaList);
 
         const firstOffice = offices[0];
-
-        setCities(cityList);
 
         setAddress({
           pincode,
           state: firstOffice.State || "",
           district: firstOffice.District || "",
-          taluka: firstOffice.Block || "",
+          taluka: talukaList[0] || "",
           city: cityList[0] || "",
         });
       } else {
@@ -327,7 +334,7 @@ const SetupPharmacy = ({
         console.log("Step 3 Success (Document Upload):", uploadResponse);
       }
 
-      showToast.success("Compliance details submitted successfully!");
+      // showToast.success("Compliance details submitted successfully!");
       setRequestId(regResponse.data?.pharmacyRegistrationId || "");
       setOpen(true);
     } catch (err: any) {
@@ -568,7 +575,7 @@ const SetupPharmacy = ({
               required
             />
 
-            <Input
+            {/* <Input
               label="Taluka"
               placeholder="Select Taluka"
               type="text"
@@ -577,7 +584,35 @@ const SetupPharmacy = ({
               value={address.taluka}
               readOnly
               required
-            />
+            /> */}
+
+            <div className="flex flex-col gap-1">
+              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
+                Taluka
+                <span className="ml-2 text-warning-500">*</span>
+              </label>
+
+              <select
+                value={address.taluka}
+                onChange={(e) =>
+                  setAddress((prev) => ({
+                    ...prev,
+                    taluka: e.target.value,
+                  }))
+                }
+                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
+              >
+                {talukas.length === 0 ? (
+                  <option value="">Select Taluka</option>
+                ) : (
+                  talukas.map((taluka) => (
+                    <option key={taluka} value={taluka}>
+                      {taluka}
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
 
             <div className="flex flex-col gap-1">
               <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
