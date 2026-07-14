@@ -116,6 +116,27 @@ const SetupPharmacy = ({
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [formKey, setFormKey] = useState(0);
+
+  const resetForm = () => {
+    setSelected("");
+    setPharmacyName("");
+    setPharmacyPhone("");
+    setDocumentNo("");
+    setIssueDate("");
+    setIssueAuthority("");
+    setExpiryDate("");
+    setPharmacyPan("");
+    setPharmacyGst("");
+    setPharmacyBuildingNo("");
+    setPharmacyStreet("");
+    setPharmacyLandmark("");
+    setManualFile(null);
+    setExistingManualFile(null);
+    resetAddress("");
+    setErrors({});
+    setFormKey(prev => prev + 1);
+  };
 
   const getFormData = () => ({
     pharmacyType: selected,
@@ -372,9 +393,14 @@ const SetupPharmacy = ({
         onDashboard={() => {
           window.location.href = "/dashboard";
         }}
+        showAddLocation={locationType === "multiple"}
+        onAddLocation={() => {
+          setOpen(false);
+          resetForm();
+        }}
       />
 
-      <div className="flex flex-col gap-5">
+      <div key={formKey} className="flex flex-col gap-5">
         <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>

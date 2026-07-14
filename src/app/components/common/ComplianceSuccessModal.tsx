@@ -9,6 +9,8 @@ interface ComplianceSuccessModalProps {
   onClose: () => void;
   requestId: string;
   onDashboard: () => void;
+  showAddLocation?: boolean;
+  onAddLocation?: () => void;
 }
 
 export default function ComplianceSuccessModal({
@@ -16,12 +18,14 @@ export default function ComplianceSuccessModal({
   onClose,
   requestId,
   onDashboard,
+  showAddLocation = false,
+  onAddLocation,
 }: ComplianceSuccessModalProps) {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-      <div className="relative h-133 w-106.5 rounded-2xl bg-white p-8 shadow-2xl">
+      <div className="relative h-auto w-106.5 rounded-2xl bg-white p-8 shadow-2xl">
         <div className="flex justify-end">
           <button
             type="button"
@@ -73,8 +77,13 @@ export default function ComplianceSuccessModal({
             completed.
           </div>
 
-          <div>
-            <Button variant="primary" className="w-[326px]" onClick={onDashboard}>
+          <div className="mt-4 flex flex-col gap-3 w-[326px]">
+            {showAddLocation && (
+              <Button variant="outline" className="w-full" onClick={onAddLocation}>
+                Add Location
+              </Button>
+            )}
+            <Button variant="primary" className="w-full" onClick={onDashboard}>
               Go to Dashboard
             </Button>
           </div>
