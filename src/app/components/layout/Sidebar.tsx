@@ -23,8 +23,35 @@ const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
 
-  // Dynamic lock check - set to true once business setup registration is complete
+  const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
+  
+  // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
+
+  React.useEffect(() => {
+    const checkRegistrationStatus = async () => {
+      try {
+        const userRes = await fetch('/api/user-info');
+        if (!userRes.ok) return;
+        const { userId } = await userRes.json();
+        if (!userId) return;
+
+        const { getUserPharmacyKPIs } = await import('@/services/SetupBusinessService');
+        const kpiResponse = await getUserPharmacyKPIs(String(userId));
+        
+        if (kpiResponse && kpiResponse.data) {
+          // Unlock ONLY User Management if there is at least 1 approved (ACCEPTED) pharmacy
+          if (kpiResponse.data.approved > 0) {
+            setHasApprovedPharmacy(true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to check registration status for sidebar:", err);
+      }
+    };
+
+    checkRegistrationStatus();
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -105,7 +132,7 @@ const Sidebar = () => {
           name: 'User Management',
           icon: Users,
           path: '/dashboard/userManagement',
-          isLocked: !isBusinessRegistered,
+          isLocked: !hasApprovedPharmacy,
         }
       ]
     },
@@ -142,9 +169,9 @@ const Sidebar = () => {
         </div>
 
         {/* Navigation Menu */}
-        <nav className="w-[204px] h-[516px] flex flex-col gap-[16px]">
+        <nav className="w-[204px] flex flex-col gap-[8px]">
           {navGroups.map((group) => (
-            <div key={group.category} className={`w-[204px] ${group.heightClass} flex flex-col gap-[4px]`}>
+            <div key={group.category} className={`w-[204px] flex flex-col gap-[2px]`}>
               {!group.isHeaderHidden && (
                 <div className="w-[120px] h-[24px] flex items-center text-[14px] font-medium font-work-sans text-[#F8F8F9] select-none tracking-wider">
                   {group.category}
