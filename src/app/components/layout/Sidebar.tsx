@@ -41,7 +41,7 @@ const Sidebar = () => {
         
         if (kpiResponse && kpiResponse.data) {
           // Unlock ONLY User Management if there is at least 1 approved (ACCEPTED) pharmacy
-          if (kpiResponse.data.approved > 0) {
+          if (kpiResponse.data.approved == 0) {
             setHasApprovedPharmacy(true);
           }
         }
