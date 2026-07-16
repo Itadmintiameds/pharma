@@ -42,6 +42,45 @@ export const getPharmacyRegistrations = async (token?: string) => {
   }
 };
 
+// Fetch pharmacy registrations for a specific user from admin backend
+export const getUserPharmacyRegistrations = async (userId: string, token?: string) => {
+  try {
+    const response = await adminApi.get(`/pharmacy-registration/user/${userId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch pharmacy registrations for user ${userId}:`, error);
+    return null;
+  }
+};
+
+// Fetch pharmacy KPIs for a specific user from admin backend
+export const getUserPharmacyKPIs = async (userId: string, token?: string) => {
+  try {
+    const response = await adminApi.get(`/pharmacy-registration/kpis/${userId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch pharmacy KPIs for user ${userId}:`, error);
+    return null;
+  }
+};
+
+// Fetch specific pharmacy registration details by reqId from admin backend
+export const getPharmacyRegistrationDetails = async (reqId: string, token?: string) => {
+  try {
+    const response = await adminApi.get(`/pharmacy-registration/${reqId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Failed to fetch details for reqId ${reqId}:`, error);
+    return null;
+  }
+};
+
 // Step 2: Hits Admin Backend (uses adminApi client)
 export const registerPharmacy = async (
   data: PharmacyRegistrationRequest,

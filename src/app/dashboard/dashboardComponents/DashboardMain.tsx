@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
+import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails } from "@/services/SetupBusinessService";
+import PharmacyDetailsModal from "./PharmacyDetailsModal";
 
 export default function DashboardMain() {
   /*
@@ -28,25 +30,52 @@ export default function DashboardMain() {
   const applicationStep = 2; // Dynamic step status: 1 = Submitted, 2 = Under Review, 3 = Approved
   const router = useRouter();
 
+  const [kpis, setKpis] = useState({
+    totalPharmacies: 0,
+    approved: 0,
+    underReview: 0,
+    actionRequired: 0,
+    rejected: 0
+  });
+
+  const [selectedDetails, setSelectedDetails] = useState<any>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+
+  const handleViewDetails = async (reqId: string) => {
+    setDetailsLoading(true);
+    try {
+      const details = await getPharmacyRegistrationDetails(reqId);
+      if (details && details.data) {
+        setSelectedDetails(details.data);
+        setIsModalOpen(true);
+      }
+    } catch (err) {
+      console.error("Failed to fetch details:", err);
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
   const cards = [
     {
       title: "Total Location",
-      value: 5,
+      value: kpis.totalPharmacies,
       icon: "/BusinessSetup/LocationIcon.svg",
     },
     {
       title: "Approved",
-      value: 2,
+      value: kpis.approved,
       icon: "/BusinessSetup/ApprovedIcon.svg",
     },
     {
       title: "Under Review",
-      value: 2,
+      value: kpis.underReview,
       icon: "/BusinessSetup/UnderReviewIcon.svg",
     },
     {
       title: "Action Required",
-      value: 1,
+      value: kpis.actionRequired,
       icon: "/BusinessSetup/ActionReviewIcon.svg",
     },
   ];
@@ -72,6 +101,13 @@ export default function DashboardMain() {
       icon: "/PharmacyDetails/PharmacyIcon.svg",
       iconBg: "bg-[#DFF5D1]",
     },
+    
+    REJECT: {
+      label: "Rejected",
+      badge: "bg-[#FEE2E2] text-[#991B1B]",
+      icon: "/PharmacyDetails/PharmacyIcon.svg",
+      iconBg: "bg-[#FEE2E2]",
+    },
 
     DRAFT: {
       label: "Draft",
@@ -88,33 +124,89 @@ export default function DashboardMain() {
     },
   };
 
-  const applicationCards = [
-    {
-      hospitalName: "ABC Hospital - Main Branch",
-      status: "UNDER_REVIEW",
-      lastUpdated: "12 Jan 2026",
-    },
-    {
-      hospitalName: "ABC Hospital - Main Branch",
-      status: "ACTION_REQUIRED",
-      lastUpdated: "12 Jan 2026",
-    },
-    {
-      hospitalName: "ABC Hospital - Main Branch",
-      status: "APPROVED",
-      lastUpdated: "12 Jan 2026",
-    },
-    {
-      hospitalName: "ABC Hospital - Main Branch",
-      status: "DRAFT",
-      lastUpdated: "12 Jan 2026",
-    },
-    {
-      hospitalName: "ABC Hospital - Main Branch",
-      status: "NOT_STARTED",
-      description: "Compliance not started yet",
-    },
-  ];
+  const [applicationCards, setApplicationCards] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPharmacies = async () => {
+      try {
+        // Fetch logged-in user information first
+        const userResponse = await fetch('/api/user-info');
+        if (!userResponse.ok) {
+          console.error("Failed to fetch user info");
+          setLoading(false);
+          return;
+        }
+        
+        const { userId } = await userResponse.json();
+        
+        if (!userId) {
+          console.error("No userId found for the current user");
+          setLoading(false);
+          return;
+        }
+
+        const [response, kpiResponse] = await Promise.all([
+          getUserPharmacyRegistrations(String(userId)),
+          getUserPharmacyKPIs(String(userId))
+        ]);
+
+        if (kpiResponse && kpiResponse.data) {
+          setKpis({
+            totalPharmacies: kpiResponse.data.totalPharmacies || 0,
+            approved: kpiResponse.data.approved || 0,
+            underReview: kpiResponse.data.underReview || 0,
+            actionRequired: kpiResponse.data.actionRequired || 0,
+            rejected: kpiResponse.data.rejected || 0
+          });
+        }
+
+        if (response && response.data) {
+          const formattedData = response.data.map((item: any) => {
+            const date = item.updatedDate ? new Date(item.updatedDate) : new Date();
+            const formattedDate = date.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+            });
+
+            let mappedStatus = "NOT_STARTED";
+            switch(item.status) {
+              case "SUBMITTED":
+                mappedStatus = "UNDER_REVIEW";
+                break;
+              case "CORRECTION":
+                mappedStatus = "ACTION_REQUIRED";
+                break;
+              case "ACCEPT":
+                mappedStatus = "APPROVED";
+                break;
+              case "REJECT":
+                mappedStatus = "REJECT";
+                break;
+              default:
+                mappedStatus = item.status || "NOT_STARTED";
+            }
+
+            return {
+              hospitalName: item.pharmacyName,
+              status: mappedStatus,
+              lastUpdated: formattedDate,
+              description: item.type,
+              reqId: item.pharmacyReqId,
+            };
+          });
+          setApplicationCards(formattedData);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPharmacies();
+  }, []);
 
   return (
     // <div className="flex flex-col select-none font-body w-full max-w-7xl gap-8">
@@ -442,9 +534,17 @@ export default function DashboardMain() {
         </div> */}
 
         <div className="grid grid-cols-3 gap-4">
-          {applicationCards.map((card, index) => {
+          {loading ? (
+            <div className="col-span-3 py-10 flex items-center justify-center text-pneutral-500">
+              Loading applications...
+            </div>
+          ) : applicationCards.length === 0 ? (
+            <div className="col-span-3 py-10 flex items-center justify-center text-pneutral-500">
+              No applications found.
+            </div>
+          ) : applicationCards.map((card, index) => {
             const config =
-              STATUS_CONFIG[card.status as keyof typeof STATUS_CONFIG];
+              STATUS_CONFIG[card.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.NOT_STARTED;
 
             return (
               <div
@@ -494,7 +594,11 @@ export default function DashboardMain() {
                   </div>
                 )}
 
-                <button className="absolute bottom-3 left-3 right-3 h-[36px] rounded-lg bg-secondary-700 text-label-l3 font-medium text-white">
+                <button 
+                  onClick={() => handleViewDetails(card.reqId)}
+                  disabled={detailsLoading}
+                  className="absolute bottom-3 left-3 right-3 h-[36px] rounded-lg bg-secondary-700 text-label-l3 font-medium text-white disabled:opacity-50 flex items-center justify-center transition-colors hover:bg-secondary-800"
+                >
                   View Details
                 </button>
               </div>
@@ -502,6 +606,15 @@ export default function DashboardMain() {
           })}
         </div>
       </div>
+      
+      <PharmacyDetailsModal 
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedDetails(null);
+        }}
+        data={selectedDetails}
+      />
     </>
   );
 }
