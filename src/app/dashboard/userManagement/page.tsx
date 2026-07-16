@@ -1,8 +1,16 @@
 import React from 'react'
+import UserDetails from './components/UserDetails'
+import AddUserWizard from './components/AddUserWizard'
 
 const page = () => {
   return (
-    <div>page</div>
+  <>
+    <div>UserManagement</div>
+    <div>
+      <UserDetails/>
+      <AddUserWizard/>
+    </div>
+  </>
   )
 }
 
