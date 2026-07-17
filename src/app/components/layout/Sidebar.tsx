@@ -207,6 +207,7 @@ const Sidebar = () => {
                         width={14} 
                         height={14} 
                         className="ml-auto shrink-0" 
+                        style={{ width: "auto", height: "auto" }}
                       />
                     )}
                   </Link>

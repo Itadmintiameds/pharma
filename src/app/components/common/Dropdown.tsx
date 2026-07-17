@@ -19,6 +19,7 @@ interface DropdownProps {
   className?: string;
   disabled?: boolean;
   isLoading?: boolean;
+  allowOther?: boolean;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -34,10 +35,31 @@ const Dropdown: React.FC<DropdownProps> = ({
   className,
   disabled = false,
   isLoading = false,
+  allowOther = false,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const dynamicOptions = allowOther 
+    ? [...options, { label: "Other", value: "OTHER" }] 
+    : options;
+
+  const [isCustomOther, setIsCustomOther] = useState(() => {
+    if (allowOther && value && !multiple && !options.find(o => o.value === value)) {
+      return true;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (allowOther && value && !multiple && !options.find(o => o.value === value)) {
+      setIsCustomOther(true);
+    } else if (!value) {
+      setIsCustomOther(false);
+    }
+  }, [value, allowOther, options, multiple]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -68,12 +90,20 @@ const Dropdown: React.FC<DropdownProps> = ({
       }
       onChange(newValues);
     } else {
-      onChange(option.value);
+      if (option.value === "OTHER") {
+        setIsCustomOther(true);
+        onChange("");
+      } else {
+        setIsCustomOther(false);
+        onChange(option.value);
+      }
+      setSearchQuery("");
       setIsOpen(false);
+      inputRef.current?.blur();
     }
   };
 
-  const filteredOptions = options.filter((option) =>
+  const filteredOptions = dynamicOptions.filter((option) =>
     option.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -82,13 +112,15 @@ const Dropdown: React.FC<DropdownProps> = ({
       const currentValues = Array.isArray(value) ? value : [];
       if (currentValues.length === 0) return "";
       if (currentValues.length === 1) {
-        return options.find((o) => o.value === currentValues[0])?.label || "";
+        return dynamicOptions.find((o) => o.value === currentValues[0])?.label || "";
       }
       return `${currentValues.length} items selected`;
     }
 
     if (value !== undefined && value !== null && value !== "") {
-      return options.find((o) => o.value === value)?.label || "";
+      const opt = dynamicOptions.find((o) => o.value === value);
+      if (opt) return opt.label;
+      if (allowOther) return value as string;
     }
     return "";
   };
@@ -110,21 +142,62 @@ const Dropdown: React.FC<DropdownProps> = ({
 
       <div
         className={clsx(
-          "flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all cursor-pointer",
+          "flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all",
           error ? "border-warning-500" : "border-pneutral-300",
-          disabled && "opacity-60 cursor-not-allowed bg-gray-50"
+          disabled ? "opacity-60 cursor-not-allowed bg-gray-50" : "cursor-pointer"
         )}
-        onClick={() => !disabled && !isLoading && setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!disabled && !isLoading && !searchable) {
+            setIsOpen(!isOpen);
+          }
+        }}
       >
-        <span
-          className={clsx(
-            "text-p4 truncate",
-            displayValue && !isLoading ? "text-pneutral-900" : "text-pneutral-500"
-          )}
-        >
-          {isLoading ? "Loading..." : (displayValue || placeholder)}
-        </span>
+        {searchable ? (
+          <input
+            ref={inputRef}
+            type="text"
+            className={clsx(
+              "w-full outline-none bg-transparent text-p4 flex-1",
+              disabled && "cursor-not-allowed"
+            )}
+            placeholder={isOpen ? "Search..." : (displayValue || placeholder)}
+            value={isOpen ? searchQuery : (displayValue || "")}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              if (!isOpen) setIsOpen(true);
+            }}
+            onFocus={() => {
+              if (!disabled && !isLoading) {
+                setIsOpen(true);
+                setSearchQuery("");
+              }
+            }}
+            onClick={() => {
+              if (!isOpen && !disabled && !isLoading) setIsOpen(true);
+            }}
+            disabled={disabled || isLoading}
+          />
+        ) : (
+          <span
+            className={clsx(
+              "text-p4 truncate w-full flex-1",
+              displayValue && !isLoading ? "text-pneutral-900" : "text-pneutral-500"
+            )}
+          >
+            {isLoading ? "Loading..." : (displayValue || placeholder)}
+          </span>
+        )}
         <svg
+          onClick={(e) => {
+            if (!disabled && !isLoading) {
+              e.stopPropagation();
+              if (searchable && !isOpen) {
+                inputRef.current?.focus();
+              } else {
+                setIsOpen(!isOpen);
+              }
+            }
+          }}
           width="16"
           height="16"
           viewBox="0 0 24 24"
@@ -132,7 +205,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           stroke="currentColor"
           strokeWidth="2"
           className={clsx(
-            "text-pneutral-500 transition-transform duration-200 shrink-0 ml-2",
+            "text-pneutral-500 transition-transform duration-200 shrink-0 ml-2 cursor-pointer",
             isOpen && "rotate-180"
           )}
         >
@@ -140,23 +213,24 @@ const Dropdown: React.FC<DropdownProps> = ({
         </svg>
       </div>
 
+      {allowOther && isCustomOther && !multiple && (
+        <input
+          type="text"
+          className={clsx(
+            "mt-2 flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all text-p4 text-pneutral-900 outline-none focus:border-pneutral-500",
+            error ? "border-warning-500" : "border-pneutral-300"
+          )}
+          placeholder="Please specify..."
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus
+        />
+      )}
+
       {error && <p className="mt-1 text-p2 text-warning-500">{error}</p>}
 
       {isOpen && (
         <div className="absolute z-50 w-full mt-1 bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col">
-          {searchable && (
-            <div className="p-2 border-b border-pneutral-100 shrink-0">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-pneutral-300 rounded-md outline-none focus:border-pneutral-500"
-                onClick={(e) => e.stopPropagation()}
-              />
-            </div>
-          )}
-
           <div className="overflow-y-auto flex-1">
             {filteredOptions.length === 0 ? (
               <div className="p-3 text-sm text-pneutral-500 text-center">
@@ -182,10 +256,9 @@ const Dropdown: React.FC<DropdownProps> = ({
                         type="checkbox"
                         checked={isSelected}
                         readOnly
-                        className="mr-3 h-4 w-4 rounded border-gray-300 outline-none"
+                        className="mr-3 h-4 w-4 rounded border-gray-300 outline-none cursor-pointer checked:shadow-[0_0_0_2px_#E0E7FFCC]"
                         style={{
-                          accentColor: 'var(--Colors-Brand-Primary-900, #4C0080)',
-                          boxShadow: '0px 0px 0px 2px #E0E7FFCC'
+                          accentColor: 'var(--Colors-Brand-Primary-900, #4C0080)'
                         }}
                       />
                     )}
