@@ -1,8 +1,110 @@
-import React from "react";
+"use client";
+
+import React, { useState } from "react";
 import Image from "next/image";
+import Table from "@/app/components/common/table/Table";
+import StatusBadge from "@/app/components/common/table/StatusBadge";
+import { EyeIcon } from "lucide-react";
+import DataTable from "@/app/components/common/table/Table";
+import UserDetails from "./components/UserDetails";
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  employeeId: string;
+  role: string;
+  location: string;
+  status: "Active" | "Inactive" | "Locked";
+}
+
+const users: User[] = [
+  {
+    id: 1,
+    name: "Rahul Sharma",
+    email: "rahul@tiameds.ai",
+    employeeId: "Emp-0001",
+    role: "Super Admin",
+    location: "Head Office",
+    status: "Active",
+  },
+  {
+    id: 2,
+    name: "Rahul Sharma 2",
+    email: "rahul@tiameds.ai",
+    employeeId: "Emp-0002",
+    role: "Admin",
+    location: "Bangalore",
+    status: "Inactive",
+  },
+  {
+    id: 1,
+    name: "Rahul Sharma 3",
+    email: "rahul@tiameds.ai",
+    employeeId: "Emp-0003",
+    role: "Desk Officer",
+    location: "Bangalore",
+    status: "Active",
+  },
+];
 
 const page = () => {
-  
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+
+  const [page, setPage] = useState(1);
+  const columns = [
+    {
+      key: "name",
+      header: "Name",
+      render: (row: User) => <span className="font-semibold">{row.name}</span>,
+    },
+    {
+      key: "email",
+      header: "Email",
+    },
+    {
+      key: "employeeId",
+      header: "Employee ID",
+    },
+
+    {
+      key: "role",
+      header: "Role",
+    },
+    {
+      key: "location",
+      header: "Location",
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (row: User) => <StatusBadge status={row.status} />,
+    },
+    {
+      key: "action",
+      header: "Actions",
+      render: (row: User) => (
+        <button onClick={() => setSelectedUserId(row.id)}>
+          <Image
+            src="/Usermanagement/ViewIcon.svg"
+            alt="View"
+            width={21}
+            height={16}
+          />
+        </button>
+      ),
+    },
+  ];
+
+  if (selectedUserId) {
+    return (
+      <UserDetails
+        userId={selectedUserId}
+        // onBack={() => setSelectedUserId(null)}
+      />
+    );
+  }
+
   return (
     <>
       <div className="flex flex-col gap-4">
@@ -88,6 +190,17 @@ const page = () => {
             />
             <span>Filters</span>
           </button>
+        </div>
+
+        <div className="w-full h-full bg-white border border-pneutral-100 rounded-lg p-4">
+          <DataTable
+            columns={columns}
+            data={users}
+            page={1}
+            pageSize={7}
+            totalItems={128}
+            onPageChange={(page) => console.log(page)}
+          />
         </div>
       </div>
     </>
