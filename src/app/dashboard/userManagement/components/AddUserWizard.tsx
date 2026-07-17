@@ -255,7 +255,7 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
 
   const renderStep3 = () => (
     <div className="w-full flex-1 bg-white rounded-[12px] border-[0.89px] border-pneutral-100 p-[16px] gap-[16px] shadow-sm flex items-center justify-center">
-      <UserDetails />
+      <UserDetails userId={1}/>
     </div>
   );
 
