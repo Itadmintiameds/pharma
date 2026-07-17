@@ -167,21 +167,21 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
 
      <div className="w-full rounded-lg border border-pneutral-100 bg-white">
       {/* Tabs */}
-      <div className="flex border-b border-pneutral-100">
+      <div className="flex ">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`relative px-6 py-4 text-label-l1 font-semibold transition-colors ${
+            className={`relative px-6 py-4 text-label-l4 font-medium transition-colors ${
               activeTab === tab
-                ? "text-primary-500"
-                : "text-pneutral-700 hover:text-primary-500"
+                ? "text-secondary-700 font-semibold"
+                : "text-pneutral-800 "
             }`}
           >
             {tab}
 
             {activeTab === tab && (
-              <span className="absolute bottom-0 left-0 h-1 w-full rounded-t bg-primary-500" />
+              <span className="absolute bottom-0 left-0 h-1 w-full rounded-t bg-secondary-700" />
             )}
           </button>
         ))}
