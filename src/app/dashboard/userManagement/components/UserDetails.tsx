@@ -37,7 +37,7 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
   
   return (
     <>
-      <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-5">
         <div className="flex justify-between">
           <div className="text-h4 font-semibold">User Details</div>
 
@@ -73,9 +73,9 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
           </div>
         </div>
         
-      </div>
+     
 
-     <div className="bg-white border border-pneutral-100 rounded-lg w-full h-61 p-4">
+     <div className="bg-white border border-pneutral-100 rounded-xl w-full h-61 p-4">
       <div className="flex gap-8">
         {/* Left Section */}
         <div className="flex flex-col gap-2 items-center justify-center border-r-2 border-pneutral-200 pr-8 min-w-[170px]">
@@ -165,7 +165,7 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
       </div>
     </div>
 
-     <div className="w-full rounded-lg border border-pneutral-100 bg-white">
+     <div>
       {/* Tabs */}
       <div className="flex ">
         {tabs.map((tab) => (
@@ -188,8 +188,12 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
       </div>
 
       {/* Tab Content */}
-      <div className="p-6">{renderComponent()}</div>
+      <div className="w-full h-full p-4 mt-4 bg-white border border-pneutral-100 rounded-xl">
+        
+        {renderComponent()}</div>
     </div>
+
+     </div>
     </>
   );
 };

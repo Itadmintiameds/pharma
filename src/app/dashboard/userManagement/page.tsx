@@ -38,7 +38,7 @@ const users: User[] = [
     status: "Inactive",
   },
   {
-    id: 1,
+    id: 3,
     name: "Rahul Sharma 3",
     email: "rahul@tiameds.ai",
     employeeId: "Emp-0003",
@@ -51,7 +51,6 @@ const users: User[] = [
 const page = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
-  const [page, setPage] = useState(1);
   const columns = [
     {
       key: "name",
