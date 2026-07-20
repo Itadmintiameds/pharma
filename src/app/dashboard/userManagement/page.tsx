@@ -16,6 +16,8 @@ const page = () => {
   const [showAddUser, setShowAddUser] = useState(false);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 7;
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -191,11 +193,11 @@ const page = () => {
           <div className="w-full h-full bg-white border border-pneutral-100 rounded-lg p-4">
             <DataTable
               columns={columns}
-              data={users}
-              page={1}
-              pageSize={7}
+              data={users.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
+              page={currentPage}
+              pageSize={pageSize}
               totalItems={users.length}
-              onPageChange={(page) => console.log(page)}
+              onPageChange={(page) => setCurrentPage(page)}
             />
           </div>
         </div>

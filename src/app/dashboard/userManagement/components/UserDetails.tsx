@@ -30,6 +30,18 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
           />
         );
 
+      case "Roles & Permissions":
+        const anyUser = user as any;
+        const mappedPermissions = anyUser?.permissions?.reduce((acc: any, p: any) => {
+          if (!acc[p.featureId]) {
+            acc[p.featureId] = {};
+          }
+          acc[p.featureId][p.permissionId] = true;
+          return acc;
+        }, {} as Record<number, Record<number, boolean>>) || {};
+        
+        return <RolesPermissions mode="view" assignedPermissions={mappedPermissions} />;
+
       case "Audit Logs":
         return <AuditLogs />;
 
@@ -106,12 +118,10 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
           <div className="flex gap-8">
             {/* Left Section */}
             <div className="flex flex-col gap-2 items-center justify-center border-r-2 border-pneutral-200 pr-8 min-w-[170px]">
-              <Image
-                src="/Usermanagement/UserImg.svg"
+              <img
+                src={user?.imageUrl || "/Usermanagement/UserImg.svg"}
                 alt="Profile"
-                width={100}
-                height={100}
-                className="rounded-full object-cover"
+                className="w-[100px] h-[100px] rounded-full object-cover"
               />
               <StatusBadge
                 status={(user?.userStatus || "Inactive") as any}
@@ -158,7 +168,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
                 <div className="flex">
                   <p className="w-36 font-semibold">Department</p>
                   <p className="font-semibold">
-                    {user?.department || "Not Present"}
+                    {(user as any)?.department || "Not Present"}
                   </p>
                 </div>
 

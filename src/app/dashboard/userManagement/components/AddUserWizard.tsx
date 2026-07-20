@@ -107,6 +107,33 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     }
   };
 
+  const handleNextStep1 = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
+    if (!formData.gender) newErrors.gender = 'Gender is required';
+    if (!formData.department) newErrors.department = 'Department is required';
+    if (!formData.designation) newErrors.designation = 'Designation is required';
+    if (!formData.location || formData.location.length === 0) newErrors.location = 'At least one location must be assigned';
+    if (!formData.mobileNumber.trim()) newErrors.mobileNumber = 'Mobile Number is required';
+    if (!formData.dob) newErrors.dob = 'Date of Birth is required';
+    
+    // Check if email is provided and valid
+    if (!formData.emailId.trim()) {
+      newErrors.emailId = 'Email ID is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
+      newErrors.emailId = 'Invalid email format';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    
+    setErrors({});
+    setStep(2);
+  };
+
   const renderHeader = () => {
     return (
       <div className="flex flex-col gap-3 w-full">
@@ -196,8 +223,10 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         />
 
         <div className="w-full">
-          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">Mobile Number</label>
-          <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-white transition-all">
+          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+            Mobile Number <span className="text-warning-500">*</span>
+          </label>
+          <div className={`flex h-12 w-full items-center rounded-md border ${errors.mobileNumber ? 'border-warning-500' : 'border-pneutral-300'} bg-white transition-all`}>
             <select className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none">
               <option>+91</option>
             </select>
@@ -211,6 +240,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
                 if (val === '' || /^[0-9]+$/.test(val)) {
                   if (val.length <= 10) {
                     setFormData({ ...formData, mobileNumber: val });
+                    if (errors.mobileNumber) setErrors({ ...errors, mobileNumber: '' });
                   }
                 }
               }}
@@ -222,16 +252,20 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         <Input 
           label="Email ID" 
           type="email"
+          required
           placeholder="johndoe@gmail.com" 
           value={formData.emailId}
-          onChange={(e) => setFormData({ ...formData, emailId: e.target.value })}
+          onChange={(e) => {
+            setFormData({ ...formData, emailId: e.target.value });
+            if (errors.emailId) setErrors({ ...errors, emailId: '' });
+          }}
           onBlur={(e) => {
             const val = e.target.value;
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (val && !emailRegex.test(val)) {
               setErrors({ ...errors, emailId: 'Invalid email format' });
-            } else {
-              setErrors({ ...errors, emailId: '' });
+            } else if (!val) {
+              setErrors({ ...errors, emailId: 'Email ID is required' });
             }
           }}
           error={errors.emailId}
@@ -246,9 +280,14 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         <Input 
           label="Date of Birth" 
           type="date"
+          required
           placeholder="12-10-2016" 
           value={formData.dob}
-          onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+          onChange={(e) => {
+            setFormData({ ...formData, dob: e.target.value });
+            if (errors.dob) setErrors({ ...errors, dob: '' });
+          }}
+          error={errors.dob}
           leftIcon={
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500">
               <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -269,7 +308,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             { label: 'Other', value: 'Other' }
           ]}
           value={formData.gender}
-          onChange={(val) => setFormData({ ...formData, gender: val })}
+          onChange={(val) => {
+            setFormData({ ...formData, gender: val });
+            if (errors.gender) setErrors({ ...errors, gender: '' });
+          }}
+          error={errors.gender}
         />
 
         <Dropdown
@@ -281,7 +324,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             { label: 'Operations', value: 'Operations' }
           ]}
           value={formData.department}
-          onChange={(val) => setFormData({ ...formData, department: val })}
+          onChange={(val) => {
+            setFormData({ ...formData, department: val });
+            if (errors.department) setErrors({ ...errors, department: '' });
+          }}
+          error={errors.department}
         />
 
         <Dropdown
@@ -290,7 +337,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           placeholder="Select Designation"
           options={roles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
-          onChange={(val) => setFormData({ ...formData, designation: val })}
+          onChange={(val) => {
+            setFormData({ ...formData, designation: val });
+            if (errors.designation) setErrors({ ...errors, designation: '' });
+          }}
+          error={errors.designation}
         />
 
         <Dropdown
@@ -304,7 +355,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             value: c.pharmacyId
           }))}
           value={formData.location}
-          onChange={(val) => setFormData({ ...formData, location: val })}
+          onChange={(val) => {
+            setFormData({ ...formData, location: val });
+            if (errors.location) setErrors({ ...errors, location: '' });
+          }}
+          error={errors.location}
         />
 
         <div className="w-full">
@@ -369,7 +424,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         </button>
         {step === 1 && (
           <button 
-            onClick={() => setStep(2)}
+            onClick={handleNextStep1}
             className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
           >
             Next
