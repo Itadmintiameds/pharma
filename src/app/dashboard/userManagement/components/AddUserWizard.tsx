@@ -371,19 +371,27 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             ref={fileInputRef}
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
-                setImageFile(e.target.files[0]);
+                const file = e.target.files[0];
+                if (file.size > 5 * 1024 * 1024) {
+                  setErrors(prev => ({ ...prev, image: 'Image size should not exceed 5 MB' }));
+                  setImageFile(null);
+                } else {
+                  setErrors(prev => ({ ...prev, image: '' }));
+                  setImageFile(file);
+                }
               }
             }}
           />
           <div 
             onClick={() => fileInputRef.current?.click()}
-            className="flex h-12 w-full items-center justify-between rounded-md border border-dashed border-pneutral-300 bg-gray-50 transition-all px-3 cursor-pointer hover:bg-gray-100"
+            className={`flex h-12 w-full items-center justify-between rounded-md border border-dashed ${errors.image ? 'border-warning-500' : 'border-pneutral-300'} bg-gray-50 transition-all px-3 cursor-pointer hover:bg-gray-100`}
           >
             <span className="text-p4 text-pneutral-500 truncate">
               {imageFile ? imageFile.name : "click to browse JPEG or PNG"}
             </span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
           </div>
+          {errors.image && <p className="mt-1 text-p2 text-warning-500">{errors.image}</p>}
         </div>
       </div>
     </div>
