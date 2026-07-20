@@ -1,3 +1,5 @@
+import { PharmacyData } from "./PharmacyData";
+
 export interface UserData {
     userId: number;
     pharmacyId?: string;
@@ -8,10 +10,20 @@ export interface UserData {
     employeeId?: string;
     dob?: Date;
     gender?: string;
+    department?: string;
     imageUrl?: string;
-    role: string;
     lastLogin?: boolean;
     isRejected?: boolean;
     userStatus?: string;
+    pharmacyCities?: string[];
+    createdAt?: string;
+
+    pharmaRolesDto?: PharmaRolesDto;
+    pharmacies?: PharmacyData[];
+}
+
+export interface PharmaRolesDto {
+    roleId: number;
+    roleName: string;
 }
 

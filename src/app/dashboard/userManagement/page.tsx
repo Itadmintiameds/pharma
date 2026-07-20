@@ -22,6 +22,7 @@ const page = () => {
       setLoading(true);
 
       const data = await getAllUsers();
+      console.log("User Data----", data);
 
       if (data) {
         setUsers(data);
@@ -48,15 +49,19 @@ const page = () => {
     {
       key: "employeeId",
       header: "Employee ID",
+      render: (row: UserData) => row.employeeId?.trim() || "Not Present",
     },
     {
-      key: "role",
+      key: "roleName",
       header: "Role",
     },
     {
-      key: "pharmacyId",
+      key: "pharmacyCities",
       header: "Location",
-      render: (row: UserData) => row.pharmacyId ?? "-",
+      render: (row: UserData) =>
+        row.pharmacyCities && row.pharmacyCities.length > 0
+          ? row.pharmacyCities.join(", ")
+          : "-",
     },
     {
       key: "userStatus",
@@ -82,7 +87,12 @@ const page = () => {
   ];
 
   if (selectedUserId) {
-    return <UserDetails userId={selectedUserId} />;
+    return (
+      <UserDetails
+        userId={selectedUserId}
+        onBack={() => setSelectedUserId(null)}
+      />
+    );
   }
 
   return (
