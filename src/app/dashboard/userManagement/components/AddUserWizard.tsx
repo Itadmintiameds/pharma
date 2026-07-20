@@ -94,6 +94,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
 
       if (newUserId) {
         setCreatedUserId(newUserId);
+      //  setCreatedUserData(response.user || response);
       }
 
       if (newUserId && imageFile) {
@@ -342,8 +343,8 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   };
 
   const renderStep3 = () => (
-    <div className="w-full flex-1 bg-white rounded-[12px] border-[0.89px] border-pneutral-100 p-[16px] gap-[16px] shadow-sm flex items-center justify-center">
-      <UserDetails userId={1}/>
+    <div className="w-full h-full overflow-auto -m-4 p-4">
+      <UserDetails userId={createdUserId || 1} />
     </div>
   );
 

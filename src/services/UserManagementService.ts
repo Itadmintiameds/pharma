@@ -42,3 +42,8 @@ export const uploadUserImage = async (userId: string | number, image: File) => {
   });
   return response.data;
 };
+
+export const getUserById = async (userId: string | number) => {
+  const response = await api.get(`/user/${userId}`);
+  return response.data;
+};
