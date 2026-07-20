@@ -24,8 +24,6 @@ const page = () => {
       setLoading(true);
 
       const data = await getAllUsers();
-      console.log("User Data----", data);
-
       if (data) {
         setUsers(data);
       }
