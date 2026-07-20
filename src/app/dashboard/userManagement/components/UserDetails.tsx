@@ -43,7 +43,6 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
       try {
         setLoading(true);
         const response = await getUserById(userId);
-        console.log("User Data ----", response);
 
         setUser(response);
       } catch (error) {
