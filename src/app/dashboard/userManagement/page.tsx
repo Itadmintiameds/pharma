@@ -7,6 +7,7 @@ import StatusBadge from "@/app/components/common/table/StatusBadge";
 import { EyeIcon } from "lucide-react";
 import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
+import AddUserWizard from "./components/AddUserWizard";
 
 interface User {
   id: number;
@@ -50,6 +51,7 @@ const users: User[] = [
 
 const page = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [showAddWizard, setShowAddWizard] = useState(false);
 
   const [page, setPage] = useState(1);
   const columns = [
@@ -96,6 +98,10 @@ const page = () => {
     },
   ];
 
+  if (showAddWizard) {
+    return <AddUserWizard onBack={() => setShowAddWizard(false)} />;
+  }
+
   if (selectedUserId) {
     return <UserDetails userId={selectedUserId} />;
   }
@@ -116,7 +122,10 @@ const page = () => {
               <span>Export</span>
             </button>
 
-            <button className="w-27.75 h-9 bg-primary-800 rounded-lg flex items-center justify-center gap-2 text-pneutral-50 text-label-l3 font-medium">
+            <button
+              onClick={() => setShowAddWizard(true)}
+              className="w-27.75 h-9 bg-primary-800 rounded-lg flex items-center justify-center gap-2 text-pneutral-50 text-label-l3 font-medium"
+            >
               <Image
                 src="/Usermanagement/FilterIcon.svg"
                 alt="Add User"

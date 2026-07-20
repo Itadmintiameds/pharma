@@ -25,7 +25,7 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
         return <AssignedLocation />;
 
       case "Roles & Permissions":
-        return <RolesPermissions />;
+        return <RolesPermissions  mode="view"/>;
 
       case "Audit Logs":
         return <AuditLogs />;

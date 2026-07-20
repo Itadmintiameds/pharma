@@ -4,9 +4,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
-import { getAllModules, getFeaturesByModuleId, getPermissions, getCities, getAllRoles, createUser, uploadUserImage } from '@/services/UserManagementService';
+import { getCities, getAllRoles, createUser, uploadUserImage } from '@/services/UserManagementService';
+import RolesPermissions from './RolesPermissions';
 
-export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
+interface AddUserWizardProps {
+  onBack: () => void;
+}
+
+export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -22,10 +27,6 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const totalSteps = 3;
 
-  const [modules, setModules] = useState<{moduleId: number, moduleName: string}[]>([]);
-  const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
-  const [features, setFeatures] = useState<{featureId: number, featureName: string, featureCode: string}[]>([]);
-  const [permissions, setPermissions] = useState<{permissionId: number, permissionName: string}[]>([]);
   const [rolePermissions, setRolePermissions] = useState<Record<number, Record<number, boolean>>>({});
   
   const [cities, setCities] = useState<{pharmacyId: string, pharmacyName: string, pharmacyCity: string}[]>([]);
@@ -34,42 +35,23 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [createdUserId, setCreatedUserId] = useState<number | null>(null);
+
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [mods, perms, citiesData, rolesData] = await Promise.all([
-          getAllModules(),
-          getPermissions(),
+        const [citiesData, rolesData] = await Promise.all([
           getCities(),
           getAllRoles()
         ]);
-        setModules(mods);
-        setPermissions(perms);
         setCities(citiesData || []);
         setRoles(rolesData || []);
-        if (mods && mods.length > 0) {
-          setSelectedModuleId(mods[0].moduleId);
-        }
       } catch (err) {
         console.error("Failed to fetch role management data", err);
       }
     };
     fetchInitialData();
   }, []);
-
-  useEffect(() => {
-    if (selectedModuleId !== null) {
-      const fetchFeatures = async () => {
-        try {
-          const data = await getFeaturesByModuleId(selectedModuleId);
-          setFeatures(data.features || []);
-        } catch (err) {
-          console.error("Failed to fetch features", err);
-        }
-      };
-      fetchFeatures();
-    }
-  }, [selectedModuleId]);
 
   const handleSave = async () => {
     try {
@@ -109,6 +91,10 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
 
       const response = await createUser(payload);
       const newUserId = response.user?.userId || response.userId || response.id; // Correct extraction from CreateUserResponseDto
+
+      if (newUserId) {
+        setCreatedUserId(newUserId);
+      }
 
       if (newUserId && imageFile) {
         await uploadUserImage(newUserId, imageFile);
@@ -262,6 +248,14 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
           placeholder="12-10-2016" 
           value={formData.dob}
           onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+          leftIcon={
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="16" y1="2" x2="16" y2="6"></line>
+              <line x1="8" y1="2" x2="8" y2="6"></line>
+              <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+          }
         />
 
         <Dropdown
@@ -292,7 +286,6 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
         <Dropdown
           label="Designation"
           required
-          allowOther
           placeholder="Select Designation"
           options={roles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
@@ -343,80 +336,7 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
   const renderStep2 = () => {
     return (
       <div className="w-full flex-1 flex gap-[10px] items-stretch min-h-0">
-        
-        {/* Modules Card (Left) */}
-        <div className="w-[210px] h-full p-[16px] flex flex-col gap-[8px] rounded-[12px] border-[1px] border-gray-200 bg-white shadow-sm shrink-0">
-          <div className="w-full h-[40px] p-[8px] border-b-[1px] border-gray-200 shrink-0">
-            <h3 className="font-medium text-[16px] leading-[24px] text-[#3C3D3A]">Modules</h3>
-          </div>
-          <div className="w-full flex-1 flex flex-col gap-[4px] overflow-y-auto min-h-0">
-            {modules.map((mod) => (
-              <div 
-                key={mod.moduleId} 
-                onClick={() => setSelectedModuleId(mod.moduleId)}
-                className={`w-full min-h-[36px] max-h-[44px] px-3 rounded-md flex justify-between items-center cursor-pointer shrink-0 ${selectedModuleId === mod.moduleId ? 'bg-[#F3EDFF] text-[#7E3AF2]' : 'text-gray-700 hover:bg-gray-50'}`}
-              >
-                <span className="text-sm font-medium truncate pr-2">{mod.moduleName}</span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><path d="M6 9l6 6 6-6"/></svg>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Role Management Card (Right) */}
-        <div className="flex-1 h-full p-[16px] flex flex-col gap-[8px] rounded-[12px] border-[1px] border-gray-200 bg-white shadow-sm min-w-0">
-          <div className="w-full h-[46px] flex flex-col gap-[4px] shrink-0">
-            <h3 className="font-semibold text-[16px] leading-[24px] text-gray-900">Role Management</h3>
-          </div>
-          
-          <div className="w-full flex-1 overflow-auto flex min-h-0">
-            {/* Column 1: Permissions */}
-            <div className="w-[180px] flex flex-col shrink-0">
-              <div className="w-[180px] h-[72px] p-[16px_8px_16px_8px] border-b-[1px] border-[#EAEAE9] bg-[#F9F9F8] shrink-0 flex items-center gap-[10px]">
-                <span className="h-[20px] text-[14px] leading-[20px] font-semibold text-[#1E1E1D]">Permission</span>
-              </div>
-              {features.map((f) => (
-                <div key={f.featureId} className="w-[180px] h-[68px] p-[12px_8px_12px_8px] border-b-[1px] border-gray-200 shrink-0 flex items-center gap-[4px]">
-                  <span className="h-[20px] text-[14px] leading-[20px] font-normal text-[#1E1E1D] truncate" title={f.featureName}>{f.featureName}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Other columns (View, Create, etc) */}
-            {permissions.map((p) => (
-              <div key={p.permissionId} className="flex-1 flex flex-col min-w-[78px]">
-                <div className="w-full h-[72px] p-[16px_8px_16px_8px] border-b-[1px] border-[#EAEAE9] bg-[#F9F9F8] shrink-0 flex items-center justify-center gap-[10px]">
-                  <span className="h-[20px] text-[14px] leading-[20px] font-semibold text-[#1E1E1D]" title={p.permissionName}>
-                    {p.permissionName.charAt(0).toUpperCase() + p.permissionName.slice(1).toLowerCase()}
-                  </span>
-                </div>
-                {features.map((f) => (
-                  <div key={f.featureId} className="w-full h-[68px] p-[12px_8px_12px_8px] border-b-[1px] border-gray-200 shrink-0 flex items-center justify-center gap-[4px]">
-                    <input 
-                      type="checkbox" 
-                      checked={!!rolePermissions[f.featureId]?.[p.permissionId]}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setRolePermissions(prev => ({
-                          ...prev,
-                          [f.featureId]: {
-                            ...(prev[f.featureId] || {}),
-                            [p.permissionId]: checked
-                          }
-                        }));
-                      }}
-                      className="h-5 w-5 rounded border-gray-300 outline-none cursor-pointer checked:shadow-[0_0_0_2px_#E0E7FFCC]"
-                      style={{
-                        accentColor: 'var(--Colors-Brand-Primary-900, #4C0080)'
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-
+        <RolesPermissions mode="assign" onPermissionsChange={setRolePermissions} />
       </div>
     );
   };
@@ -441,7 +361,7 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
 
       <div className="w-full flex justify-end gap-4 mt-1 shrink-0">
         <button 
-          onClick={onCancel}
+          onClick={onBack}
           className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-white bg-white"
         >
           Cancel
@@ -464,10 +384,10 @@ export default function AddUserWizard({ onCancel }: { onCancel: () => void }) {
         )}
         {step === 3 && (
           <button 
-            onClick={() => onCancel()}
+            onClick={onBack}
             className="px-8 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium hover:bg-gray-300"
           >
-            Close
+            Done
           </button>
         )}
       </div>
