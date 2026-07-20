@@ -9,7 +9,7 @@ import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
 import AddUserWizard from "./components/AddUserWizard";
 import { UserData } from "@/types/UserData";
-import { getAllUsers } from "@/services/UserService";
+import { getAllUsers } from "@/services/UserManagementService";
 
 const page = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);

@@ -42,3 +42,14 @@ export const uploadUserImage = async (userId: string | number, image: File) => {
   });
   return response.data;
 };
+
+
+export const getAllUsers = async () => {
+    try {
+        const response = await api.get("/user/all");
+        return response.data;
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+};
