@@ -16,7 +16,7 @@ export interface UserData {
     isRejected?: boolean;
     userStatus?: string;
     pharmacyCities?: string[];
-    createdAt?: string;
+    createdAt?: string | Date;
 
     pharmaRolesDto?: PharmaRolesDto;
     pharmacies?: PharmacyData[];

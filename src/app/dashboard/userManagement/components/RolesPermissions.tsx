@@ -113,8 +113,11 @@ const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange }: Ro
                 <div key={f.featureId} className="w-full h-[68px] p-[12px_8px_12px_8px] border-b-[1px] border-gray-200 shrink-0 flex items-center justify-center gap-[4px]">
                   <input 
                     type="checkbox" 
-                    disabled={mode === 'view'}
+                    readOnly={mode === 'view'}
                     checked={!!rolePermissions[f.featureId]?.[p.permissionId]}
+                    onClick={(e) => {
+                      if (mode === 'view') e.preventDefault();
+                    }}
                     onChange={(e) => {
                       if (mode === 'view') return;
                       const checked = e.target.checked;
@@ -126,7 +129,7 @@ const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange }: Ro
                         }
                       }));
                     }}
-                    className="h-5 w-5 rounded border-gray-300 outline-none cursor-pointer checked:shadow-[0_0_0_2px_#E0E7FFCC] disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`h-5 w-5 rounded border-gray-300 outline-none checked:shadow-[0_0_0_2px_#E0E7FFCC] ${mode === 'view' ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                     style={{
                       accentColor: 'var(--Colors-Brand-Primary-900, #4C0080)'
                     }}
