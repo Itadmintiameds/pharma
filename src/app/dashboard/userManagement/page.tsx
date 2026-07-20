@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Image from "next/image";
 import Table from "@/app/components/common/table/Table";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
@@ -8,84 +8,68 @@ import { EyeIcon } from "lucide-react";
 import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
 import AddUserWizard from "./components/AddUserWizard";
-
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  employeeId: string;
-  role: string;
-  location: string;
-  status: "Active" | "Inactive" | "Locked";
-}
-
-const users: User[] = [
-  {
-    id: 1,
-    name: "Rahul Sharma",
-    email: "rahul@tiameds.ai",
-    employeeId: "Emp-0001",
-    role: "Super Admin",
-    location: "Head Office",
-    status: "Active",
-  },
-  {
-    id: 2,
-    name: "Rahul Sharma 2",
-    email: "rahul@tiameds.ai",
-    employeeId: "Emp-0002",
-    role: "Admin",
-    location: "Bangalore",
-    status: "Inactive",
-  },
-  {
-    id: 3,
-    name: "Rahul Sharma 3",
-    email: "rahul@tiameds.ai",
-    employeeId: "Emp-0003",
-    role: "Desk Officer",
-    location: "Bangalore",
-    status: "Active",
-  },
-];
+import { UserData } from "@/types/UserData";
+import { getAllUsers } from "@/services/UserService";
 
 const page = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
+  const [users, setUsers] = useState<UserData[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoading(true);
+
+      const data = await getAllUsers();
+
+      if (data) {
+        setUsers(data);
+      }
+
+      setLoading(false);
+    };
+
+    fetchUsers();
+  }, []);
 
   const columns = [
     {
-      key: "name",
+      key: "fullName",
       header: "Name",
-      render: (row: User) => <span className="font-semibold">{row.name}</span>,
+      render: (row: UserData) => (
+        <span className="font-semibold">{row.fullName}</span>
+      ),
     },
     {
-      key: "email",
+      key: "userEmail",
       header: "Email",
     },
     {
       key: "employeeId",
       header: "Employee ID",
     },
-
     {
       key: "role",
       header: "Role",
     },
     {
-      key: "location",
+      key: "pharmacyId",
       header: "Location",
+      render: (row: UserData) => row.pharmacyId ?? "-",
     },
     {
-      key: "status",
+      key: "userStatus",
       header: "Status",
-      render: (row: User) => <StatusBadge status={row.status} />,
+      render: (row: UserData) => (
+        <StatusBadge status={(row.userStatus ?? "Inactive") as any} />
+      ),
     },
     {
       key: "action",
       header: "Actions",
-      render: (row: User) => (
-        <button onClick={() => setSelectedUserId(row.id)}>
+      render: (row: UserData) => (
+        <button onClick={() => setSelectedUserId(row.userId)}>
           <Image
             src="/Usermanagement/ViewIcon.svg"
             alt="View"
@@ -200,7 +184,7 @@ const page = () => {
               data={users}
               page={1}
               pageSize={7}
-              totalItems={128}
+              totalItems={users.length}
               onPageChange={(page) => console.log(page)}
             />
           </div>
