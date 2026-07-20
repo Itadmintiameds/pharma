@@ -52,4 +52,9 @@ export const getAllUsers = async () => {
         console.error(error);
         return null;
     }
-};
+  }
+  
+export const getUserById = async (userId: string | number) => {
+  const response = await api.get(`/user/${userId}`);
+  return response.data;
+}
