@@ -84,10 +84,7 @@ const page = () => {
       key: "action",
       header: "Actions",
       render: (row: User) => (
-        <button
-          onClick={() => setSelectedUserId(row.id)}
-         
-        >
+        <button onClick={() => setSelectedUserId(row.id)}>
           <Image
             src="/Usermanagement/ViewIcon.svg"
             alt="View"
@@ -98,12 +95,13 @@ const page = () => {
       ),
     },
   ];
-  
+
+  if (selectedUserId) {
+    return <UserDetails userId={selectedUserId} />;
+  }
 
   return (
     <>
-
-
       <div className="flex flex-col gap-4">
         <div className="flex justify-between">
           <div className="text-h4 font-semibold text-pneutral-900">Users</div>
