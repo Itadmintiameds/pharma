@@ -1,0 +1,44 @@
+import api from "@/utils/api";
+
+export const getAllModules = async () => {
+  const response = await api.get('/modules/all');
+  return response.data;
+};
+
+export const getFeaturesByModuleId = async (moduleId: number) => {
+  const response = await api.get(`/modules/${moduleId}/features`);
+  return response.data;
+};
+
+export const getPermissions = async () => {
+  const response = await api.get('/permissions');
+  return response.data;
+};
+
+export const getCities = async () => {
+  const response = await api.get('/pharmacy/cities');
+  return response.data;
+};
+
+export const getAllRoles = async () => {
+  const response = await api.get('/roles');
+  return response.data;
+};
+
+export const createUser = async (data: any) => {
+  const response = await api.post('/user/create', data);
+  return response.data;
+};
+
+export const uploadUserImage = async (userId: string | number, image: File) => {
+  const formData = new FormData();
+  formData.append('image', image);
+  formData.append('userId', String(userId));
+  
+  const response = await api.post(`/user/${userId}/image`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  });
+  return response.data;
+};

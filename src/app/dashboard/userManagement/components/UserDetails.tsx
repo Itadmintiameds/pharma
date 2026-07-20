@@ -25,7 +25,7 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
         return <AssignedLocation />;
 
       case "Roles & Permissions":
-        return <RolesPermissions />;
+        return <RolesPermissions  mode="view"/>;
 
       case "Audit Logs":
         return <AuditLogs />;
@@ -37,7 +37,7 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
   
   return (
     <>
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-10">
         <div className="flex justify-between">
           <div className="text-h4 font-semibold">User Details</div>
 
@@ -73,9 +73,9 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
           </div>
         </div>
         
-     
+      </div>
 
-     <div className="bg-white border border-pneutral-100 rounded-xl w-full h-61 p-4">
+     <div className="bg-white border border-pneutral-100 rounded-lg w-full h-61 p-4">
       <div className="flex gap-8">
         {/* Left Section */}
         <div className="flex flex-col gap-2 items-center justify-center border-r-2 border-pneutral-200 pr-8 min-w-[170px]">
@@ -165,35 +165,31 @@ const UserDetails = ({ userId }: UserDetailsProps) => {
       </div>
     </div>
 
-     <div>
+     <div className="w-full rounded-lg border border-pneutral-100 bg-white">
       {/* Tabs */}
-      <div className="flex ">
+      <div className="flex border-b border-pneutral-100">
         {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`relative px-6 py-4 text-label-l4 font-medium transition-colors ${
+            className={`relative px-6 py-4 text-label-l1 font-semibold transition-colors ${
               activeTab === tab
-                ? "text-secondary-700 font-semibold"
-                : "text-pneutral-800 "
+                ? "text-primary-500"
+                : "text-pneutral-700 hover:text-primary-500"
             }`}
           >
             {tab}
 
             {activeTab === tab && (
-              <span className="absolute bottom-0 left-0 h-1 w-full rounded-t bg-secondary-700" />
+              <span className="absolute bottom-0 left-0 h-1 w-full rounded-t bg-primary-500" />
             )}
           </button>
         ))}
       </div>
 
       {/* Tab Content */}
-      <div className="w-full h-full p-4 mt-4 bg-white border border-pneutral-100 rounded-xl">
-        
-        {renderComponent()}</div>
+      <div className="p-6">{renderComponent()}</div>
     </div>
-
-     </div>
     </>
   );
 };

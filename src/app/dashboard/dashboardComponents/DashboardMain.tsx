@@ -5,7 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
-import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails } from "@/services/SetupBusinessService";
+import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails, getUserOrganization } from "@/services/SetupBusinessService";
 import PharmacyDetailsModal from "./PharmacyDetailsModal";
 
 export default function DashboardMain() {
@@ -126,6 +126,7 @@ export default function DashboardMain() {
 
   const [applicationCards, setApplicationCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [organizationType, setOrganizationType] = useState<string>("");
 
   useEffect(() => {
     const fetchPharmacies = async () => {
@@ -146,10 +147,15 @@ export default function DashboardMain() {
           return;
         }
 
-        const [response, kpiResponse] = await Promise.all([
+        const [response, kpiResponse, org] = await Promise.all([
           getUserPharmacyRegistrations(String(userId)),
-          getUserPharmacyKPIs(String(userId))
+          getUserPharmacyKPIs(String(userId)),
+          getUserOrganization()
         ]);
+
+        if (org && org.organizationType) {
+          setOrganizationType(org.organizationType);
+        }
 
         if (kpiResponse && kpiResponse.data) {
           setKpis({
@@ -485,7 +491,15 @@ export default function DashboardMain() {
             </div>
 
             <div>
-              <button className="w-[139px] h-[36px] border-[1.5px] border-secondary-700 rounded-lg text-label-l3 font-medium text-secondary-700 flex items-center justify-center gap-2">
+              <button 
+                onClick={() => {
+                  if (organizationType?.toLowerCase() === "multiple") {
+                    router.push("/dashboard/setupBusiness");
+                  }
+                }}
+                disabled={organizationType?.toLowerCase() !== "multiple"}
+                className={`w-[139px] h-[36px] border-[1.5px] border-secondary-700 rounded-lg text-label-l3 font-medium text-secondary-700 flex items-center justify-center gap-2 ${organizationType?.toLowerCase() !== "multiple" ? "opacity-50 cursor-not-allowed" : "hover:bg-secondary-50 transition-colors"}`}
+              >
                 <Image
                   src="/BusinessSetup/PlusIcon.svg"
                   alt="Add"
