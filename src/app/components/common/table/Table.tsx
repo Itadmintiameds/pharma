@@ -115,7 +115,7 @@ export default function DataTable<T extends Record<string, any>>({
             className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Image
-              src="/Usermanagement/PreviousIcon.svg"
+              src="/UserManagement/PreviousIcon.svg"
               alt="Export"
               width={24}
               height={24}
@@ -145,7 +145,7 @@ export default function DataTable<T extends Record<string, any>>({
             className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Image
-              src="/Usermanagement/NextIcon.svg"
+              src="/UserManagement/NextIcon.svg"
               alt="Export"
               width={24}
               height={24}
