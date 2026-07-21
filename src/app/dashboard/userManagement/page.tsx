@@ -76,7 +76,7 @@ const page = () => {
       render: (row: UserData) => (
         <button onClick={() => setSelectedUserId(row.userId)}>
           <Image
-            src="/Usermanagement/ViewIcon.svg"
+            src="/UserManagement/ViewIcon.svg"
             alt="View"
             width={21}
             height={16}
@@ -106,7 +106,7 @@ const page = () => {
             <div className="flex gap-4">
               <button className="w-27 h-9 bg-white border border-pneutral-50 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
                 <Image
-                  src="/Usermanagement/ExportIcon.svg"
+                  src="/UserManagement/ExportIcon.svg"
                   alt="Export"
                   width={16}
                   height={16}
@@ -119,7 +119,7 @@ const page = () => {
                 className="w-27.75 h-9 bg-primary-800 rounded-lg flex items-center justify-center gap-2 text-pneutral-50 text-label-l3 font-medium"
               >
                 <Image
-                  src="/Usermanagement/FilterIcon.svg"
+                  src="/UserManagement/FilterIcon.svg"
                   alt="Add User"
                   width={16}
                   height={16}
@@ -179,7 +179,7 @@ const page = () => {
 
             <button className="w-[117px] h-9 shrink-0 bg-white border border-pneutral-50 rounded-lg shadow-sm flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
               <Image
-                src="/Usermanagement/FilterBlackIcon.svg"
+                src="/UserManagement/FilterBlackIcon.svg"
                 alt="Filters"
                 width={16}
                 height={16}

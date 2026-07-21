@@ -84,7 +84,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
               className="flex items-center gap-2 text-label-l3 font-medium text-secondary-700"
             >
               <Image
-                src="/Usermanagement/BackIcon.svg"
+                src="/UserManagement/BackIcon.svg"
                 alt="Back"
                 width={16}
                 height={16}
@@ -94,7 +94,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
 
             <button className="w-27 h-9 border-[1.5px] border-secondary-700 rounded-lg flex items-center justify-center gap-2 text-label-l3 font-medium text-secondary-700">
               <Image
-                src="/Usermanagement/EditIcon.svg"
+                src="/UserManagement/EditIcon.svg"
                 alt="Edit"
                 width={16}
                 height={16}
@@ -118,7 +118,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
             {/* Left Section */}
             <div className="flex flex-col gap-2 items-center justify-center border-r-2 border-pneutral-200 pr-8 min-w-[170px]">
               <img
-                src={user?.imageUrl || "/Usermanagement/UserImg.svg"}
+                src={user?.imageUrl || "/UserManagement/UserImg.svg"}
                 alt="Profile"
                 className="w-[100px] h-[100px] rounded-full object-cover"
               />
