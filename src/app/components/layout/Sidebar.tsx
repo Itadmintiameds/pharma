@@ -1,44 +1,45 @@
-'use client';
+"use client";
 
-import React from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  ShieldAlert, 
-  Settings, 
-  ShoppingCart, 
-  Package, 
-  Receipt, 
-  Box, 
-  Truck, 
-  Users, 
-  BarChart3, 
-  LogOut 
-} from 'lucide-react';
-import { logout } from '@/services/AuthService';
-import Image from 'next/image';
+import React from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  ShieldAlert,
+  Settings,
+  ShoppingCart,
+  Package,
+  Receipt,
+  Box,
+  Truck,
+  Users,
+  BarChart3,
+  LogOut,
+} from "lucide-react";
+import { logout } from "@/services/AuthService";
+import Image from "next/image";
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
-  
+
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
 
   React.useEffect(() => {
     const checkRegistrationStatus = async () => {
       try {
-        const userRes = await fetch('/api/user-info');
+        const userRes = await fetch("/api/user-info");
         if (!userRes.ok) return;
         const { userId } = await userRes.json();
         if (!userId) return;
 
-        const { getUserPharmacyKPIs } = await import('@/services/SetupBusinessService');
+        const { getUserPharmacyKPIs } =
+          await import("@/services/SetupBusinessService");
         const kpiResponse = await getUserPharmacyKPIs(String(userId));
-        
+
         if (kpiResponse && kpiResponse.data) {
           // Unlock ONLY User Management if there is at least 1 approved (ACCEPTED) pharmacy
           if (kpiResponse.data.approved > 0) {
@@ -64,90 +65,90 @@ const Sidebar = () => {
 
   const navGroups = [
     {
-      category: 'MAIN MENU',
+      category: "MAIN MENU",
       isHeaderHidden: true,
-      heightClass: 'h-[116px]',
+      heightClass: "h-[116px]",
       items: [
         {
-          name: 'Dashboard',
+          name: "Dashboard",
           icon: LayoutDashboard,
-          path: '/dashboard',
+          path: "/dashboard",
           isLocked: false,
         },
         {
-          name: 'Setup Business',
+          name: "Setup Business",
           icon: ShieldAlert,
-          path: '/dashboard/setupBusiness',
+          path: "/dashboard/setupBusiness",
           isLocked: false,
         },
         {
-          name: 'Settings',
+          name: "Settings",
           icon: Settings,
-          path: '/dashboard/settings',
+          path: "/dashboard/settings",
           isLocked: false,
-        }
-      ]
+        },
+      ],
     },
     {
-      category: 'TRANSACTIONS',
-      heightClass: 'h-[144px]',
+      category: "TRANSACTIONS",
+      heightClass: "h-[144px]",
       items: [
         {
-          name: 'Purchase',
+          name: "Purchase",
           icon: ShoppingCart,
-          path: '/dashboard/purchase',
-          isLocked: !isBusinessRegistered,
-        },
-        {
-          name: 'Stock Management',
-          icon: Package,
-          path: '/dashboard/stockManagement',
-          isLocked: !isBusinessRegistered,
-        },
-        {
-          name: 'Sales / Billing',
-          icon: Receipt,
-          path: '/dashboard/salesBilling',
-          isLocked: !isBusinessRegistered,
-        }
-      ]
-    },
-    {
-      category: 'MASTERS',
-      heightClass: 'h-[144px]',
-      items: [
-        {
-          name: 'Products',
-          icon: Box,
-          path: '/dashboard/products',
-          isLocked: !isBusinessRegistered,
-        },
-        {
-          name: 'Suppliers',
-          icon: Truck,
-          path: '/dashboard/suppliers',
-          isLocked: !isBusinessRegistered,
-        },
-        {
-          name: 'User Management',
-          icon: Users,
-          path: '/dashboard/userManagement',
+          path: "/dashboard/purchase",
           isLocked: !hasApprovedPharmacy,
-        }
-      ]
+        },
+        {
+          name: "Stock Management",
+          icon: Package,
+          path: "/dashboard/stockManagement",
+          isLocked: !isBusinessRegistered,
+        },
+        {
+          name: "Sales / Billing",
+          icon: Receipt,
+          path: "/dashboard/salesBilling",
+          isLocked: !isBusinessRegistered,
+        },
+      ],
     },
     {
-      category: 'REPORTS',
-      heightClass: 'h-[64px]',
+      category: "MASTERS",
+      heightClass: "h-[144px]",
       items: [
         {
-          name: 'Reports',
-          icon: BarChart3,
-          path: '/dashboard/reports',
+          name: "Products",
+          icon: Box,
+          path: "/dashboard/products",
+          isLocked: !hasApprovedPharmacy,
+        },
+        {
+          name: "Suppliers",
+          icon: Truck,
+          path: "/dashboard/suppliers",
           isLocked: !isBusinessRegistered,
-        }
-      ]
-    }
+        },
+        {
+          name: "User Management",
+          icon: Users,
+          path: "/dashboard/userManagement",
+          isLocked: !hasApprovedPharmacy,
+        },
+      ],
+    },
+    {
+      category: "REPORTS",
+      heightClass: "h-[64px]",
+      items: [
+        {
+          name: "Reports",
+          icon: BarChart3,
+          path: "/dashboard/reports",
+          isLocked: !isBusinessRegistered,
+        },
+      ],
+    },
   ];
 
   return (
@@ -155,13 +156,11 @@ const Sidebar = () => {
       {/* Top Section: Logo & Navigation */}
       <div className="flex flex-col gap-8">
         {/* Logo Container */}
-        <div 
-          className="w-[204px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none"
-        >
-          <Image 
-            src="/Logo/tiameds logo.svg" 
-            alt="TiaMeds Logo" 
-            width={176} 
+        <div className="w-[204px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none">
+          <Image
+            src="/Logo/tiameds logo.svg"
+            alt="TiaMeds Logo"
+            width={176}
             height={75}
             className="w-full h-full object-contain"
             priority
@@ -171,7 +170,10 @@ const Sidebar = () => {
         {/* Navigation Menu */}
         <nav className="w-[204px] flex flex-col gap-[8px]">
           {navGroups.map((group) => (
-            <div key={group.category} className={`w-[204px] flex flex-col gap-[2px]`}>
+            <div
+              key={group.category}
+              className={`w-[204px] flex flex-col gap-[2px]`}
+            >
               {!group.isHeaderHidden && (
                 <div className="w-[120px] h-[24px] flex items-center text-[14px] font-medium font-work-sans text-[#F8F8F9] select-none tracking-wider">
                   {group.category}
@@ -184,7 +186,7 @@ const Sidebar = () => {
                 return (
                   <Link
                     key={item.name}
-                    href={item.isLocked ? '#' : item.path}
+                    href={item.isLocked ? "#" : item.path}
                     onClick={(e) => {
                       if (item.isLocked) {
                         e.preventDefault();
@@ -192,21 +194,21 @@ const Sidebar = () => {
                     }}
                     className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
                       isActive
-                        ? 'bg-secondary-200 text-secondary-900 shadow-sm font-semibold'
+                        ? "bg-secondary-200 text-secondary-900 shadow-sm font-semibold"
                         : item.isLocked
-                        ? 'text-pneutral-50 cursor-not-allowed'
-                        : 'text-pneutral-50 hover:bg-secondary-800 hover:text-white cursor-pointer'
+                          ? "text-pneutral-50 cursor-not-allowed"
+                          : "text-pneutral-50 hover:bg-secondary-800 hover:text-white cursor-pointer"
                     }`}
                   >
                     <Icon size={18} className="shrink-0" />
                     <span className="truncate">{item.name}</span>
                     {item.isLocked && (
-                      <Image 
-                        src="/sidebar/lock-icon.svg" 
-                        alt="Locked" 
-                        width={14} 
-                        height={14} 
-                        className="ml-auto shrink-0" 
+                      <Image
+                        src="/sidebar/lock-icon.svg"
+                        alt="Locked"
+                        width={14}
+                        height={14}
+                        className="ml-auto shrink-0"
                         style={{ width: "auto", height: "auto" }}
                       />
                     )}
