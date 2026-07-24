@@ -8,6 +8,7 @@ type Props = {
   placeholder?: string;
   accept?: string;
   hasError?: boolean;
+  required?: boolean;
 };
 
 export default function UploadInput({
@@ -17,6 +18,7 @@ export default function UploadInput({
   placeholder = "Upload the File",
   accept = "application/pdf",
   hasError = false,
+  required = false,
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [removedExisting, setRemovedExisting] = useState(false);
@@ -59,7 +61,7 @@ export default function UploadInput({
     <div className="flex flex-col gap-1">
       {label && (
         <label className="text-label-l4 font-medium text-pneutral-900 font-heading">
-          {label}
+          {label} {required && <span className="text-warning-500">*</span>}
         </label>
       )}
 

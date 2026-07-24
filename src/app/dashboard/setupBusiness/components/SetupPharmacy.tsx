@@ -92,7 +92,7 @@ const SetupPharmacy = ({
         : "Drug License Number";
 
   const selectedBusinessType =
-    pharmacyTypes.find((type) => type.id === selected)?.label ?? "Pharmacy";
+    pharmacyTypes.find((type) => type.id === selected)?.label ?? "Business";
 
   const pharmacyNameLabel = `${selectedBusinessType} Name`;
 
@@ -152,6 +152,7 @@ const SetupPharmacy = ({
     pharmacyBuildingNo,
     pharmacyStreet,
     pharmacyLandmark,
+    manualFile: manualFile || existingManualFile || null,
   });
 
   const resetAddress = (pincode = "") => {
@@ -241,10 +242,6 @@ const SetupPharmacy = ({
         fieldErrors[field] = issue.message;
       }
     });
-
-    if (!manualFile && !existingManualFile) {
-      fieldErrors.documentFile = "Document is required";
-    }
 
     setErrors(fieldErrors);
 
@@ -482,17 +479,33 @@ const SetupPharmacy = ({
               required
             />
 
-            <Input
-              label="Mobile Number"
-              placeholder="Enter company phone"
-              type="text"
-              name="pharmacyPhone"
-              id="pharmacyPhone"
-              value={pharmacyPhone}
-              onChange={handleFieldChange("pharmacyPhone", setPharmacyPhone)}
-              error={errors.pharmacyPhone}
-              required
-            />
+            <div className="w-full">
+              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+                Mobile Number <span className="text-warning-500">*</span>
+              </label>
+              <div className={`flex h-12 w-full items-center rounded-[8px] border ${errors.pharmacyPhone ? 'border-warning-500' : 'border-pneutral-300'} bg-white transition-all`}>
+                <select className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none">
+                  <option>+91</option>
+                </select>
+                <input 
+                  type="text" 
+                  placeholder="Enter company phone" 
+                  className="h-full w-full bg-transparent px-4 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500" 
+                  value={pharmacyPhone}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^[0-9]+$/.test(val)) {
+                      if (val.length <= 10) {
+                        setPharmacyPhone(val);
+                        validateField("pharmacyPhone", val);
+                      }
+                    }
+                  }}
+                  required
+                />
+              </div>
+              {errors.pharmacyPhone && <p className="text-sm text-red-500 mt-1">{errors.pharmacyPhone}</p>}
+            </div>
 
             <Input
               label={documentLabel}
@@ -509,6 +522,8 @@ const SetupPharmacy = ({
             <UploadInput
               onFileSelect={setManualFile}
               existingFile={existingManualFile || undefined}
+              required
+              hasError={!!errors.manualFile}
             />
 
             <Input
@@ -519,6 +534,7 @@ const SetupPharmacy = ({
               value={issueDate}
               onChange={handleFieldChange("issueDate", setIssueDate)}
               error={errors.issueDate}
+              max={new Date().toISOString().split("T")[0]}
               required
             />
 
@@ -542,6 +558,8 @@ const SetupPharmacy = ({
               value={expiryDate}
               onChange={handleFieldChange("expiryDate", setExpiryDate)}
               error={errors.expiryDate}
+              min={new Date().toISOString().split("T")[0]}
+              max="9999-12-31"
               required
             />
 
@@ -735,7 +753,7 @@ const SetupPharmacy = ({
         </div>
 
         <div className="flex gap-6">
-          <Button variant="outline">Cancel</Button>
+          <Button variant="outline" onClick={() => router.push("/dashboard")}>Cancel</Button>
 
           <Button
             variant="primary"
