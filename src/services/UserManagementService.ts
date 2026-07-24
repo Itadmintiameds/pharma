@@ -30,6 +30,11 @@ export const createUser = async (data: any) => {
   return response.data;
 };
 
+export const checkUserEmail = async (email: string) => {
+  const response = await api.get(`/user/check-email?email=${encodeURIComponent(email)}`);
+  return response.data;
+};
+
 export const uploadUserImage = async (userId: string | number, image: File) => {
   const formData = new FormData();
   formData.append('image', image);

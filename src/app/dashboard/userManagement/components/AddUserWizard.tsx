@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
-import { getCities, getAllRoles, createUser, uploadUserImage } from '@/services/UserManagementService';
+import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail } from '@/services/UserManagementService';
 import RolesPermissions from './RolesPermissions';
 
 interface AddUserWizardProps {
@@ -107,7 +107,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     }
   };
 
-  const handleNextStep1 = () => {
+  const handleNextStep1 = async () => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
@@ -123,6 +123,15 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       newErrors.emailId = 'Email ID is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
       newErrors.emailId = 'Invalid email format';
+    } else {
+      try {
+        const exists = await checkUserEmail(formData.emailId);
+        if (exists) {
+          newErrors.emailId = 'Email already exists';
+        }
+      } catch (err) {
+        console.error("Failed to check email during submission", err);
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -259,13 +268,22 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             setFormData({ ...formData, emailId: e.target.value });
             if (errors.emailId) setErrors({ ...errors, emailId: '' });
           }}
-          onBlur={(e) => {
+          onBlur={async (e) => {
             const val = e.target.value;
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (val && !emailRegex.test(val)) {
               setErrors({ ...errors, emailId: 'Invalid email format' });
             } else if (!val) {
               setErrors({ ...errors, emailId: 'Email ID is required' });
+            } else {
+              try {
+                const exists = await checkUserEmail(val);
+                if (exists) {
+                  setErrors({ ...errors, emailId: 'Email already exists' });
+                }
+              } catch (err) {
+                console.error("Failed to check email", err);
+              }
             }
           }}
           error={errors.emailId}
@@ -439,12 +457,20 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           </button>
         )}
         {step === 2 && (
-          <button 
-            onClick={handleSave}
-            className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
-          >
-            Save Changes
-          </button>
+          <>
+            <button 
+              onClick={() => setStep(1)}
+              className="px-8 py-2 border border-gray-300 text-gray-800 rounded-lg font-medium hover:bg-gray-100 bg-white"
+            >
+              Back to Step 1
+            </button>
+            <button 
+              onClick={handleSave}
+              className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
+            >
+              Save Changes
+            </button>
+          </>
         )}
         {step === 3 && (
           <button 

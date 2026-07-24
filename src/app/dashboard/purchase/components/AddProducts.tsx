@@ -2,26 +2,50 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import Button from "@/app/components/common/Button";
 import ProductDetails from "@/app/dashboard/products/component/ProductDetails";
 import PackagingDetails from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails from "@/app/dashboard/products/component/BatchDetails";
+import OnboardedProductsTable from "./OnboardedProductsTable";
 
 const PRODUCT_CATEGORIES = [
-  { id: 'drugs', label: 'Drugs', iconPath: '/ProductManagement/Drug.svg', width: 'w-[178px]' },
-  { id: 'supplements', label: 'Supplements /\nNutraceuticals', iconPath: '/ProductManagement/Suppliments.svg', width: 'w-[246px]' },
-  { id: 'cosmetic', label: 'Cosmetic &\nPersonal Use', iconPath: '/ProductManagement/Cosmetics.svg', width: 'w-[233px]' },
-  { id: 'food', label: 'Food & Infant\nNutrition', iconPath: '/ProductManagement/Food&Infant.svg', width: 'w-[242px]' },
-  { id: 'medical', label: 'Medical\nDevices & Equipment', iconPath: '/ProductManagement/MedicalDevices.svg', width: 'w-[296px]' },
+  { id: 1, label: 'Drugs', iconPath: '/ProductManagement/Drug.svg', width: 'w-[178px]' },
+  { id: 2, label: 'Supplements /\nNutraceuticals', iconPath: '/ProductManagement/Suppliments.svg', width: 'w-[246px]' },
+  { id: 4, label: 'Cosmetic &\nPersonal Use', iconPath: '/ProductManagement/Cosmetics.svg', width: 'w-[233px]' },
+  { id: 3, label: 'Food & Infant\nNutrition', iconPath: '/ProductManagement/Food&Infant.svg', width: 'w-[242px]' },
+  { id: 5, label: 'Medical\nDevices & Equipment', iconPath: '/ProductManagement/MedicalDevices.svg', width: 'w-[200px]' },
 ];
 
 const AddProducts = () => {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("Product Details");
-  const [selectedCategory, setSelectedCategory] = useState("drugs");
+  const [selectedCategory, setSelectedCategory] = useState(1);
+
+  const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
+
+  const handleNext = () => {
+    const currentIndex = TABS.indexOf(activeTab);
+    if (currentIndex < TABS.length - 1) {
+      setActiveTab(TABS[currentIndex + 1]);
+    }
+  };
+
+  const handleBack = () => {
+    const currentIndex = TABS.indexOf(activeTab);
+    if (currentIndex > 0) {
+      setActiveTab(TABS[currentIndex - 1]);
+    }
+  };
+
+  const handleCancel = () => {
+    router.push("/dashboard/purchase"); // Or the appropriate list page
+  };
 
   const renderActiveComponent = () => {
     switch (activeTab) {
       case "Product Details":
-        return <ProductDetails />;
+        return <ProductDetails categoryId={selectedCategory} />;
       case "Packaging & Order Details":
         return <PackagingDetails />;
       case "Batch & Stock Details":
@@ -63,8 +87,11 @@ const AddProducts = () => {
         />
       </div>
 
+      {/* Onboarded Products Table */}
+      <OnboardedProductsTable />
+
       {/* Product Category Selection */}
-      <div className="flex flex-col p-[16px] gap-[16px] w-full h-[268px] bg-white rounded-xl border-[0.89px] border-pneutral-200">
+      <div className="flex flex-col p-[16px] gap-[16px] w-full min-w-0 h-[194px] bg-white rounded-xl border-[0.89px] border-pneutral-200 overflow-hidden">
         <div className="flex flex-col gap-1">
           <h3 className="font-semibold text-[18px] text-[#1E1E1D] leading-[28px]">
             Select Product Category
@@ -73,14 +100,14 @@ const AddProducts = () => {
             Choose the category that best describes your product.
           </p>
         </div>
-        <div className="w-full flex flex-wrap gap-[16px] h-[164px]">
+        <div className="w-full flex flex-nowrap overflow-x-auto gap-[16px] h-[90px] pb-2">
           {PRODUCT_CATEGORIES.map((cat) => {
             const isSelected = selectedCategory === cat.id;
             return (
               <div
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`flex items-center gap-[4px] p-[8px] h-[74px] rounded-[20px] border cursor-pointer transition-all ${cat.width} ${
+                className={`shrink-0 flex items-center gap-[4px] p-[8px] h-[74px] rounded-[20px] border cursor-pointer transition-all ${cat.width} ${
                   isSelected
                     ? "border-secondary-700 bg-secondary-50 shadow-[0px_4px_6px_-2px_#00000008,0px_12px_16px_-4px_#00000014]"
                     : "border-[#D5D5D4] bg-white hover:border-gray-400"
@@ -98,7 +125,7 @@ const AddProducts = () => {
 
       {/* Details Tabs */}
       <div className="flex items-center gap-4 w-full max-w-[600px] h-[46px] border-b border-gray-200 mt-2">
-        {["Product Details", "Packaging & Order Details", "Batch & Stock Details"].map((tab) => (
+        {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -116,11 +143,32 @@ const AddProducts = () => {
         ))}
       </div>
 
-{renderActiveComponent()}
-      {/* Render Active Component 
-      <div className="w-full mt-2 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        
-      </div>*/}
+      {renderActiveComponent()}
+      
+      {/* Navigation Buttons */}
+      <div className="flex justify-between items-center w-full mt-4 pt-4 border-t border-gray-100">
+        <div>
+          {activeTab !== "Product Details" && (
+            <Button variant="outline" onClick={handleBack} className="w-[120px]">
+              Back
+            </Button>
+          )}
+        </div>
+        <div className="flex gap-4">
+          <Button variant="outline" onClick={handleCancel} className="w-[120px]">
+            Cancel
+          </Button>
+          {activeTab === "Batch & Stock Details" ? (
+            <Button variant="primary" onClick={() => {}} className="w-[120px]">
+              Submit
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={handleNext} className="w-[120px]">
+              Next
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
