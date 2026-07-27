@@ -396,9 +396,18 @@ const SetupPharmacy = ({
           resetForm();
         }}
       />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="text-h4 font-semibold text-pneutral-900">
+            Setup Your Business
+          </div>
+          <div className="text-p4 font-normal text-pneutral-900 font-noto-sans">
+            Complete your Business setup to start using <br /> TiaMeds Inventory Platform
+          </div>
+        </div>
 
-      <div key={formKey} className="flex flex-col gap-5">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
+        <div key={formKey} className="flex flex-col gap-5">
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>
             <div className="text-p4 font-normal font-noto-sans">
@@ -513,6 +522,7 @@ const SetupPharmacy = ({
               type="text"
               name="documentNo"
               id="documentNo"
+              maxLength={30}
               value={documentNo}
               onChange={handleFieldChange("documentNo", setDocumentNo)}
               error={errors.documentNo}
@@ -702,7 +712,7 @@ const SetupPharmacy = ({
             </div>
 
             <Input
-              label="Building No"
+              label="Building No and name"
               placeholder="Enter building no"
               type="text"
               name="pharmacyBuildingNo"
@@ -764,6 +774,7 @@ const SetupPharmacy = ({
             Submit Compliance
           </Button>
         </div>
+      </div>
       </div>
     </>
   );

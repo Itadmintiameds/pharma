@@ -34,7 +34,7 @@ export const pharmacyDetailsSchema = z.object({
         .string()
         .trim()
         .min(1, "Document Number is required")
-        .max(20, "Document Number cannot exceed 20 characters"),
+        .max(30, "Document Number cannot exceed 30 characters"),
 
     issueDate: z
         .string()
@@ -121,7 +121,7 @@ export const pharmacyDetailsSchema = z.object({
         .string()
         .trim()
         .min(1, "Building Number is required")
-        .max(20, "Building Number cannot exceed 20 characters")
+        .max(50, "Building Number and name cannot exceed 50 characters")
         .regex(/[a-zA-Z0-9]/, "Building number must contain letters or numbers"),
 
 
@@ -129,7 +129,7 @@ export const pharmacyDetailsSchema = z.object({
         .string()
         .trim()
         .min(1, "Street/Road/Lane is required")
-        .max(25, "Street/Road/Lane cannot exceed 25 characters"),
+        .max(50, "Street/Road/Lane cannot exceed 50 characters"),
 
     pharmacyLandmark: z
         .string()

@@ -19,6 +19,47 @@ const page = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 7;
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedRole, setSelectedRole] = useState("All Roles");
+  const [selectedLocation, setSelectedLocation] = useState("All Locations");
+  const [selectedStatus, setSelectedStatus] = useState("All Status");
+  const [sortOrder, setSortOrder] = useState("None");
+
+  const roles = ["All Roles", ...Array.from(new Set(users.map(u => u.pharmaRolesDto?.roleName).filter(Boolean)))];
+  const locations = ["All Locations", ...Array.from(new Set(users.flatMap(u => u.pharmacyCities || []).filter(Boolean)))];
+  const statuses = ["All Status", "Active", "Inactive"];
+  const sortOptions = ["None", "Ascending (A-Z)", "Descending (Z-A)"];
+
+  const filteredUsers = users.filter((u) => {
+    const term = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !term ||
+      u.fullName?.toLowerCase().includes(term) ||
+      u.userEmail?.toLowerCase().includes(term) ||
+      u.employeeId?.toLowerCase().includes(term);
+
+    const matchesRole = selectedRole === "All Roles" || u.pharmaRolesDto?.roleName === selectedRole;
+    const matchesLocation =
+      selectedLocation === "All Locations" ||
+      (u.pharmacyCities && u.pharmacyCities.includes(selectedLocation));
+    
+    // API returns Active/Inactive. Fallback to Inactive if null.
+    const statusVal = u.userStatus || "Inactive";
+    const matchesStatus =
+      selectedStatus === "All Status" || statusVal === selectedStatus;
+
+    return matchesSearch && matchesRole && matchesLocation && matchesStatus;
+  });
+
+  const sortedUsers = [...filteredUsers].sort((a, b) => {
+    if (sortOrder === "Ascending (A-Z)") {
+      return (a.fullName || "").localeCompare(b.fullName || "");
+    } else if (sortOrder === "Descending (Z-A)") {
+      return (b.fullName || "").localeCompare(a.fullName || "");
+    }
+    return 0;
+  });
+
   useEffect(() => {
     const fetchUsers = async () => {
       setLoading(true);
@@ -54,6 +95,7 @@ const page = () => {
     {
       key: "roleName",
       header: "Role",
+      render: (row: UserData) => row.pharmaRolesDto?.roleName || "Not Present",
     },
     {
       key: "pharmacyCities",
@@ -141,62 +183,63 @@ const page = () => {
 
               <input
                 type="text"
-                placeholder="Search Location..."
+                placeholder="Search by Name, Email, or Employee ID..."
                 className="w-full bg-transparent outline-none text-p2 font-normal placeholder:text-pneutral-400"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value.replace(/  +/g, ' '))}
               />
             </div>
 
-            {/* Buttons */}
-            <button className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-center gap-2 text-p2 font-normal">
-              All Roles
-              <Image
-                src="/BusinessSetup/DropdownIcon.svg"
-                alt=""
-                width={16}
-                height={16}
-              />
-            </button>
+            {/* Buttons / Dropdowns */}
+            <select
+              value={selectedRole}
+              onChange={(e) => { setSelectedRole(e.target.value); setCurrentPage(1); }}
+              className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg px-2 text-p2 font-normal outline-none bg-white cursor-pointer"
+            >
+              {roles.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
 
-            <button className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-center gap-2 text-p2 font-normal">
-              All Locations
-              <Image
-                src="/BusinessSetup/DropdownIcon.svg"
-                alt=""
-                width={16}
-                height={16}
-              />
-            </button>
+            <select
+              value={selectedLocation}
+              onChange={(e) => { setSelectedLocation(e.target.value); setCurrentPage(1); }}
+              className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg px-2 text-p2 font-normal outline-none bg-white cursor-pointer"
+            >
+              {locations.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
 
-            <button className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-center gap-2 text-p2 font-normal">
-              All Status
-              <Image
-                src="/BusinessSetup/DropdownIcon.svg"
-                alt=""
-                width={16}
-                height={16}
-              />
-            </button>
+            <select
+              value={selectedStatus}
+              onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
+              className="w-[117px] h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg px-2 text-p2 font-normal outline-none bg-white cursor-pointer"
+            >
+              {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
 
-            <button className="w-[117px] h-9 shrink-0 bg-white border border-pneutral-50 rounded-lg shadow-sm flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
-              <Image
-                src="/UserManagement/FilterBlackIcon.svg"
-                alt="Filters"
-                width={16}
-                height={16}
-              />
-              <span>Filters</span>
-            </button>
+            <select
+              value={sortOrder}
+              onChange={(e) => { setSortOrder(e.target.value); setCurrentPage(1); }}
+              className="w-[117px] h-9 shrink-0 bg-white border border-pneutral-50 rounded-lg shadow-sm px-2 text-label-l3 font-medium text-pneutral-900 outline-none cursor-pointer"
+            >
+              {sortOptions.map(o => <option key={o} value={o}>{o === 'None' ? 'Sort' : o}</option>)}
+            </select>
           </div>
 
           <div className="w-full h-full bg-white border border-pneutral-100 rounded-lg p-4">
-            <DataTable
-              columns={columns}
-              data={users.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
-              page={currentPage}
-              pageSize={pageSize}
-              totalItems={users.length}
-              onPageChange={(page) => setCurrentPage(page)}
-            />
+            {sortedUsers.length > 0 ? (
+              <DataTable
+                columns={columns}
+                data={sortedUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
+                page={currentPage}
+                pageSize={pageSize}
+                totalItems={sortedUsers.length}
+                onPageChange={(page) => setCurrentPage(page)}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-[300px] text-gray-500">
+                <p className="text-lg font-medium text-red-500">No records found matching your search.</p>
+                <p className="text-sm">Try adjusting your filters or search term.</p>
+              </div>
+            )}
           </div>
         </div>
       )}

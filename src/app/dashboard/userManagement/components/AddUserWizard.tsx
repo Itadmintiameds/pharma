@@ -115,8 +115,27 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     if (!formData.department) newErrors.department = 'Department is required';
     if (!formData.designation) newErrors.designation = 'Designation is required';
     if (!formData.location || formData.location.length === 0) newErrors.location = 'At least one location must be assigned';
-    if (!formData.mobileNumber.trim()) newErrors.mobileNumber = 'Mobile Number is required';
-    if (!formData.dob) newErrors.dob = 'Date of Birth is required';
+    
+    if (!formData.mobileNumber.trim()) {
+      newErrors.mobileNumber = 'Mobile Number is required';
+    } else if (formData.mobileNumber.length < 10) {
+      newErrors.mobileNumber = 'Mobile Number must be 10 digits';
+    }
+    
+    if (!formData.dob) {
+      newErrors.dob = 'Date of Birth is required';
+    } else {
+      const dobDate = new Date(formData.dob);
+      const today = new Date();
+      let age = today.getFullYear() - dobDate.getFullYear();
+      const m = today.getMonth() - dobDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        newErrors.dob = 'User must be at least 18 years old';
+      }
+    }
     
     // Check if email is provided and valid
     if (!formData.emailId.trim()) {
@@ -205,7 +224,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           placeholder="Emp-00001" 
           maxLength={15}
           value={formData.employeeId}
-          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
         />
         
         <Input 
@@ -299,11 +318,32 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           label="Date of Birth" 
           type="date"
           required
+          min="1900-01-01"
+          max="9999-12-31"
           placeholder="12-10-2016" 
           value={formData.dob}
           onChange={(e) => {
-            setFormData({ ...formData, dob: e.target.value });
-            if (errors.dob) setErrors({ ...errors, dob: '' });
+            const val = e.target.value;
+            if (val.length > 10) return; // Prevent more than 4 digit years
+            
+            setFormData({ ...formData, dob: val });
+            
+            if (val) {
+              const dobDate = new Date(val);
+              const today = new Date();
+              let age = today.getFullYear() - dobDate.getFullYear();
+              const m = today.getMonth() - dobDate.getMonth();
+              if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+                age--;
+              }
+              if (age < 18) {
+                setErrors({ ...errors, dob: 'User must be at least 18 years old' });
+              } else {
+                if (errors.dob) setErrors({ ...errors, dob: '' });
+              }
+            } else {
+              if (errors.dob) setErrors({ ...errors, dob: '' });
+            }
           }}
           error={errors.dob}
           leftIcon={
