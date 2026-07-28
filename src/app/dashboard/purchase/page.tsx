@@ -2,9 +2,11 @@
 
 import React, { useState } from "react";
 import GoodsReceipt from "./components/GoodsReceipt";
+import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 
 const Page = () => {
   const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
+  const [open, setOpen] = useState(true);
 
   return (
     <>
@@ -18,6 +20,13 @@ const Page = () => {
           >
             Add Purchase
           </button>
+
+          <PurchaseSuccessModal
+            isOpen={open}
+            onClose={() => setOpen(false)}
+            onAddProduct={() => console.log("Add Product")}
+            onViewSummary={() => console.log("View Summary")}
+          />
         </>
       ) : (
         <GoodsReceipt />
