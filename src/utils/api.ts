@@ -8,6 +8,21 @@ const api = axios.create({
   },
 });
 
+// State to manage concurrent refresh token requests
+let isRefreshing = false;
+let failedQueue: { resolve: (value?: unknown) => void; reject: (reason?: any) => void }[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
 // Response interceptor to handle token expiration (HTTP 401)
 api.interceptors.response.use(
   (response) => response,
@@ -27,17 +42,42 @@ api.interceptors.response.use(
         return Promise.reject(error);
       }
 
+      if (isRefreshing) {
+        // If already refreshing, wait for it to finish then retry the original request
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            return api(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
       try {
         // Attempt to silently refresh the access token via the refreshToken endpoint
         await api.post("/auth/refreshToken");
+        
+        // Success: tell all queued requests to proceed
+        processQueue(null);
+        
         // Retry the original request
         return api(originalRequest);
       } catch (refreshError) {
+        // Failure: reject all queued requests
+        processQueue(refreshError);
+        
         // Refresh token is expired or invalid -> force redirect to login
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
@@ -62,15 +102,34 @@ adminApi.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => {
+            return adminApi(originalRequest);
+          })
+          .catch((err) => {
+            return Promise.reject(err);
+          });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
       try {
         // Silently refresh token using the main auth client
         await api.post("/auth/refreshToken");
+        processQueue(null);
         return adminApi(originalRequest);
       } catch (refreshError) {
+        processQueue(refreshError);
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 

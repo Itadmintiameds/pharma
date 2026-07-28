@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 import {
   createOrganization,
   registerPharmacy,
+  savePharmacyDraft,
+  submitPharmacyDraft,
   uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
 import { showToast } from "@/app/components/common/Toast";
@@ -23,6 +25,7 @@ interface SetupPharmacyProps {
   locationType: "single" | "multiple";
   hasOrganization?: boolean;
   existingOrg?: any;
+  prefillData?: any;
 }
 
 interface PostOffice {
@@ -40,6 +43,7 @@ const SetupPharmacy = ({
   locationType,
   hasOrganization = false,
   existingOrg = null,
+  prefillData = null,
 }: SetupPharmacyProps) => {
   const [selected, setSelected] = useState("");
 
@@ -92,7 +96,7 @@ const SetupPharmacy = ({
         : "Drug License Number";
 
   const selectedBusinessType =
-    pharmacyTypes.find((type) => type.id === selected)?.label ?? "Pharmacy";
+    pharmacyTypes.find((type) => type.id === selected)?.label ?? "Business";
 
   const pharmacyNameLabel = `${selectedBusinessType} Name`;
 
@@ -114,6 +118,7 @@ const SetupPharmacy = ({
   const [open, setOpen] = useState(false);
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [draftLoading, setDraftLoading] = useState(false);
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formKey, setFormKey] = useState(0);
@@ -152,6 +157,7 @@ const SetupPharmacy = ({
     pharmacyBuildingNo,
     pharmacyStreet,
     pharmacyLandmark,
+    manualFile: manualFile || existingManualFile || null,
   });
 
   const resetAddress = (pincode = "") => {
@@ -167,7 +173,10 @@ const SetupPharmacy = ({
     });
   };
 
-  const fetchAddressByPincode = async (pincode: string) => {
+  const fetchAddressByPincode = async (
+    pincode: string,
+    preserve?: { taluka?: string; city?: string },
+  ) => {
     if (pincode.length !== 6) return;
 
     try {
@@ -196,8 +205,14 @@ const SetupPharmacy = ({
           pincode,
           state: firstOffice.State || "",
           district: firstOffice.District || "",
-          taluka: talukaList[0] || "",
-          city: cityList[0] || "",
+          taluka:
+            preserve?.taluka && talukaList.includes(preserve.taluka)
+              ? preserve.taluka
+              : talukaList[0] || "",
+          city:
+            preserve?.city && cityList.includes(preserve.city)
+              ? preserve.city
+              : cityList[0] || "",
         });
       } else {
         resetAddress(pincode);
@@ -209,6 +224,61 @@ const SetupPharmacy = ({
       setLoadingPincode(false);
     }
   };
+
+  // Autofill the form when editing an existing registration (reqId in URL)
+  useEffect(() => {
+    if (!prefillData) return;
+
+    const data = prefillData;
+
+    // Match business type ignoring case/underscores/spaces
+    // (e.g. "NURSING_HOME" or "NURSINGHOME" -> "nursingHome")
+    const normalizeType = (value: string) =>
+      value.replace(/[^a-z]/gi, "").toLowerCase();
+    const typeId =
+      pharmacyTypes.find(
+        (type) =>
+          normalizeType(type.id) === normalizeType(String(data.pharmacyType || "")),
+      )?.id || "";
+    setSelected(typeId);
+
+    setPharmacyName(data.pharmacyName || "");
+    setPharmacyPhone(data.pharmacyPhone || "");
+    setPharmacyPan(data.panNumber || "");
+    setPharmacyGst(data.gstNumber || "");
+    setPharmacyBuildingNo(data.pharmacyBuildingNo || "");
+    setPharmacyStreet(data.pharmacyStreet || "");
+    setPharmacyLandmark(data.pharmacyLandmark || "");
+
+    const doc = data.pharmacyRegistrationDocuments?.[0];
+    if (doc) {
+      setDocumentNo(doc.documentNumber || "");
+      setIssueAuthority(doc.issueAuthority || "");
+      setIssueDate(doc.issueDate ? String(doc.issueDate).split("T")[0] : "");
+      setExpiryDate(doc.expiryDate ? String(doc.expiryDate).split("T")[0] : "");
+      setExistingManualFile(doc.documentUrl || null);
+    }
+
+    const pincode = data.pharmacyPincode ? String(data.pharmacyPincode) : "";
+    const taluka = data.pharmacyTaluka || "";
+    const city = data.pharmacyCity || "";
+
+    setAddress({
+      pincode,
+      state: data.pharmacyState || "",
+      district: data.pharmacyDistricts || data.pharmacyDistrict || "",
+      taluka,
+      city,
+    });
+    setTalukas(taluka ? [taluka] : []);
+    setCities(city ? [city] : []);
+
+    // Load the full taluka/city dropdown options while keeping the saved selection
+    if (pincode.length === 6) {
+      fetchAddressByPincode(pincode, { taluka, city });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillData]);
 
   const validateField = <K extends keyof typeof pharmacyDetailsSchema.shape>(
     field: K,
@@ -242,10 +312,6 @@ const SetupPharmacy = ({
       }
     });
 
-    if (!manualFile && !existingManualFile) {
-      fieldErrors.documentFile = "Document is required";
-    }
-
     setErrors(fieldErrors);
 
     return false;
@@ -262,6 +328,126 @@ const SetupPharmacy = ({
       setter(value);
       validateField(field, value);
     };
+
+  // Editing an existing draft: submit updates via PUT instead of creating a new registration
+  const isDraftEdit =
+    !!prefillData?.pharmacyRegistrationId &&
+    String(prefillData?.registrationStatus || "").toUpperCase() === "DRAFT";
+
+  const getDocType = () =>
+    selected === "doctor"
+      ? "MEDICAL_REGISTRATION_CERTIFICATE"
+      : ["hospital", "clinic", "nursingHome"].includes(selected)
+        ? "CLINICAL_ESTABLISHMENT_CERTIFICATE"
+        : "DRUG_LICENSE";
+
+  const handleSaveDraft = async () => {
+    setDraftLoading(true);
+    try {
+      const userResponse = await fetch("/api/user-info");
+      if (!userResponse.ok) {
+        throw new Error("Failed to fetch user session info.");
+      }
+      const { userId, email, accessToken } = await userResponse.json();
+
+      // Drafts allow partial data — send only the fields that are filled in
+      const payload: Record<string, any> = { userId: String(userId) };
+
+      // Re-saving an existing draft: include the id so the backend updates it
+      // instead of creating a new draft (users can hold multiple drafts)
+      if (isDraftEdit) {
+        payload.pharmacyRegistrationId = prefillData.pharmacyRegistrationId;
+      }
+
+      if (pharmacyName) payload.pharmacyName = pharmacyName;
+      if (selected) payload.pharmacyType = selected.toUpperCase();
+      if (email) payload.pharmacyEmail = email;
+      if (pharmacyPhone) payload.pharmacyPhone = pharmacyPhone;
+      // No org fallback here — only send PAN/GST the user actually entered
+      if (pharmacyPan) payload.panNumber = pharmacyPan;
+      if (pharmacyGst) payload.gstNumber = pharmacyGst;
+      if (address.city) {
+        payload.pharmacyBranch = address.city;
+        payload.pharmacyCity = address.city;
+      }
+      if (pharmacyBuildingNo) payload.pharmacyBuildingNo = pharmacyBuildingNo;
+      if (pharmacyStreet) payload.pharmacyStreet = pharmacyStreet;
+      if (address.taluka) payload.pharmacyTaluka = address.taluka;
+      if (address.district) payload.pharmacyDistricts = address.district;
+      if (address.pincode) payload.pharmacyPincode = Number(address.pincode);
+      if (pharmacyLandmark) payload.pharmacyLandmark = pharmacyLandmark;
+      if (address.state) payload.pharmacyState = address.state;
+
+      if (existingOrg) {
+        payload.organizationId = existingOrg.organizationId;
+        payload.organizationName = existingOrg.organizationName;
+        payload.ownershipType = existingOrg.ownershipType;
+        payload.organizationPanNumber = existingOrg.panNumber;
+        payload.organizationGstNumber = existingOrg.gstNumber;
+      } else if (businessName) {
+        payload.organizationName = businessName;
+        payload.ownershipType = ownershipType;
+        payload.organizationPanNumber = panNumber;
+        payload.organizationGstNumber = gstNumber;
+      }
+      payload.organizationType = locationType === "single" ? "Single" : "Multiple";
+
+      // Send back the existing row's id so the backend updates it in place
+      // instead of inserting a duplicate document on every draft save
+      const existingDocId = isDraftEdit
+        ? prefillData?.pharmacyRegistrationDocuments?.[0]?.registrationDocumentId
+        : undefined;
+
+      if (documentNo) {
+        payload.pharmacyRegistrationDocuments = [
+          {
+            ...(existingDocId ? { registrationDocumentId: existingDocId } : {}),
+            documentNumber: documentNo,
+            documentType: getDocType(),
+            ...(issueDate ? { issueDate: `${issueDate}T00:00:00` } : {}),
+            ...(issueAuthority ? { issueAuthority } : {}),
+            ...(expiryDate ? { expiryDate: `${expiryDate}T00:00:00` } : {}),
+          },
+        ];
+      }
+
+      const draftResponse = await savePharmacyDraft(payload, accessToken);
+      console.log("Draft saved:", draftResponse);
+
+      // Upload document file if provided, same as the submit flow
+      if (
+        manualFile &&
+        draftResponse.data?.pharmacyRegistrationDocuments &&
+        draftResponse.data.pharmacyRegistrationDocuments.length > 0
+      ) {
+        // The response can hold several document rows; upload to the row we
+        // just saved, not whichever comes first
+        const responseDocs = draftResponse.data.pharmacyRegistrationDocuments;
+        const docId = (
+          responseDocs.find(
+            (d: { registrationDocumentId?: number }) =>
+              existingDocId != null &&
+              d.registrationDocumentId === existingDocId,
+          ) ?? responseDocs[0]
+        ).registrationDocumentId;
+        const uploadResponse = await uploadPharmacyDocument(
+          draftResponse.data.pharmacyRegistrationId,
+          docId,
+          manualFile,
+          accessToken,
+        );
+        console.log("Draft document uploaded:", uploadResponse);
+      }
+
+      showToast.success("Draft saved successfully!");
+      router.push("/dashboard");
+    } catch (err: any) {
+      showToast.error(err?.message || "Failed to save draft.");
+      console.error("Draft save failed:", err);
+    } finally {
+      setDraftLoading(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
@@ -305,50 +491,57 @@ const SetupPharmacy = ({
       const { userId, email, accessToken } = await userResponse.json();
 
       // Map document type
-      const docType =
-        selected === "doctor"
-          ? "MEDICAL_REGISTRATION_CERTIFICATE"
-          : ["hospital", "clinic", "nursingHome"].includes(selected)
-            ? "CLINICAL_ESTABLISHMENT_CERTIFICATE"
-            : "DRUG_LICENSE";
+      const docType = getDocType();
 
-      // Step 3: Register Pharmacy on Admin Backend
-      const regResponse = await registerPharmacy(
-        {
-          userId: String(userId),
-          pharmacyName: pharmacyName,
-          pharmacyType: selected.toUpperCase(),
-          pharmacyEmail: email,
-          pharmacyPhone: pharmacyPhone,
-          panNumber: pharmacyPan || panNumber,
-          gstNumber: pharmacyGst || gstNumber,
-          pharmacyBranch: address.city,
-          pharmacyBuildingNo: pharmacyBuildingNo,
-          pharmacyStreet: pharmacyStreet,
-          pharmacyCity: address.city,
-          pharmacyTaluka: address.taluka,
-          pharmacyDistricts: address.district,
-          pharmacyPincode: Number(address.pincode),
-          pharmacyLandmark: pharmacyLandmark,
-          pharmacyState: address.state,
-          organizationId: orgResponse.organizationId,
-          organizationName: orgResponse.organizationName,
-          ownershipType: orgResponse.ownershipType,
-          organizationType: locationType === "single" ? "Single" : "Multiple",
-          organizationPanNumber: orgResponse.panNumber,
-          organizationGstNumber: orgResponse.gstNumber,
-          pharmacyRegistrationDocuments: [
-            {
-              documentNumber: documentNo,
-              documentType: docType,
-              issueDate: issueDate ? `${issueDate}T00:00:00` : undefined,
-              issueAuthority: issueAuthority,
-              expiryDate: expiryDate ? `${expiryDate}T00:00:00` : undefined,
-            },
-          ],
-        },
-        accessToken,
-      );
+      // When submitting an existing draft, reuse its document row so the
+      // backend updates it in place instead of inserting a duplicate
+      const existingDocId = isDraftEdit
+        ? prefillData?.pharmacyRegistrationDocuments?.[0]?.registrationDocumentId
+        : undefined;
+
+      const registrationPayload = {
+        userId: String(userId),
+        pharmacyName: pharmacyName,
+        pharmacyType: selected.toUpperCase(),
+        pharmacyEmail: email,
+        pharmacyPhone: pharmacyPhone,
+        panNumber: pharmacyPan, //|| panNumber,
+        gstNumber: pharmacyGst, //|| gstNumber,
+        pharmacyBranch: address.city,
+        pharmacyBuildingNo: pharmacyBuildingNo,
+        pharmacyStreet: pharmacyStreet,
+        pharmacyCity: address.city,
+        pharmacyTaluka: address.taluka,
+        pharmacyDistricts: address.district,
+        pharmacyPincode: Number(address.pincode),
+        pharmacyLandmark: pharmacyLandmark,
+        pharmacyState: address.state,
+        organizationId: orgResponse.organizationId,
+        organizationName: orgResponse.organizationName,
+        ownershipType: orgResponse.ownershipType,
+        organizationType: locationType === "single" ? "Single" : "Multiple",
+        organizationPanNumber: orgResponse.panNumber,
+        organizationGstNumber: orgResponse.gstNumber,
+        pharmacyRegistrationDocuments: [
+          {
+            ...(existingDocId ? { registrationDocumentId: existingDocId } : {}),
+            documentNumber: documentNo,
+            documentType: docType,
+            issueDate: issueDate ? `${issueDate}T00:00:00` : undefined,
+            issueAuthority: issueAuthority,
+            expiryDate: expiryDate ? `${expiryDate}T00:00:00` : undefined,
+          },
+        ],
+      };
+
+      // Step 3: Submit draft (PUT) or register a new pharmacy (POST) on Admin Backend
+      const regResponse = isDraftEdit
+        ? await submitPharmacyDraft(
+            prefillData.pharmacyRegistrationId,
+            registrationPayload,
+            accessToken,
+          )
+        : await registerPharmacy(registrationPayload, accessToken);
 
       console.log("Step 2 Success (Pharmacy Registration):", regResponse);
 
@@ -358,9 +551,15 @@ const SetupPharmacy = ({
         regResponse.data?.pharmacyRegistrationDocuments &&
         regResponse.data.pharmacyRegistrationDocuments.length > 0
       ) {
-        const docId =
-          regResponse.data.pharmacyRegistrationDocuments[0]
-            .registrationDocumentId;
+        // Upload to the row we just saved, not whichever comes first
+        const responseDocs = regResponse.data.pharmacyRegistrationDocuments;
+        const docId = (
+          responseDocs.find(
+            (d: { registrationDocumentId?: number }) =>
+              existingDocId != null &&
+              d.registrationDocumentId === existingDocId,
+          ) ?? responseDocs[0]
+        ).registrationDocumentId;
         const uploadResponse = await uploadPharmacyDocument(
           regResponse.data.pharmacyRegistrationId,
           docId,
@@ -399,9 +598,16 @@ const SetupPharmacy = ({
           resetForm();
         }}
       />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <div className="text-h4 font-semibold text-pneutral-900">
+            Setup Your Business
+          </div>
+          
+        </div>
 
-      <div key={formKey} className="flex flex-col gap-5">
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
+        <div key={formKey} className="flex flex-col gap-5">
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>
             <div className="text-p4 font-normal font-noto-sans">
@@ -482,17 +688,33 @@ const SetupPharmacy = ({
               required
             />
 
-            <Input
-              label="Mobile Number"
-              placeholder="Enter company phone"
-              type="text"
-              name="pharmacyPhone"
-              id="pharmacyPhone"
-              value={pharmacyPhone}
-              onChange={handleFieldChange("pharmacyPhone", setPharmacyPhone)}
-              error={errors.pharmacyPhone}
-              required
-            />
+            <div className="w-full">
+              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+                Mobile Number <span className="text-warning-500">*</span>
+              </label>
+              <div className={`flex h-12 w-full items-center rounded-[8px] border ${errors.pharmacyPhone ? 'border-warning-500' : 'border-pneutral-300'} bg-white transition-all`}>
+                <select className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none">
+                  <option>+91</option>
+                </select>
+                <input 
+                  type="text" 
+                  placeholder="Enter company phone" 
+                  className="h-full w-full bg-transparent px-4 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500" 
+                  value={pharmacyPhone}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || /^[0-9]+$/.test(val)) {
+                      if (val.length <= 10) {
+                        setPharmacyPhone(val);
+                        validateField("pharmacyPhone", val);
+                      }
+                    }
+                  }}
+                  required
+                />
+              </div>
+              {errors.pharmacyPhone && <p className="text-sm text-red-500 mt-1">{errors.pharmacyPhone}</p>}
+            </div>
 
             <Input
               label={documentLabel}
@@ -500,6 +722,7 @@ const SetupPharmacy = ({
               type="text"
               name="documentNo"
               id="documentNo"
+              maxLength={30}
               value={documentNo}
               onChange={handleFieldChange("documentNo", setDocumentNo)}
               error={errors.documentNo}
@@ -509,6 +732,8 @@ const SetupPharmacy = ({
             <UploadInput
               onFileSelect={setManualFile}
               existingFile={existingManualFile || undefined}
+              required
+              hasError={!!errors.manualFile}
             />
 
             <Input
@@ -519,6 +744,7 @@ const SetupPharmacy = ({
               value={issueDate}
               onChange={handleFieldChange("issueDate", setIssueDate)}
               error={errors.issueDate}
+              max={new Date().toISOString().split("T")[0]}
               required
             />
 
@@ -542,6 +768,8 @@ const SetupPharmacy = ({
               value={expiryDate}
               onChange={handleFieldChange("expiryDate", setExpiryDate)}
               error={errors.expiryDate}
+              min={new Date().toISOString().split("T")[0]}
+              max="9999-12-31"
               required
             />
 
@@ -684,7 +912,7 @@ const SetupPharmacy = ({
             </div>
 
             <Input
-              label="Building No"
+              label="Building No and name"
               placeholder="Enter building no"
               type="text"
               name="pharmacyBuildingNo"
@@ -729,13 +957,18 @@ const SetupPharmacy = ({
 
       <div className="mt-5 flex justify-between">
         <div>
-          <Button variant="secondary" className="w-35.25">
+          <Button
+            variant="secondary"
+            className="w-35.25"
+            onClick={handleSaveDraft}
+            loading={draftLoading}
+          >
             Save Draft
           </Button>
         </div>
 
         <div className="flex gap-6">
-          <Button variant="outline">Cancel</Button>
+          <Button variant="outline" onClick={() => router.push("/dashboard")}>Cancel</Button>
 
           <Button
             variant="primary"
@@ -743,9 +976,10 @@ const SetupPharmacy = ({
             onClick={handleSubmit}
             loading={loading}
           >
-            Submit Compliance
+            {isDraftEdit ? "Submit Draft" : "Submit Compliance"}
           </Button>
         </div>
+      </div>
       </div>
     </>
   );

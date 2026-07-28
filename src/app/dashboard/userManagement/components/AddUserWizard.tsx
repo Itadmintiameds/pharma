@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
-import { getCities, getAllRoles, createUser, uploadUserImage } from '@/services/UserManagementService';
+import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail } from '@/services/UserManagementService';
 import RolesPermissions from './RolesPermissions';
 
 interface AddUserWizardProps {
@@ -107,7 +107,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     }
   };
 
-  const handleNextStep1 = () => {
+  const handleNextStep1 = async () => {
     const newErrors: Record<string, string> = {};
     
     if (!formData.fullName.trim()) newErrors.fullName = 'Full Name is required';
@@ -115,14 +115,42 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     if (!formData.department) newErrors.department = 'Department is required';
     if (!formData.designation) newErrors.designation = 'Designation is required';
     if (!formData.location || formData.location.length === 0) newErrors.location = 'At least one location must be assigned';
-    if (!formData.mobileNumber.trim()) newErrors.mobileNumber = 'Mobile Number is required';
-    if (!formData.dob) newErrors.dob = 'Date of Birth is required';
+    
+    if (!formData.mobileNumber.trim()) {
+      newErrors.mobileNumber = 'Mobile Number is required';
+    } else if (formData.mobileNumber.length < 10) {
+      newErrors.mobileNumber = 'Mobile Number must be 10 digits';
+    }
+    
+    if (!formData.dob) {
+      newErrors.dob = 'Date of Birth is required';
+    } else {
+      const dobDate = new Date(formData.dob);
+      const today = new Date();
+      let age = today.getFullYear() - dobDate.getFullYear();
+      const m = today.getMonth() - dobDate.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+        age--;
+      }
+      if (age < 18) {
+        newErrors.dob = 'User must be at least 18 years old';
+      }
+    }
     
     // Check if email is provided and valid
     if (!formData.emailId.trim()) {
       newErrors.emailId = 'Email ID is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
       newErrors.emailId = 'Invalid email format';
+    } else {
+      try {
+        const exists = await checkUserEmail(formData.emailId);
+        if (exists) {
+          newErrors.emailId = 'Email already exists';
+        }
+      } catch (err) {
+        console.error("Failed to check email during submission", err);
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -196,7 +224,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           placeholder="Emp-00001" 
           maxLength={15}
           value={formData.employeeId}
-          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
         />
         
         <Input 
@@ -259,13 +287,22 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             setFormData({ ...formData, emailId: e.target.value });
             if (errors.emailId) setErrors({ ...errors, emailId: '' });
           }}
-          onBlur={(e) => {
+          onBlur={async (e) => {
             const val = e.target.value;
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (val && !emailRegex.test(val)) {
               setErrors({ ...errors, emailId: 'Invalid email format' });
             } else if (!val) {
               setErrors({ ...errors, emailId: 'Email ID is required' });
+            } else {
+              try {
+                const exists = await checkUserEmail(val);
+                if (exists) {
+                  setErrors({ ...errors, emailId: 'Email already exists' });
+                }
+              } catch (err) {
+                console.error("Failed to check email", err);
+              }
             }
           }}
           error={errors.emailId}
@@ -281,11 +318,32 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           label="Date of Birth" 
           type="date"
           required
+          min="1900-01-01"
+          max="9999-12-31"
           placeholder="12-10-2016" 
           value={formData.dob}
           onChange={(e) => {
-            setFormData({ ...formData, dob: e.target.value });
-            if (errors.dob) setErrors({ ...errors, dob: '' });
+            const val = e.target.value;
+            if (val.length > 10) return; // Prevent more than 4 digit years
+            
+            setFormData({ ...formData, dob: val });
+            
+            if (val) {
+              const dobDate = new Date(val);
+              const today = new Date();
+              let age = today.getFullYear() - dobDate.getFullYear();
+              const m = today.getMonth() - dobDate.getMonth();
+              if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+                age--;
+              }
+              if (age < 18) {
+                setErrors({ ...errors, dob: 'User must be at least 18 years old' });
+              } else {
+                if (errors.dob) setErrors({ ...errors, dob: '' });
+              }
+            } else {
+              if (errors.dob) setErrors({ ...errors, dob: '' });
+            }
           }}
           error={errors.dob}
           leftIcon={
@@ -439,12 +497,20 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           </button>
         )}
         {step === 2 && (
-          <button 
-            onClick={handleSave}
-            className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
-          >
-            Save Changes
-          </button>
+          <>
+            <button 
+              onClick={() => setStep(1)}
+              className="px-8 py-2 border border-gray-300 text-gray-800 rounded-lg font-medium hover:bg-gray-100 bg-white"
+            >
+              Back to Step 1
+            </button>
+            <button 
+              onClick={handleSave}
+              className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
+            >
+              Save Changes
+            </button>
+          </>
         )}
         {step === 3 && (
           <button 

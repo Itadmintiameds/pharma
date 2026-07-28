@@ -20,6 +20,7 @@ interface DropdownProps {
   disabled?: boolean;
   isLoading?: boolean;
   allowOther?: boolean;
+  menuPlacement?: 'top' | 'bottom';
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -36,6 +37,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   disabled = false,
   isLoading = false,
   allowOther = false,
+  menuPlacement = 'bottom',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -230,7 +232,10 @@ const Dropdown: React.FC<DropdownProps> = ({
       {error && <p className="mt-1 text-p2 text-warning-500">{error}</p>}
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col">
+        <div className={clsx(
+          "absolute z-50 w-full bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col",
+          menuPlacement === 'top' ? "bottom-full mb-1" : "top-full mt-1"
+        )}>
           <div className="overflow-y-auto flex-1">
             {filteredOptions.length === 0 ? (
               <div className="p-3 text-sm text-pneutral-500 text-center">

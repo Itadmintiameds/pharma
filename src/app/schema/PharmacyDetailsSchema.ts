@@ -34,12 +34,22 @@ export const pharmacyDetailsSchema = z.object({
         .string()
         .trim()
         .min(1, "Document Number is required")
-        .max(20, "Document Number cannot exceed 20 characters"),
+        .max(30, "Document Number cannot exceed 30 characters"),
 
     issueDate: z
         .string()
         .trim()
-        .min(1, "Issue Date is required"),
+        .min(1, "Issue Date is required")
+        .refine((val) => {
+            const date = new Date(val);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Ignore time part
+            return date <= today;
+        }, { message: "Issue date cannot be in the future" })
+        .refine((val) => {
+            const year = val.split('-')[0];
+            return year && year.length === 4;
+        }, { message: "Invalid year format" }),
 
     issueAuthority: z
         .string()
@@ -54,7 +64,17 @@ export const pharmacyDetailsSchema = z.object({
     expiryDate: z
         .string()
         .trim()
-        .min(1, "Expiry Date is required"),
+        .min(1, "Expiry Date is required")
+        .refine((val) => {
+            const date = new Date(val);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Ignore time part
+            return date >= today;
+        }, { message: "Expiry date cannot be in the past" })
+        .refine((val) => {
+            const year = val.split('-')[0];
+            return year && year.length === 4;
+        }, { message: "Invalid year format" }),
 
     pharmacyPan: z
         .string()
@@ -101,14 +121,15 @@ export const pharmacyDetailsSchema = z.object({
         .string()
         .trim()
         .min(1, "Building Number is required")
-        .max(20, "Building Number cannot exceed 20 characters"),
+        .max(50, "Building Number and name cannot exceed 50 characters")
+        .regex(/[a-zA-Z0-9]/, "Building number must contain letters or numbers"),
 
 
     pharmacyStreet: z
         .string()
         .trim()
         .min(1, "Street/Road/Lane is required")
-        .max(25, "Street/Road/Lane cannot exceed 25 characters"),
+        .max(50, "Street/Road/Lane cannot exceed 50 characters"),
 
     pharmacyLandmark: z
         .string()
@@ -118,6 +139,10 @@ export const pharmacyDetailsSchema = z.object({
         .or(z.literal("")),
 
     pharmacyGstCertificate: z.any().optional(),
+    
+    manualFile: z.any().refine((val) => val !== null && val !== undefined, {
+        message: "Document upload is required",
+    }),
 });
 
 export const setupBusinessSchema = z.object({

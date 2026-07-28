@@ -118,7 +118,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
             {/* Left Section */}
             <div className="flex flex-col gap-2 items-center justify-center border-r-2 border-pneutral-200 pr-8 min-w-[170px]">
               <img
-                src={user?.imageUrl || "/UserManagement/UserImg.svg"}
+                src={user?.imageUrl || "/dashboard/icons/Avatar Base.svg"}
                 alt="Profile"
                 className="w-[100px] h-[100px] rounded-full object-cover"
               />
@@ -188,7 +188,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
                 {/* Last Login */}
                 <div className="flex">
                   <p className="w-36 font-semibold">Last Login</p>
-                  <p className="font-normal">14 May 2024, 10:15 AM</p>
+                  <p className="font-normal">Data yet to come</p>
                 </div>
               </div>
             </div>

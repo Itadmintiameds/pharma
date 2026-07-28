@@ -81,6 +81,46 @@ export const getPharmacyRegistrationDetails = async (reqId: string, token?: stri
   }
 };
 
+// Delete a pharmacy registration by reqId from admin backend (draft only)
+export const deletePharmacyRegistration = async (reqId: string, token?: string) => {
+  try {
+    const response = await adminApi.delete(`/pharmacy-registration/${reqId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to delete pharmacy registration.");
+  }
+};
+
+// Save pharmacy registration as draft on Admin Backend (partial payload allowed)
+export const savePharmacyDraft = async (data: Partial<PharmacyRegistrationRequest>, token?: string) => {
+  try {
+    const response = await adminApi.post("/pharmacy-registration/draft", data, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to save draft.");
+  }
+};
+
+// Submit an existing draft registration on Admin Backend (PUT)
+export const submitPharmacyDraft = async (
+  reqId: string,
+  data: PharmacyRegistrationRequest,
+  token?: string
+) => {
+  try {
+    const response = await adminApi.put(`/pharmacy-registration/${reqId}/submit`, data, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to submit draft.");
+  }
+};
+
 // Step 2: Hits Admin Backend (uses adminApi client)
 export const registerPharmacy = async (
   data: PharmacyRegistrationRequest,
