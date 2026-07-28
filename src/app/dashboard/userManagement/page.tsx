@@ -25,7 +25,7 @@ const page = () => {
   const [selectedStatus, setSelectedStatus] = useState("All Status");
   const [sortOrder, setSortOrder] = useState("None");
 
-  const roles = ["All Roles", ...Array.from(new Set(users.map(u => u.pharmaRolesDto?.roleName).filter(Boolean)))];
+  const roles = ["All Roles", ...Array.from(new Set(users.map(u => u.roleName).filter(Boolean)))];
   const locations = ["All Locations", ...Array.from(new Set(users.flatMap(u => u.pharmacyCities || []).filter(Boolean)))];
   const statuses = ["All Status", "Active", "Inactive"];
   const sortOptions = ["None", "Ascending (A-Z)", "Descending (Z-A)"];
@@ -38,7 +38,7 @@ const page = () => {
       u.userEmail?.toLowerCase().includes(term) ||
       u.employeeId?.toLowerCase().includes(term);
 
-    const matchesRole = selectedRole === "All Roles" || u.pharmaRolesDto?.roleName === selectedRole;
+    const matchesRole = selectedRole === "All Roles" || u.roleName === selectedRole;
     const matchesLocation =
       selectedLocation === "All Locations" ||
       (u.pharmacyCities && u.pharmacyCities.includes(selectedLocation));
@@ -75,6 +75,31 @@ const page = () => {
     fetchUsers();
   }, []);
 
+  const handleExport = () => {
+    if (sortedUsers.length === 0) return;
+
+    const headers = ["Name", "Email", "Employee ID", "Role", "Location", "Status"];
+    const rows = sortedUsers.map(u => [
+      `"${u.fullName || ''}"`,
+      `"${u.userEmail || ''}"`,
+      `"${u.employeeId || ''}"`,
+      `"${u.roleName || ''}"`,
+      `"${u.pharmacyCities?.join(', ') || ''}"`,
+      `"${u.userStatus || 'Inactive'}"`
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `tiameds_users_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+
   const columns = [
     {
       key: "fullName",
@@ -95,7 +120,7 @@ const page = () => {
     {
       key: "roleName",
       header: "Role",
-      render: (row: UserData) => row.pharmaRolesDto?.roleName || "Not Present",
+      render: (row: UserData) => row.roleName || "Not Present",
     },
     {
       key: "pharmacyCities",
@@ -146,7 +171,9 @@ const page = () => {
           <div className="flex justify-between">
             <div className="text-h4 font-semibold text-pneutral-900">Users</div>
             <div className="flex gap-4">
-              <button className="w-27 h-9 bg-white border border-pneutral-50 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
+              <button 
+                onClick={handleExport}
+                className="w-27 h-9 bg-white border border-pneutral-50 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
                 <Image
                   src="/UserManagement/ExportIcon.svg"
                   alt="Export"

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
@@ -21,6 +21,8 @@ const AddProducts = () => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Product Details");
   const [selectedCategory, setSelectedCategory] = useState(1);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(5); // 5: Consumable, 6: Non-Consumable
+  const productDetailsRef = useRef<any>(null);
 
   const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
 
@@ -43,9 +45,10 @@ const AddProducts = () => {
   };
 
   const renderActiveComponent = () => {
+    const effectiveCategoryId = selectedCategory === 5 ? selectedSubCategory : selectedCategory;
     switch (activeTab) {
       case "Product Details":
-        return <ProductDetails categoryId={selectedCategory} />;
+        return <ProductDetails categoryId={effectiveCategoryId} ref={productDetailsRef} />;
       case "Packaging & Order Details":
         return <PackagingDetails />;
       case "Batch & Stock Details":
@@ -123,6 +126,43 @@ const AddProducts = () => {
         </div>
       </div>
 
+      {/* Medical Device Sub-Category Selection */}
+      {selectedCategory === 5 && (
+        <div className="flex flex-col p-[16px] gap-[16px] w-full min-w-0 h-[150px] bg-white rounded-xl border-[0.89px] border-pneutral-200 overflow-hidden">
+          <div className="flex flex-col gap-1">
+            <h3 className="font-semibold text-[18px] text-[#1E1E1D] leading-[28px]">
+              Select Medical Device and Equipment Sub Category
+            </h3>
+          </div>
+          <div className="w-full flex gap-[16px] h-[60px]">
+            <div
+              onClick={() => setSelectedSubCategory(5)}
+              className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
+                selectedSubCategory === 5
+                  ? "border-secondary-700 bg-secondary-50 shadow-sm"
+                  : "border-[#D5D5D4] bg-white hover:border-gray-400"
+              }`}
+            >
+              <span className="text-[14px] font-semibold text-gray-800">
+                Consumable Medical Devices
+              </span>
+            </div>
+            <div
+              onClick={() => setSelectedSubCategory(6)}
+              className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
+                selectedSubCategory === 6
+                  ? "border-secondary-700 bg-secondary-50 shadow-sm"
+                  : "border-[#D5D5D4] bg-white hover:border-gray-400"
+              }`}
+            >
+              <span className="text-[14px] font-semibold text-gray-800">
+                Non-Consumable Medical Devices
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Details Tabs */}
       <div className="flex items-center gap-4 w-full max-w-[600px] h-[46px] border-b border-gray-200 mt-2">
         {TABS.map((tab) => (
@@ -159,7 +199,11 @@ const AddProducts = () => {
             Cancel
           </Button>
           {activeTab === "Batch & Stock Details" ? (
-            <Button variant="primary" onClick={() => {}} className="w-[120px]">
+            <Button variant="primary" onClick={() => {
+              const productData = productDetailsRef.current?.getFormData();
+              console.log("Product Data on Submit:", productData);
+              // Ready for API integration!
+            }} className="w-[120px]">
               Submit
             </Button>
           ) : (

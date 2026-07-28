@@ -401,9 +401,7 @@ const SetupPharmacy = ({
           <div className="text-h4 font-semibold text-pneutral-900">
             Setup Your Business
           </div>
-          <div className="text-p4 font-normal text-pneutral-900 font-noto-sans">
-            Complete your Business setup to start using <br /> TiaMeds Inventory Platform
-          </div>
+          
         </div>
 
         <div key={formKey} className="flex flex-col gap-5">

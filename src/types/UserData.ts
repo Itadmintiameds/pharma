@@ -18,6 +18,8 @@ export interface UserData {
     pharmacyCities?: string[];
     createdAt?: string | Date;
 
+    roleId?: number;
+    roleName?: string;
     pharmaRolesDto?: PharmaRolesDto;
     pharmacies?: PharmacyData[];
 }
