@@ -28,19 +28,67 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     hsnCode: ""
   });
 
+  const [productTypeOptions, setProductTypeOptions] = useState<{label: string, value: string}[]>([]);
+  const [productSubTypeOptions, setProductSubTypeOptions] = useState<{label: string, value: string}[]>([]);
+  const [productFormOptions, setProductFormOptions] = useState<{label: string, value: string}[]>([]);
+  const [intendedUseAreaOptions, setIntendedUseAreaOptions] = useState<{label: string, value: string}[]>([]);
+  const [skinTypeOptions, setSkinTypeOptions] = useState<{label: string, value: string}[]>([]);
+  const [hairTypeOptions, setHairTypeOptions] = useState<{label: string, value: string}[]>([]);
   const [ageGroupOptions, setAgeGroupOptions] = useState<{label: string, value: string}[]>([]);
+  const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
 
+  // Fetch initial master data
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const ageRes = await api.get('master/age-groups');
+        const [
+          ageRes, 
+          typeRes, 
+          formRes, 
+          intendedRes, 
+          skinRes, 
+          hairRes, 
+          unitRes
+        ] = await Promise.all([
+          api.get('master/age-groups'),
+          api.get('master/product-categories/4/product-types'),
+          api.get('master/product-forms'),
+          api.get('master/intended-use-areas'),
+          api.get('master/skin-types'),
+          api.get('master/hair-types'),
+          api.get('master/product-categories/4/net-quantity-units')
+        ]);
+        
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
+        setProductTypeOptions(typeRes.data.map((item: any) => ({ label: item.productTypeName, value: String(item.productTypeId) })));
+        setProductFormOptions(formRes.data.map((item: any) => ({ label: item.productFormName, value: String(item.productFormId) })));
+        setIntendedUseAreaOptions(intendedRes.data.map((item: any) => ({ label: item.intendedUseAreaName, value: String(item.intendedUseAreaId) })));
+        setSkinTypeOptions(skinRes.data.map((item: any) => ({ label: item.skinTypeName, value: String(item.skinTypeId) })));
+        setHairTypeOptions(hairRes.data.map((item: any) => ({ label: item.hairTypeName, value: String(item.hairTypeId) })));
+        setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
     };
     fetchMasterData();
   }, []);
+
+  // Fetch sub-types whenever productType changes
+  useEffect(() => {
+    if (formData.productType) {
+      const fetchSubTypes = async () => {
+        try {
+          const res = await api.get(`master/product-types/${formData.productType}/sub-types`);
+          setProductSubTypeOptions(res.data.map((item: any) => ({ label: item.productSubTypeName, value: String(item.productSubTypeId) })));
+        } catch (error) {
+          console.error("Error fetching sub types:", error);
+        }
+      };
+      fetchSubTypes();
+    } else {
+      setProductSubTypeOptions([]);
+    }
+  }, [formData.productType]);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -49,6 +97,45 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   useImperativeHandle(ref, () => ({
     getFormData: () => formData
   }));
+
+  // Find the selected unit label for display
+  const selectedUnitLabel = netQtyUnitOptions.find(opt => opt.value === formData.netQuantityUnit)?.label || "Select Unit";
+
+  const selectedProductTypeName = productTypeOptions.find(opt => opt.value === formData.productType)?.label;
+
+  let showSkinType = false;
+  let skinTypeRequired = false;
+  let showHairType = false;
+  let hairTypeRequired = false;
+
+  if (selectedProductTypeName) {
+    switch (selectedProductTypeName) {
+      case 'Hair Care':
+        showHairType = true;
+        hairTypeRequired = true;
+        break;
+      case 'Skin Care (Face)':
+      case 'Body Care':
+      case 'Lip Care':
+      case 'Eye Care':
+        showSkinType = true;
+        skinTypeRequired = true;
+        break;
+      case 'Personal Hygiene':
+      case 'Makeup / Color Cosmetics':
+        showSkinType = true;
+        skinTypeRequired = false;
+        break;
+      case 'Fragrance':
+        break;
+      case "Men's Grooming":
+        showSkinType = true;
+        skinTypeRequired = false;
+        showHairType = true;
+        hairTypeRequired = false;
+        break;
+    }
+  }
 
   return (
     <>
@@ -59,17 +146,67 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         label="Product Type"
         required
         placeholder="Select Product Type"
-        options={[{label: 'Type 1', value: 'Type 1'}, {label: 'Type 2', value: 'Type 2'}]}
+        options={productTypeOptions}
         value={formData.productType}
-        onChange={(val) => handleChange('productType', val)}
+        onChange={(val) => {
+          handleChange('productType', val);
+          handleChange('productSubType', ""); // Reset sub-type when type changes
+          handleChange('skinType', ""); // Reset skin type
+          handleChange('hairType', ""); // Reset hair type
+        }}
       />
       
-      <Input label="Product Sub Type" required placeholder="Enter Product Sub Type" value={formData.productSubType} onChange={(e) => handleChange('productSubType', e.target.value)} />
-      <Input label="Product Form" required placeholder="Eg., Cream, Lotion" value={formData.productForm} onChange={(e) => handleChange('productForm', e.target.value)} />
+      <Dropdown
+        label="Product Sub Type"
+        required
+        placeholder="Select Product Sub Type"
+        options={productSubTypeOptions}
+        value={formData.productSubType}
+        onChange={(val) => handleChange('productSubType', val)}
+        disabled={!formData.productType}
+      />
+      
+      <Dropdown
+        label="Product Form"
+        required
+        placeholder="Select Product Form"
+        options={productFormOptions}
+        value={formData.productForm}
+        onChange={(val) => handleChange('productForm', val)}
+      />
+
       <Input label="Variant" placeholder="Enter Variant" value={formData.variant} onChange={(e) => handleChange('variant', e.target.value)} />
-      <Input label="Intended Use Area" required placeholder="Enter Intended Use Area" value={formData.intendedUseArea} onChange={(e) => handleChange('intendedUseArea', e.target.value)} />
-      <Input label="Skin Type" placeholder="Enter Skin Type" value={formData.skinType} onChange={(e) => handleChange('skinType', e.target.value)} />
-      <Input label="Hair Type" required placeholder="Enter Hair Type" value={formData.hairType} onChange={(e) => handleChange('hairType', e.target.value)} />
+      
+      <Dropdown
+        label="Intended Use Area"
+        required
+        placeholder="Select Intended Use Area"
+        options={intendedUseAreaOptions}
+        value={formData.intendedUseArea}
+        onChange={(val) => handleChange('intendedUseArea', val)}
+      />
+
+      {showSkinType && (
+        <Dropdown
+          label="Skin Type"
+          required={skinTypeRequired}
+          placeholder="Select Skin Type"
+          options={skinTypeOptions}
+          value={formData.skinType}
+          onChange={(val) => handleChange('skinType', val)}
+        />
+      )}
+
+      {showHairType && (
+        <Dropdown
+          label="Hair Type"
+          required={hairTypeRequired}
+          placeholder="Select Hair Type"
+          options={hairTypeOptions}
+          value={formData.hairType}
+          onChange={(val) => handleChange('hairType', val)}
+        />
+      )}
       
       <Dropdown
         label="Age Group"
@@ -107,11 +244,21 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
               className="w-full h-12 rounded-l-md border border-r-0 border-pneutral-300 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500" 
             />
           </div>
-          <div className="w-[140px] shrink-0 border border-pneutral-300 rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer">
-            <span className="text-p4 text-pneutral-500 flex-1 truncate">{formData.netQuantityUnit || "Select Unit"}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0">
+          <div className="relative w-[140px] shrink-0 border border-pneutral-300 rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer">
+            <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
               <path d="M6 9l6 6 6-6" />
             </svg>
+            <select
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              value={formData.netQuantityUnit}
+              onChange={(e) => handleChange('netQuantityUnit', e.target.value)}
+            >
+              <option value="" disabled>Select Unit</option>
+              {netQtyUnitOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>

@@ -30,18 +30,21 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   const [flavorOptions, setFlavorOptions] = useState<{label: string, value: string}[]>([]);
   const [therapeuticCategoryOptions, setTherapeuticCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [therapeuticSubcategoryOptions, setTherapeuticSubcategoryOptions] = useState<{label: string, value: string}[]>([]);
+  const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, flavorRes, therRes] = await Promise.all([
+        const [ageRes, flavorRes, therRes, unitRes] = await Promise.all([
           api.get('master/age-groups'),
           api.get('master/flavours'),
-          api.get('master/therapeutic-categories')
+          api.get('master/therapeutic-categories'),
+          api.get('master/product-categories/2/net-quantity-units')
         ]);
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
         setFlavorOptions(flavorRes.data.map((item: any) => ({ label: item.flavourName, value: String(item.flavourId) })));
         setTherapeuticCategoryOptions(therRes.data.map((item: any) => ({ label: item.therapeuticCategoryName, value: String(item.therapeuticCategoryId) })));
+        setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
@@ -72,6 +75,9 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   useImperativeHandle(ref, () => ({
     getFormData: () => formData
   }));
+
+  // Find the selected unit label for display
+  const selectedUnitLabel = netQtyUnitOptions.find(opt => opt.value === formData.netQuantityUnit)?.label || "Select Unit";
 
   return (
     <>
@@ -125,11 +131,21 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
               className="w-full h-12 rounded-l-md border border-r-0 border-pneutral-300 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500" 
             />
           </div>
-          <div className="w-[140px] shrink-0 border border-pneutral-300 rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer">
-            <span className="text-p4 text-pneutral-500 flex-1 truncate">{formData.netQuantityUnit || "Select Unit"}</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0">
+          <div className="relative w-[140px] shrink-0 border border-pneutral-300 rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer">
+            <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
               <path d="M6 9l6 6 6-6" />
             </svg>
+            <select
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              value={formData.netQuantityUnit}
+              onChange={(e) => handleChange('netQuantityUnit', e.target.value)}
+            >
+              <option value="" disabled>Select Unit</option>
+              {netQtyUnitOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
