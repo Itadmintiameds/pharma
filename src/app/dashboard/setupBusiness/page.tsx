@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import SetupBusinessView from './components/SetupBusiness';
 import SetupPharmacy from './components/SetupPharmacy';
-import { getUserOrganization, getPharmacyRegistrations } from '@/services/SetupBusinessService';
+import { getUserOrganization, getPharmacyRegistrations, getPharmacyRegistrationDetails } from '@/services/SetupBusinessService';
 import Button from '@/app/components/common/Button';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function SetupBusinessPage() {
+function SetupBusinessContent() {
   const [businessName, setBusinessName] = useState("");
   const [ownershipType, setOwnershipType] = useState("");
   const [panNumber, setPanNumber] = useState("");
@@ -17,7 +17,10 @@ export default function SetupBusinessPage() {
   const [existingOrg, setExistingOrg] = useState<any>(null);
   const [isSingleLocationRegistered, setIsSingleLocationRegistered] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [prefillData, setPrefillData] = useState<any>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const reqId = searchParams.get("reqId");
 
   useEffect(() => {
     const fetchOrgAndRegistrations = async () => {
@@ -28,6 +31,14 @@ export default function SetupBusinessPage() {
           return;
         }
         const { accessToken } = await userRes.json();
+
+        // Edit mode: fetch existing registration details and autofill the form
+        if (reqId) {
+          const details = await getPharmacyRegistrationDetails(reqId, accessToken);
+          if (details && details.data) {
+            setPrefillData(details.data);
+          }
+        }
 
         const org = await getUserOrganization();
         if (org && org.organizationId) {
@@ -67,7 +78,7 @@ export default function SetupBusinessPage() {
       }
     };
     fetchOrgAndRegistrations();
-  }, []);
+  }, [reqId]);
 
   if (loading) {
     return (
@@ -79,7 +90,7 @@ export default function SetupBusinessPage() {
 
   return (
     <div className="flex flex-col gap-6 w-full">
-      {isSingleLocationRegistered ? (
+      {isSingleLocationRegistered && !reqId ? (
         <div className="flex items-center justify-center w-full py-8">
           <div 
             className="bg-white rounded-2xl p-8 shadow-sm border border-pneutral-100 flex flex-col items-center justify-center gap-6 text-center shrink-0"
@@ -120,7 +131,7 @@ export default function SetupBusinessPage() {
               setLocationType={setLocationType}
             />
           )}
-          <SetupPharmacy 
+          <SetupPharmacy
             businessName={businessName}
             ownershipType={ownershipType}
             panNumber={panNumber}
@@ -128,9 +139,24 @@ export default function SetupBusinessPage() {
             locationType={locationType}
             hasOrganization={hasOrganization}
             existingOrg={existingOrg}
+            prefillData={prefillData}
           />
         </>
       )}
     </div>
+  );
+}
+
+export default function SetupBusinessPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        </div>
+      }
+    >
+      <SetupBusinessContent />
+    </Suspense>
   );
 }

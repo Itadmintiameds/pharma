@@ -5,8 +5,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
-import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails, getUserOrganization } from "@/services/SetupBusinessService";
+import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails, getUserOrganization, deletePharmacyRegistration } from "@/services/SetupBusinessService";
 import PharmacyDetailsModal from "./PharmacyDetailsModal";
+import { showToast } from "@/app/components/common/Toast";
 
 export default function DashboardMain() {
   /*
@@ -39,21 +40,55 @@ export default function DashboardMain() {
   });
 
   const [selectedDetails, setSelectedDetails] = useState<any>(null);
+  const [selectedCard, setSelectedCard] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const handleViewDetails = async (reqId: string) => {
+  const handleViewDetails = async (card: any) => {
     setDetailsLoading(true);
     try {
-      const details = await getPharmacyRegistrationDetails(reqId);
+      const details = await getPharmacyRegistrationDetails(card.reqId);
       if (details && details.data) {
         setSelectedDetails(details.data);
+        setSelectedCard(card);
         setIsModalOpen(true);
       }
     } catch (err) {
       console.error("Failed to fetch details:", err);
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  const handleEdit = () => {
+    if (!selectedCard) return;
+    setIsModalOpen(false);
+    router.push(`/dashboard/setupBusiness?reqId=${selectedCard.reqId}`);
+  };
+
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!selectedCard) return;
+    if (!window.confirm("Delete this draft registration? This action cannot be undone.")) return;
+
+    setDeleting(true);
+    try {
+      await deletePharmacyRegistration(selectedCard.reqId);
+      setApplicationCards((prev) => prev.filter((c) => c.reqId !== selectedCard.reqId));
+      setKpis((prev) => ({
+        ...prev,
+        totalPharmacies: Math.max(0, prev.totalPharmacies - 1),
+      }));
+      showToast.success("Draft deleted successfully!");
+      setIsModalOpen(false);
+      setSelectedDetails(null);
+      setSelectedCard(null);
+    } catch (err: any) {
+      showToast.error(err?.message || "Failed to delete draft.");
+      console.error("Delete failed:", err);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -101,7 +136,7 @@ export default function DashboardMain() {
       icon: "/PharmacyDetails/PharmacyIcon.svg",
       iconBg: "bg-[#DFF5D1]",
     },
-    
+
     REJECT: {
       label: "Rejected",
       badge: "bg-[#FEE2E2] text-[#991B1B]",
@@ -138,9 +173,9 @@ export default function DashboardMain() {
           setLoading(false);
           return;
         }
-        
+
         const { userId } = await userResponse.json();
-        
+
         if (!userId) {
           console.error("No userId found for the current user");
           setLoading(false);
@@ -177,7 +212,7 @@ export default function DashboardMain() {
             });
 
             let mappedStatus = "NOT_STARTED";
-            switch(item.status) {
+            switch (item.status) {
               case "SUBMITTED":
                 mappedStatus = "UNDER_REVIEW";
                 break;
@@ -189,6 +224,9 @@ export default function DashboardMain() {
                 break;
               case "REJECT":
                 mappedStatus = "REJECT";
+                break;
+              case "DRAFT":
+                mappedStatus = "DRAFT";
                 break;
               default:
                 mappedStatus = item.status || "NOT_STARTED";
@@ -491,7 +529,7 @@ export default function DashboardMain() {
             </div>
 
             <div>
-              <button 
+              <button
                 onClick={() => {
                   if (organizationType?.toLowerCase() === "multiple") {
                     router.push("/dashboard/setupBusiness");
@@ -608,8 +646,8 @@ export default function DashboardMain() {
                   </div>
                 )}
 
-                <button 
-                  onClick={() => handleViewDetails(card.reqId)}
+                <button
+                  onClick={() => handleViewDetails(card)}
                   disabled={detailsLoading}
                   className="absolute bottom-3 left-3 right-3 h-[36px] rounded-lg bg-secondary-700 text-label-l3 font-medium text-white disabled:opacity-50 flex items-center justify-center transition-colors hover:bg-secondary-800"
                 >
@@ -620,14 +658,19 @@ export default function DashboardMain() {
           })}
         </div>
       </div>
-      
-      <PharmacyDetailsModal 
+
+      <PharmacyDetailsModal
         isOpen={isModalOpen}
         onClose={() => {
           setIsModalOpen(false);
           setSelectedDetails(null);
+          setSelectedCard(null);
         }}
         data={selectedDetails}
+        status={selectedCard?.status}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
+        deleting={deleting}
       />
     </>
   );

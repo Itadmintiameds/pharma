@@ -5,14 +5,27 @@ interface PharmacyDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   data: any | null;
+  status?: string;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  deleting?: boolean;
 }
+
+const EDITABLE_STATUSES = ["DRAFT", "ACTION_REQUIRED"];
 
 export default function PharmacyDetailsModal({
   isOpen,
   onClose,
   data,
+  status,
+  onEdit,
+  onDelete,
+  deleting = false,
 }: PharmacyDetailsModalProps) {
   if (!isOpen || !data) return null;
+
+  const canEdit = !!onEdit && !!status && EDITABLE_STATUSES.includes(status);
+  const canDelete = !!onDelete && status === "DRAFT";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -27,18 +40,39 @@ export default function PharmacyDetailsModal({
               Req ID: {data.pharmacyRegistrationId} • {data.pharmacyType}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <Image
-              src="/PharmacyDetails/CloseIcon.svg"
-              alt="Close"
-              width={16}
-              height={16}
-            />
-          </button>
+          <div className="flex items-center gap-3">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="h-[36px] px-4 border-[1.5px] border-secondary-700 rounded-lg text-label-l3 font-medium text-secondary-700 flex items-center justify-center gap-2 hover:bg-secondary-50 transition-colors"
+              >
+                Edit
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                onClick={onDelete}
+                disabled={deleting}
+                className="h-[36px] px-4 border-[1.5px] border-red-600 rounded-lg text-label-l3 font-medium text-red-600 flex items-center justify-center gap-2 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deleting ? "Deleting..." : "Delete"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <Image
+                src="/PharmacyDetails/CloseIcon.svg"
+                alt="Close"
+                width={16}
+                height={16}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Content (Scrollable) */}
