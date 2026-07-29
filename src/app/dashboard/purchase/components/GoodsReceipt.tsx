@@ -7,14 +7,13 @@ import Image from "next/image";
 
 const GoodsReceipt = () => {
   const [showAddProducts, setShowAddProducts] = useState(false);
+  const [paymentType, setPaymentType] = useState<"" | "CASH" | "CREDIT">("");
+  const [creditDays, setCreditDays] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
 
   if (showAddProducts) {
     return <AddProducts />;
   }
-
-  const [paymentType, setPaymentType] = useState<"" | "CASH" | "CREDIT">("");
-  const [creditDays, setCreditDays] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
 
   const paymentDueDate =
     invoiceDate && creditDays
@@ -168,7 +167,10 @@ const GoodsReceipt = () => {
           <button className="w-27 h-9 rounded-lg bg-white border border-pneutral-50 shadow-[0_4px_12px_rgba(0,0,0,0.12)] active:shadow-md transition-all duration-200 text-label-l3 font-medium text-pneutral-900">
             Cancel
           </button>
-          <button className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800">
+          <button
+            className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800"
+            onClick={() => setShowAddProducts(true)}
+          >
             Next
           </button>
         </div>
