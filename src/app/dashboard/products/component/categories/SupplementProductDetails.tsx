@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import api from '@/utils/api';
+import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 
@@ -35,15 +36,15 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, flavorRes, therRes, unitRes] = await Promise.all([
-          api.get('master/age-groups'),
-          api.get('master/flavours'),
-          api.get('master/therapeutic-categories'),
-          api.get('master/product-categories/2/net-quantity-units')
+        const [ageRes, flavourRes, tcRes, unitRes] = await Promise.all([
+          ProductMasterService.getAgeGroups(),
+          ProductMasterService.getFlavours(),
+          ProductMasterService.getTherapeuticCategories(),
+          ProductMasterService.getSupplementNetQuantityUnits()
         ]);
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
-        setFlavorOptions(flavorRes.data.map((item: any) => ({ label: item.flavourName, value: String(item.flavourId) })));
-        setTherapeuticCategoryOptions(therRes.data.map((item: any) => ({ label: item.therapeuticCategoryName, value: String(item.therapeuticCategoryId) })));
+        setFlavorOptions(flavourRes.data.map((item: any) => ({ label: item.flavourName, value: String(item.flavourId) })));
+        setTherapeuticCategoryOptions(tcRes.data.map((item: any) => ({ label: item.therapeuticCategoryName, value: String(item.therapeuticCategoryId) })));
         setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
@@ -56,7 +57,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     if (formData.therapeuticCategory) {
       const fetchSubcategories = async () => {
         try {
-          const res = await api.get(`master/therapeutic-categories/${formData.therapeuticCategory}/subcategories`);
+          const res = await ProductMasterService.getTherapeuticSubCategories(formData.therapeuticCategory);
           setTherapeuticSubcategoryOptions(res.data.map((item: any) => ({ label: item.therapeuticSubcategoryName, value: String(item.therapeuticSubcategoryId) })));
         } catch (error) {
           console.error("Error fetching subcategories:", error);

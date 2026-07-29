@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import api from '@/utils/api';
+import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { Plus, Minus } from 'lucide-react';
@@ -23,8 +24,8 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const res = await api.get('master/molecules');
-        setMoleculeOptions(res.data.map((item: any) => ({ label: item.moleculeName, value: String(item.moleculeId) })));
+        const res = await ProductMasterService.getMolecules();
+        setMoleculeOptions(res.data.map((m: any) => ({ label: m.moleculeName, value: String(m.moleculeId) })));
         
         const schedulesMap: Record<string, string> = {};
         res.data.forEach((item: any) => {

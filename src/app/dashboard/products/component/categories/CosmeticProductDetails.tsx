@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import api from '@/utils/api';
+import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 
@@ -41,22 +42,14 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [
-          ageRes, 
-          typeRes, 
-          formRes, 
-          intendedRes, 
-          skinRes, 
-          hairRes, 
-          unitRes
-        ] = await Promise.all([
-          api.get('master/age-groups'),
-          api.get('master/product-categories/4/product-types'),
-          api.get('master/product-forms'),
-          api.get('master/intended-use-areas'),
-          api.get('master/skin-types'),
-          api.get('master/hair-types'),
-          api.get('master/product-categories/4/net-quantity-units')
+        const [ageRes, typeRes, formRes, intendedRes, skinRes, hairRes, unitRes] = await Promise.all([
+          ProductMasterService.getAgeGroups(),
+          ProductMasterService.getCosmeticProductTypes(),
+          ProductMasterService.getCosmeticProductForms(),
+          ProductMasterService.getIntendedUseAreas(),
+          ProductMasterService.getSkinTypes(),
+          ProductMasterService.getHairTypes(),
+          ProductMasterService.getCosmeticNetQuantityUnits()
         ]);
         
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
@@ -78,7 +71,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     if (formData.productType) {
       const fetchSubTypes = async () => {
         try {
-          const res = await api.get(`master/product-types/${formData.productType}/sub-types`);
+          const res = await ProductMasterService.getCosmeticProductSubTypes(formData.productType);
           setProductSubTypeOptions(res.data.map((item: any) => ({ label: item.productSubTypeName, value: String(item.productSubTypeId) })));
         } catch (error) {
           console.error("Error fetching sub types:", error);
