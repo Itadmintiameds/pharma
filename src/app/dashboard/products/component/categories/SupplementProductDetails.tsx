@@ -31,21 +31,24 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   const [flavorOptions, setFlavorOptions] = useState<{label: string, value: string}[]>([]);
   const [therapeuticCategoryOptions, setTherapeuticCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [therapeuticSubcategoryOptions, setTherapeuticSubcategoryOptions] = useState<{label: string, value: string}[]>([]);
+  const [dosageFormOptions, setDosageFormOptions] = useState<{label: string, value: string}[]>([]);
   const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, flavourRes, tcRes, unitRes] = await Promise.all([
+        const [ageRes, flavourRes, tcRes, unitRes, dosageRes] = await Promise.all([
           ProductMasterService.getAgeGroups(),
           ProductMasterService.getFlavours(),
           ProductMasterService.getTherapeuticCategories(),
-          ProductMasterService.getSupplementNetQuantityUnits()
+          ProductMasterService.getSupplementNetQuantityUnits(),
+          ProductMasterService.getDosageForms()
         ]);
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
         setFlavorOptions(flavourRes.data.map((item: any) => ({ label: item.flavourName, value: String(item.flavourId) })));
         setTherapeuticCategoryOptions(tcRes.data.map((item: any) => ({ label: item.therapeuticCategoryName, value: String(item.therapeuticCategoryId) })));
         setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
+        setDosageFormOptions(dosageRes.data.map((item: any) => ({ label: item.dosageName, value: String(item.dosageId) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
@@ -117,7 +120,14 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         onChange={(val) => handleChange('flavor', val)}
       />
       
-      <Input label="Dosage Form" required placeholder="Eg., Gel, Powder" value={formData.dosageForm} onChange={(e) => handleChange('dosageForm', e.target.value)} />
+      <Dropdown
+        label="Dosage Form"
+        required
+        placeholder="Select Dosage Form"
+        options={dosageFormOptions}
+        value={formData.dosageForm}
+        onChange={(val) => handleChange('dosageForm', val)}
+      />
       <Input label="Strength / Composition" required placeholder="Placeholder" value={formData.strength} onChange={(e) => handleChange('strength', e.target.value)} />
       
       <div className="flex flex-col gap-1 w-full">

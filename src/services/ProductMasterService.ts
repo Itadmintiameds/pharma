@@ -12,6 +12,7 @@ export const ProductMasterService = {
   getMolecules: () => api.get('master/molecules'),
   
   // --- Category: Supplements (2) ---
+  getDosageForms: () => api.get('master/dosage-forms'),
   getFlavours: () => api.get('master/flavours'),
   getTherapeuticCategories: () => api.get('master/therapeutic-categories'),
   getTherapeuticSubCategories: (categoryId: string | number) => api.get(`master/therapeutic-categories/${categoryId}/subcategories`),
@@ -32,6 +33,10 @@ export const ProductMasterService = {
   getSkinTypes: () => api.get('master/skin-types'),
   getHairTypes: () => api.get('master/hair-types'),
 
-  // --- Medical Devices (5, 6) ---
-  // To be implemented...
+  // --- Medical Devices / Consumables (5) & Non-Consumables (6) ---
+  getDeviceCategories: (productCategoryId: string | number) => api.get(`master/product-categories/${productCategoryId}/device-categories`),
+  getDeviceSubCategories: (deviceCategoryId: string | number) => api.get(`master/device-categories/${deviceCategoryId}/device-sub-categories`),
+  getMaterialTypes: (productCategoryId: string | number) => api.get(`master/product-categories/${productCategoryId}/material-types`),
+  getPowerSources: () => api.get('master/power-sources'),
+  getCountries: () => api.get('master/countries'),
 };

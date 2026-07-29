@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 
 const PackagingDetails = () => {
+  const [purchaseUnit, setPurchaseUnit] = useState('');
+
+  const purchaseUnitOptions = [
+    { label: 'Box', value: 'box' },
+    { label: 'Carton', value: 'carton' }
+  ];
+
+  const selectedPurchaseUnit = purchaseUnitOptions.find(opt => opt.value === purchaseUnit);
+  const purchaseUnitLabel = selectedPurchaseUnit ? selectedPurchaseUnit.label : 'Unit';
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-sm">
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -16,11 +26,12 @@ const PackagingDetails = () => {
               label="Purchase Unit"
               required
               placeholder="Select Unit"
-              options={[{ label: 'Box', value: 'box' }, { label: 'Carton', value: 'carton' }]}
-              value=""
-              onChange={() => {}}
+              options={purchaseUnitOptions}
+              value={purchaseUnit}
+              onChange={(val) => setPurchaseUnit(val)}
             />
             
+            {/*
             <Input 
               label="Contains" 
               type="number" 
@@ -36,9 +47,10 @@ const PackagingDetails = () => {
               value=""
               onChange={() => {}}
             />
+            */}
 
             <Input 
-              label="Each Strip Contains" 
+              label={`Each ${purchaseUnitLabel} Contains`} 
               type="number" 
               required 
               placeholder="Enter number" 
