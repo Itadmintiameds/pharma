@@ -1,6 +1,7 @@
 import React from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
+import DashboardProvider from "../components/providers/DashboardProvider";
 
 export default function layout({
   children,
@@ -8,6 +9,7 @@ export default function layout({
   children: React.ReactNode;
 }) {
   return (
+    <DashboardProvider>
     <div className="flex h-screen">
       <Sidebar />
 
@@ -17,6 +19,9 @@ export default function layout({
         <main className="flex-1 overflow-y-auto p-6 bg-pneutral-50">{children}</main>
       </div>
     </div>
+
+    </DashboardProvider>
+
   );
 }
 
