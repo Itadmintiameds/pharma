@@ -1,4 +1,8 @@
-import Input from '@/app/components/common/Input'
+import React, { useState } from 'react';
+import Input from '@/app/components/common/Input';
+import Dropdown from '@/app/components/common/Dropdown';
+import { BatchSchema } from '@/app/schema/BatchSchema';
+import { z } from 'zod';
 
 const CalendarIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500">
@@ -10,6 +14,48 @@ const CalendarIcon = () => (
 )
 
 const BatchDetails = () => {
+  const [formData, setFormData] = useState({
+    batchNumber: '',
+    manufacturingDate: '',
+    expiryDate: '',
+    purchaseUnit: '',
+    purchaseQuantity: '',
+    freeUnit: '',
+    freeQuantity: '',
+    purchasePricePerBox: '',
+    mrpPerBox: '',
+    sellingPricePerBox: '',
+    purchasePricePerSmallestUnit: '',
+    mrpPerSmallestUnit: '',
+    sellingPricePerSmallestUnit: '',
+    rackLocation: ''
+  });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const validateField = (field: keyof typeof formData, value: string) => {
+    try {
+      const newData = { ...formData, [field]: value };
+      BatchSchema.parse(newData);
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const zodError = error as z.ZodError;
+        setErrors(prev => ({ ...prev, [field]: '' }));
+        const fieldError = zodError.issues.find((err: z.ZodIssue) => err.path.includes(field));
+        if (fieldError) {
+          setErrors(prev => ({ ...prev, [field]: fieldError.message }));
+        }
+      }
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
+  };
+
+
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-sm">
       <div className="flex min-h-0 w-full flex-1 flex-col">
@@ -19,7 +65,14 @@ const BatchDetails = () => {
           </h3>
 
           <div className="grid grid-cols-2 items-start gap-x-xlg gap-y-sm">
-            <Input label="Batch Number" required placeholder="Enter Batch Number" />
+            <Input 
+              label="Batch Number" 
+              required 
+              placeholder="Enter Batch Number" 
+              value={formData.batchNumber}
+              onChange={(e) => handleChange('batchNumber', e.target.value)}
+              error={errors.batchNumber}
+            />
 
             <Input
               label="Manufacturing Date"
@@ -27,6 +80,9 @@ const BatchDetails = () => {
               required
               placeholder="Enter Manufacturing Date"
               leftIcon={<CalendarIcon />}
+              value={formData.manufacturingDate}
+              onChange={(e) => handleChange('manufacturingDate', e.target.value)}
+              error={errors.manufacturingDate}
             />
 
             <Input
@@ -35,22 +91,112 @@ const BatchDetails = () => {
               required
               placeholder="Enter Expiry Date"
               leftIcon={<CalendarIcon />}
+              value={formData.expiryDate}
+              onChange={(e) => handleChange('expiryDate', e.target.value)}
+              error={errors.expiryDate}
             />
 
-            <Input label="Purchase Unit" required placeholder="0" />
-            <Input label="Purchase Quantity" required placeholder="0" />
-            <Input label="Free Unit" required placeholder="0" />
-            <Input label="Free Quantity" required placeholder="0" />
+            <Dropdown 
+              label="Purchase Unit" 
+              required 
+              placeholder="Select Unit" 
+              options={[{ label: 'Box', value: 'box' }, { label: 'Strip', value: 'strip' }, { label: 'Bottle', value: 'bottle' }]}
+              value={formData.purchaseUnit}
+              onChange={(val) => handleChange('purchaseUnit', val)}
+              error={errors.purchaseUnit}
+            />
+            <Input 
+              label="Purchase Quantity" 
+              required 
+              type="number"
+              placeholder="0" 
+              value={formData.purchaseQuantity}
+              onChange={(e) => handleChange('purchaseQuantity', e.target.value)}
+              error={errors.purchaseQuantity}
+            />
+            <Dropdown 
+              label="Free Unit" 
+              required 
+              placeholder="Select Unit"
+              options={[{ label: 'Box', value: 'box' }, { label: 'Strip', value: 'strip' }, { label: 'Bottle', value: 'bottle' }]}
+              value={formData.freeUnit}
+              onChange={(val) => handleChange('freeUnit', val)}
+              error={errors.freeUnit}
+            />
+            <Input 
+              label="Free Quantity" 
+              required 
+              type="number"
+              placeholder="0" 
+              value={formData.freeQuantity}
+              onChange={(e) => handleChange('freeQuantity', e.target.value)}
+              error={errors.freeQuantity}
+            />
 
-            <Input label="Purchase Price (per Box)" required placeholder="₹ 0.00" />
-            <Input label="MRP (per Box)" required placeholder="₹ 0.00" />
-            <Input label="Selling Price (per Box)" required placeholder="₹ 0.00" />
+            <Input 
+              label="Purchase Price (per Box)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.purchasePricePerBox}
+              onChange={(e) => handleChange('purchasePricePerBox', e.target.value)}
+              error={errors.purchasePricePerBox}
+            />
+            <Input 
+              label="MRP (per Box)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.mrpPerBox}
+              onChange={(e) => handleChange('mrpPerBox', e.target.value)}
+              error={errors.mrpPerBox}
+            />
+            <Input 
+              label="Selling Price (per Box)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.sellingPricePerBox}
+              onChange={(e) => handleChange('sellingPricePerBox', e.target.value)}
+              error={errors.sellingPricePerBox}
+            />
 
-            <Input label="Purchase Price (per Smallest Unit)" required placeholder="₹ 0.00" />
-            <Input label="MRP (per Smallest Unit)" required placeholder="₹ 0.00" />
-            <Input label="Selling Price (per Smallest Unit)" required placeholder="₹ 0.00" />
+            <Input 
+              label="Purchase Price (per Smallest Unit)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.purchasePricePerSmallestUnit}
+              onChange={(e) => handleChange('purchasePricePerSmallestUnit', e.target.value)}
+              error={errors.purchasePricePerSmallestUnit}
+            />
+            <Input 
+              label="MRP (per Smallest Unit)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.mrpPerSmallestUnit}
+              onChange={(e) => handleChange('mrpPerSmallestUnit', e.target.value)}
+              error={errors.mrpPerSmallestUnit}
+            />
+            <Input 
+              label="Selling Price (per Smallest Unit)" 
+              required 
+              type="number"
+              placeholder="₹ 0.00" 
+              value={formData.sellingPricePerSmallestUnit}
+              onChange={(e) => handleChange('sellingPricePerSmallestUnit', e.target.value)}
+              error={errors.sellingPricePerSmallestUnit}
+            />
 
-            <Input label="Rack / Location" required placeholder="Enter Rack / Location" />
+            <Input 
+              label="Rack / Location" 
+              required 
+              placeholder="Enter Rack / Location" 
+              value={formData.rackLocation}
+              onChange={(e) => handleChange('rackLocation', e.target.value)}
+              error={errors.rackLocation}
+            />
           </div>
         </div>
       </div>

@@ -81,10 +81,16 @@ export default function PurchaseSuccessModal({
         </div>
 
         <div className="flex justify-between">
-          <button className="w-36 h-9 border-[1.5px] border-primary-800 rounded-lg text-label-l3 font-medium text-primary-800">
+          <button 
+            onClick={onAddProduct}
+            className="w-36 h-9 border-[1.5px] border-primary-800 rounded-lg text-label-l3 font-medium text-primary-800"
+          >
             Add New Product
           </button>
-          <button className="w-36 h-9 rounded-lg bg-primary-800 text-label-l3 font-medium text-white">
+          <button 
+            onClick={onViewSummary}
+            className="w-36 h-9 rounded-lg bg-primary-800 text-label-l3 font-medium text-white"
+          >
             View Summary
           </button>
         </div>

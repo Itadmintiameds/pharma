@@ -1,9 +1,10 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
-import api from '@/utils/api';
 import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { Plus, Minus } from 'lucide-react';
+import { DrugProductSchema, MoleculeSchema } from '@/app/schema/ProductSchemas';
+import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
@@ -20,6 +21,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   const [moleculeOptions, setMoleculeOptions] = useState<{label: string, value: string}[]>([]);
   const [moleculeSchedules, setMoleculeSchedules] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchMasterData = async () => {
@@ -39,8 +41,21 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     fetchMasterData();
   }, []);
 
-  const handleChange = (field: string, value: any) => {
+  const validateField = (field: keyof typeof formData, value: any) => {
+    try {
+      DrugProductSchema.pick({ [field]: true } as any).parse({ [field]: value });
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const zodError = error as z.ZodError;
+        setErrors(prev => ({ ...prev, [field]: zodError.issues[0].message }));
+      }
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   const addMolecule = () => {
@@ -59,11 +74,26 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   };
 
+  const validateMoleculeField = (id: number, field: string, value: string) => {
+    if (field === 'strength') {
+      try {
+        MoleculeSchema.pick({ strength: true }).parse({ strength: value });
+        setErrors(prev => ({ ...prev, [`mol_${id}_strength`]: '' }));
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          const zodError = error as z.ZodError;
+          setErrors(prev => ({ ...prev, [`mol_${id}_strength`]: zodError.issues[0].message }));
+        }
+      }
+    }
+  };
+
   const updateMolecule = (id: number, field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       molecules: prev.molecules.map(m => m.id === id ? { ...m, [field]: value } : m)
     }));
+    validateMoleculeField(id, field, value);
   };
 
   let finalDrugSchedule = "";
@@ -93,8 +123,22 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} />
-      <Input label="Brand name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} />
+      <Input 
+        label="Product Name" 
+        required 
+        placeholder="Enter Product Name" 
+        value={formData.productName} 
+        onChange={(e) => handleChange('productName', e.target.value)} 
+        error={errors.productName}
+      />
+      <Input 
+        label="Brand name" 
+        required 
+        placeholder="Enter Brand Name" 
+        value={formData.brandName} 
+        onChange={(e) => handleChange('brandName', e.target.value)} 
+        error={errors.brandName}
+      />
 
       {formData.molecules.map((mol, index) => (
         <React.Fragment key={mol.id}>
@@ -112,9 +156,10 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
               <Input 
                 label="Molecule Strength" 
                 required 
-                placeholder="Enter Strength" 
+                placeholder="e.g. 500mg, 10mg/ml" 
                 value={mol.strength} 
                 onChange={(e) => updateMolecule(mol.id, 'strength', e.target.value)} 
+                error={errors[`mol_${mol.id}_strength`]}
               />
             </div>
             <div className="flex items-center gap-2 shrink-0 h-[48px]">
@@ -165,7 +210,14 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         menuPlacement="top"
       />
       
-      <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} />
+      <Input 
+        label="Hsn code" 
+        required 
+        placeholder="Enter HSN Code" 
+        value={formData.hsnCode} 
+        onChange={(e) => handleChange('hsnCode', e.target.value)} 
+        error={errors.hsnCode}
+      />
     </>
   );
 });

@@ -7,6 +7,8 @@ import Button from "@/app/components/common/Button";
 import ProductDetails from "@/app/dashboard/products/component/ProductDetails";
 import PackagingDetails from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails from "@/app/dashboard/products/component/BatchDetails";
+import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
+import InvoiceSummary from "./InvoiceSummary";
 
 const PRODUCT_CATEGORIES = [
   { id: 1, label: 'Drugs', iconPath: '/ProductManagement/Drug.svg', width: 'w-[178px]' },
@@ -21,10 +23,11 @@ const AddProducts = () => {
   const [activeTab, setActiveTab] = useState("Product Details");
   const [selectedCategory, setSelectedCategory] = useState(1);
   const [selectedSubCategory, setSelectedSubCategory] = useState(5); // 5: Consumable, 6: Non-Consumable
-  const [viewState, setViewState] = useState<'search' | 'add'>('search');
+  const [viewState, setViewState] = useState<'search' | 'add' | 'summary'>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
   const productDetailsRef = useRef<any>(null);
 
   const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
@@ -75,11 +78,16 @@ const AddProducts = () => {
       {/* Top Header */}
       <div className="flex flex-col gap-1 w-full mb-2">
         <h2 className="font-semibold text-[24px] text-pneutral-900 leading-[32px]">
-          {viewState === 'search' ? "Search Products" : "Add Items to Invoice"}
+          {viewState === 'search' ? "Search Products" : viewState === 'add' ? "Add Items to Invoice" : ""}
         </h2>
       </div>
 
-      {viewState === 'search' ? (
+      {viewState === 'summary' ? (
+        <InvoiceSummary 
+          onCancel={() => setViewState('search')} 
+          onSubmit={() => { console.log('Invoice Summary Submitted'); }} 
+        />
+      ) : viewState === 'search' ? (
         <>
           <div className="flex w-full items-center gap-4 relative">
             {/* Search Bar Container */}
@@ -285,7 +293,7 @@ const AddProducts = () => {
                 <Button variant="primary" onClick={() => {
                   const productData = productDetailsRef.current?.getFormData();
                   console.log("Product Data on Submit:", productData);
-                  // Ready for API integration!
+                  setShowSuccessModal(true);
                 }} className="w-[120px]">
                   Submit
                 </Button>
@@ -298,6 +306,19 @@ const AddProducts = () => {
           </div>
         </>
       )}
+
+      <PurchaseSuccessModal 
+        isOpen={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        onAddProduct={() => {
+          setShowSuccessModal(false);
+          setViewState('search');
+        }}
+        onViewSummary={() => {
+          setShowSuccessModal(false);
+          setViewState('summary');
+        }}
+      />
     </div>
   );
 };

@@ -3,6 +3,8 @@ import api from '@/utils/api';
 import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
+import { SupplementProductSchema } from '@/app/schema/ProductSchemas';
+import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
@@ -26,6 +28,8 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     gst: "",
     hsnCode: ""
   });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [ageGroupOptions, setAgeGroupOptions] = useState<{label: string, value: string}[]>([]);
   const [flavorOptions, setFlavorOptions] = useState<{label: string, value: string}[]>([]);
@@ -72,8 +76,24 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   }, [formData.therapeuticCategory]);
 
-  const handleChange = (field: string, value: string) => {
+  const validateField = (field: keyof typeof formData, value: any) => {
+    try {
+      SupplementProductSchema.pick({ [field]: true } as any).parse({ [field]: value });
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const zodError = error as z.ZodError;
+        setErrors(prev => ({ ...prev, [field]: zodError.issues[0].message }));
+      }
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: string) => {
+    if (field === 'netQuantity' && value !== '' && !/^\d*\.?\d*$/.test(value)) {
+      return;
+    }
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   useImperativeHandle(ref, () => ({
@@ -85,7 +105,14 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Placeholder" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} />
+      <Input 
+        label="Product Name" 
+        required 
+        placeholder="Placeholder" 
+        value={formData.productName} 
+        onChange={(e) => handleChange('productName', e.target.value)} 
+        error={errors.productName}
+      />
       
       <Dropdown
         label="Therapeutic Category"
@@ -109,7 +136,14 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         disabled={!formData.therapeuticCategory}
       />
       
-      <Input label="Brand Name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} />
+      <Input 
+        label="Brand Name" 
+        required 
+        placeholder="Enter Brand Name" 
+        value={formData.brandName} 
+        onChange={(e) => handleChange('brandName', e.target.value)} 
+        error={errors.brandName}
+      />
 
       <Dropdown
         label="Flavor"
@@ -128,10 +162,19 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.dosageForm}
         onChange={(val) => handleChange('dosageForm', val)}
       />
-      <Input label="Strength / Composition" required placeholder="Placeholder" value={formData.strength} onChange={(e) => handleChange('strength', e.target.value)} />
+      <Input 
+        label="Strength / Composition" 
+        required 
+        placeholder="Placeholder" 
+        value={formData.strength} 
+        onChange={(e) => handleChange('strength', e.target.value)} 
+        error={errors.strength}
+      />
       
       <div className="flex flex-col gap-1 w-full">
-        <label className="text-label-l4 font-medium text-pneutral-900">Net Quantity<span className="ml-2 text-warning-500 font-semibold">*</span></label>
+        <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+          Net Quantity<span className="ml-2 text-warning-500 font-semibold text-label-l2">*</span>
+        </label>
         <div className="flex w-full">
           <div className="flex-1">
             <input 
@@ -139,10 +182,14 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
               placeholder="Placeholder" 
               value={formData.netQuantity}
               onChange={(e) => handleChange('netQuantity', e.target.value)}
-              className="w-full h-12 rounded-l-md border border-r-0 border-pneutral-300 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500" 
+              className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 ${
+                errors.netQuantity ? "border-warning-500" : "border-pneutral-300"
+              }`} 
             />
           </div>
-          <div className="relative w-[140px] shrink-0 border border-pneutral-300 rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer">
+          <div className={`relative w-[140px] shrink-0 border rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer ${
+            errors.netQuantity ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
+          }`}>
             <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
               <path d="M6 9l6 6 6-6" />
@@ -159,6 +206,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             </select>
           </div>
         </div>
+        {errors.netQuantity && <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity}</p>}
       </div>
 
       <Dropdown
@@ -170,9 +218,35 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         onChange={(val) => handleChange('ageGroup', val)}
       />
       
-      <Input label="Gender" required placeholder="Placeholder" value={formData.gender} onChange={(e) => handleChange('gender', e.target.value)} />
-      <Input label="Manufacturer Name" required placeholder="Placeholder" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} />
-      <Input label="FSSAI License number" required placeholder="Placeholder" value={formData.fssaiLicense} onChange={(e) => handleChange('fssaiLicense', e.target.value)} />
+      <Dropdown
+        label="Gender"
+        required
+        placeholder="Select Gender"
+        options={[
+          { label: 'Unisex', value: 'unisex' },
+          { label: 'Male', value: 'male' },
+          { label: 'Female', value: 'female' }
+        ]}
+        value={formData.gender}
+        onChange={(val) => handleChange('gender', val)}
+        error={errors.gender}
+      />
+      <Input 
+        label="Manufacturer Name" 
+        required 
+        placeholder="Placeholder" 
+        value={formData.manufacturerName} 
+        onChange={(e) => handleChange('manufacturerName', e.target.value)} 
+        error={errors.manufacturerName}
+      />
+      <Input 
+        label="FSSAI License number" 
+        required 
+        placeholder="Placeholder" 
+        value={formData.fssaiLicense} 
+        onChange={(e) => handleChange('fssaiLicense', e.target.value)} 
+        error={errors.fssaiLicense}
+      />
 
       <Dropdown
         label="GST"
@@ -187,9 +261,17 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
+        error={errors.gst}
       />
       
-      <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} />
+      <Input 
+        label="Hsn code" 
+        required 
+        placeholder="Enter HSN Code" 
+        value={formData.hsnCode} 
+        onChange={(e) => handleChange('hsnCode', e.target.value)} 
+        error={errors.hsnCode}
+      />
     </>
   );
 });
