@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
+import Image from "next/image";
+import React, { useEffect, useRef, useState } from "react";
 
 export interface DropdownOption {
   label: string;
@@ -44,8 +45,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const dynamicOptions = allowOther 
-    ? [...options, { label: "Other", value: "OTHER" }] 
+  const dynamicOptions = allowOther
+    ? [...options, { label: "Other", value: "OTHER" }]
     : options;
 
   const [isCustomOther, setIsCustomOther] = useState(() => {
@@ -189,7 +190,11 @@ const Dropdown: React.FC<DropdownProps> = ({
             {isLoading ? "Loading..." : (displayValue || placeholder)}
           </span>
         )}
-        <svg
+        <Image
+          src="/ProductManagement/ChevronDouble.svg"
+          alt="Dropdown"
+          width={14}
+          height={8}
           onClick={(e) => {
             if (!disabled && !isLoading) {
               e.stopPropagation();
@@ -200,19 +205,11 @@ const Dropdown: React.FC<DropdownProps> = ({
               }
             }
           }}
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
           className={clsx(
-            "text-pneutral-500 transition-transform duration-200 shrink-0 ml-2 cursor-pointer",
+            "transition-transform duration-200 shrink-0 ml-2 cursor-pointer",
             isOpen && "rotate-180"
           )}
-        >
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        />
       </div>
 
       {allowOther && isCustomOther && !multiple && (
