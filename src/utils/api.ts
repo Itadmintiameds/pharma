@@ -110,20 +110,20 @@ export const adminApi = axios.create({
   },
 });
 
-adminApi.interceptors.request.use(
-  (config) => {
-    const pharmacy =
-      usePharmacyStore.getState().selectedPharmacy;
+// adminApi.interceptors.request.use(
+//   (config) => {
+//     const pharmacy =
+//       usePharmacyStore.getState().selectedPharmacy;
 
-    if (pharmacy?.pharmacyId) {
-      config.headers["X-Pharmacy-Id"] =
-        pharmacy.pharmacyId;
-    }
+//     if (pharmacy?.pharmacyId) {
+//       config.headers["X-Pharmacy-Id"] =
+//         pharmacy.pharmacyId;
+//     }
 
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+//     return config;
+//   },
+//   (error) => Promise.reject(error)
+// );
 
 adminApi.interceptors.response.use(
   (response) => response,
