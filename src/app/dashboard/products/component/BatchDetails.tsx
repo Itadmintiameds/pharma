@@ -2,6 +2,7 @@ import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { BatchSchema } from '@/app/schema/BatchSchema';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 const CalendarIcon = () => (
@@ -15,6 +16,7 @@ const CalendarIcon = () => (
 
 export interface BatchDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const BatchDetails = forwardRef<BatchDetailsRef>((props, ref) => {
@@ -60,7 +62,27 @@ const BatchDetails = forwardRef<BatchDetailsRef>((props, ref) => {
   };
 
   useImperativeHandle(ref, () => ({
-    getFormData: () => formData
+    getFormData: () => formData,
+    validate: () => {
+      // z.coerce.number() turns "" into 0, so the numeric fields need an
+      // explicit presence check on top of the schema.
+      const nextErrors = collectErrors(BatchSchema, formData, {
+        purchaseUnit: 'Purchase Unit is required',
+        purchaseQuantity: 'Purchase Quantity is required',
+        freeUnit: 'Free Unit is required',
+        freeQuantity: 'Free Quantity is required',
+        purchasePricePerBox: 'Purchase Price (per Box) is required',
+        mrpPerBox: 'MRP (per Box) is required',
+        sellingPricePerBox: 'Selling Price (per Box) is required',
+        purchasePricePerSmallestUnit: 'Purchase Price (per Smallest Unit) is required',
+        mrpPerSmallestUnit: 'MRP (per Smallest Unit) is required',
+        sellingPricePerSmallestUnit: 'Selling Price (per Smallest Unit) is required',
+        rackLocation: 'Rack / Location is required',
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
   }));
 
   return (

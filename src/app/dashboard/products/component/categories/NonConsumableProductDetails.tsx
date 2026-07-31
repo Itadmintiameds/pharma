@@ -3,10 +3,12 @@ import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { ProductMasterService } from '@/services/ProductMasterService';
 import { NonConsumableProductSchema } from '@/app/schema/ProductSchemas';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
@@ -94,7 +96,16 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
   };
 
   useImperativeHandle(ref, () => ({
-    getFormData: () => formData
+    getFormData: () => formData,
+    validate: () => {
+      const nextErrors = collectErrors(NonConsumableProductSchema, formData, {
+        deviceCategory: 'Device Category is required',
+        deviceSubCategory: 'Device Sub - Category is required',
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
   }));
 
   return (
@@ -112,6 +123,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
           handleChange('deviceCategory', val);
           handleChange('deviceSubCategory', ""); // Reset subcategory when category changes
         }}
+        error={errors.deviceCategory}
       />
       
       <Dropdown
@@ -122,6 +134,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         value={formData.deviceSubCategory}
         onChange={(val) => handleChange('deviceSubCategory', val)}
         disabled={!formData.deviceCategory}
+        error={errors.deviceSubCategory}
       />
       
       <Input label="Model Name" required placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} maxLength={60} />

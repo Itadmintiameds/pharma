@@ -4,10 +4,12 @@ import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { CosmeticProductSchema } from '@/app/schema/ProductSchemas';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
@@ -107,10 +109,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     validateField(field, value);
   };
 
-  useImperativeHandle(ref, () => ({
-    getFormData: () => formData
-  }));
-
   // Find the selected unit label for display
   const selectedUnitLabel = netQtyUnitOptions.find(opt => opt.value === formData.netQuantityUnit)?.label || "Select Unit";
 
@@ -150,6 +148,27 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   }
 
+  useImperativeHandle(ref, () => ({
+    getFormData: () => formData,
+    validate: () => {
+      const nextErrors = collectErrors(CosmeticProductSchema, formData, {
+        productType: 'Product Type is required',
+        productSubType: 'Product Sub Type is required',
+        productForm: 'Product Form is required',
+        intendedUseArea: 'Intended Use Area is required',
+        ageGroup: 'Age Group is required',
+        gender: 'Gender is required',
+        netQuantityUnit: 'Net Quantity Unit is required',
+        // Skin / hair type are only mandatory for certain product types.
+        ...(skinTypeRequired ? { skinType: 'Skin Type is required' } : {}),
+        ...(hairTypeRequired ? { hairType: 'Hair Type is required' } : {}),
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
+  }));
+
   return (
     <>
       <Input 
@@ -183,6 +202,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           handleChange('skinType', ""); // Reset skin type
           handleChange('hairType', ""); // Reset hair type
         }}
+        error={errors.productType}
       />
       
       <Dropdown
@@ -193,6 +213,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.productSubType}
         onChange={(val) => handleChange('productSubType', val)}
         disabled={!formData.productType}
+        error={errors.productSubType}
       />
       
       <Dropdown
@@ -202,6 +223,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={productFormOptions}
         value={formData.productForm}
         onChange={(val) => handleChange('productForm', val)}
+        error={errors.productForm}
       />
 
       <Input 
@@ -220,6 +242,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={intendedUseAreaOptions}
         value={formData.intendedUseArea}
         onChange={(val) => handleChange('intendedUseArea', val)}
+        error={errors.intendedUseArea}
       />
 
       {showSkinType && (
@@ -230,6 +253,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           options={skinTypeOptions}
           value={formData.skinType}
           onChange={(val) => handleChange('skinType', val)}
+          error={errors.skinType}
         />
       )}
 
@@ -241,6 +265,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           options={hairTypeOptions}
           value={formData.hairType}
           onChange={(val) => handleChange('hairType', val)}
+          error={errors.hairType}
         />
       )}
       
@@ -252,6 +277,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
         multiple
+        error={errors.ageGroup}
       />
       
       <Dropdown
@@ -265,6 +291,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         ]}
         value={formData.gender}
         onChange={(val) => handleChange('gender', val)}
+        error={errors.gender}
       />
       
       <Input 

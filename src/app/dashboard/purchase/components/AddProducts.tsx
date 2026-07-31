@@ -40,6 +40,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Bumped to remount the three step forms with blank state.
+  const [formKey, setFormKey] = useState(0);
   
   const productDetailsRef = useRef<any>(null);
   const packagingDetailsRef = useRef<PackagingDetailsRef>(null);
@@ -64,7 +66,26 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
 
   const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
 
+  // Each step must pass its own validation before the user can move forward.
+  const validateTab = (tab: string): boolean => {
+    switch (tab) {
+      case "Product Details":
+        return productDetailsRef.current?.validate() ?? false;
+      case "Packaging & Order Details":
+        return packagingDetailsRef.current?.validate() ?? false;
+      case "Batch & Stock Details":
+        return batchDetailsRef.current?.validate() ?? false;
+      default:
+        return true;
+    }
+  };
+
   const handleNext = () => {
+    if (!validateTab(activeTab)) {
+      toast.error("Please fill all mandatory fields before continuing");
+      return;
+    }
+
     const currentIndex = TABS.indexOf(activeTab);
     if (currentIndex < TABS.length - 1) {
       setActiveTab(TABS[currentIndex + 1]);
@@ -76,6 +97,33 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
     if (currentIndex > 0) {
       setActiveTab(TABS[currentIndex - 1]);
     }
+  };
+
+  // Jumping via the tab strip is only allowed for steps already completed.
+  const handleTabClick = (tab: string) => {
+    const targetIndex = TABS.indexOf(tab);
+    const currentIndex = TABS.indexOf(activeTab);
+
+    if (targetIndex <= currentIndex) {
+      setActiveTab(tab);
+      return;
+    }
+
+    for (let i = currentIndex; i < targetIndex; i++) {
+      if (!validateTab(TABS[i])) {
+        setActiveTab(TABS[i]);
+        toast.error("Please fill all mandatory fields before continuing");
+        return;
+      }
+    }
+    setActiveTab(tab);
+  };
+
+  // Always open the wizard on step 1 with blank forms.
+  const handleOpenAddProduct = () => {
+    setActiveTab(TABS[0]);
+    setFormKey((key) => key + 1);
+    setViewState('add');
   };
 
   const handleCancel = () => {
@@ -93,6 +141,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
 
   const handleSubmit = async () => {
     try {
+      if (!validateTab(activeTab)) {
+        toast.error("Please fill all mandatory fields before submitting");
+        return;
+      }
+
       if (!selectedPharmacy?.pharmacyId) {
         toast.error("Pharmacy ID is required");
         return;
@@ -373,7 +426,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
             </div>
             
             <button 
-              onClick={() => setViewState('add')}
+              onClick={handleOpenAddProduct}
               className="flex items-center justify-center gap-2 bg-[#9851f5] hover:bg-[#8645d9] text-white rounded-[8px] px-[16px] h-[48px] min-w-[108px] w-[141px] max-h-[52px] transition-all duration-300 ease-out text-[16px] font-medium leading-[20px] shrink-0"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -472,7 +525,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
             {TABS.map((tab) => (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => handleTabClick(tab)}
                 className={`h-full px-1 text-[14px] font-medium transition-colors relative ${
                   activeTab === tab
                     ? "text-secondary-700 font-semibold"
@@ -489,13 +542,13 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
 
           {/* Render all tabs but hide inactive ones to preserve refs and state */}
           <div className={activeTab === "Product Details" ? "block w-full" : "hidden"}>
-            <ProductDetails categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory} ref={productDetailsRef} />
+            <ProductDetails key={`product-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`} categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory} ref={productDetailsRef} />
           </div>
           <div className={activeTab === "Packaging & Order Details" ? "block w-full" : "hidden"}>
-            <PackagingDetails ref={packagingDetailsRef} />
+            <PackagingDetails key={`packaging-${formKey}`} ref={packagingDetailsRef} />
           </div>
           <div className={activeTab === "Batch & Stock Details" ? "block w-full" : "hidden"}>
-            <BatchDetails ref={batchDetailsRef} />
+            <BatchDetails key={`batch-${formKey}`} ref={batchDetailsRef} />
           </div>
           
           {/* Navigation Buttons */}

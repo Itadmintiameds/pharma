@@ -3,10 +3,12 @@ import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { ProductMasterService } from '@/services/ProductMasterService';
 import { ConsumableProductSchema } from '@/app/schema/ProductSchemas';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
@@ -83,7 +85,18 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   };
 
   useImperativeHandle(ref, () => ({
-    getFormData: () => formData
+    getFormData: () => formData,
+    validate: () => {
+      const nextErrors = collectErrors(ConsumableProductSchema, formData, {
+        deviceCategory: 'Device Category is required',
+        deviceSubCategory: 'Device Sub - Category is required',
+        sterile: 'Sterility Classification is required',
+        disposable: 'Usage Type is required',
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
   }));
 
   return (
@@ -101,6 +114,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           handleChange('deviceCategory', val);
           handleChange('deviceSubCategory', ""); // Reset subcategory when category changes
         }}
+        error={errors.deviceCategory}
       />
       
       <Dropdown
@@ -111,6 +125,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.deviceSubCategory}
         onChange={(val) => handleChange('deviceSubCategory', val)}
         disabled={!formData.deviceCategory}
+        error={errors.deviceSubCategory}
       />
       
       <Dropdown
@@ -136,6 +151,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             Non-Sterile
           </label>
         </div>
+        {errors.sterile && <p className="text-p2 text-warning-500">{errors.sterile}</p>}
       </div>
 
       <div className="flex flex-col gap-1 w-full">
@@ -152,6 +168,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             Reusable
           </label>
         </div>
+        {errors.disposable && <p className="text-p2 text-warning-500">{errors.disposable}</p>}
       </div>
       
       <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />

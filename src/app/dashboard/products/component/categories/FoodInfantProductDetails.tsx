@@ -4,10 +4,12 @@ import { ProductMasterService } from '@/services/ProductMasterService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { FoodInfantProductSchema } from '@/app/schema/ProductSchemas';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
@@ -91,7 +93,19 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   };
 
   useImperativeHandle(ref, () => ({
-    getFormData: () => formData
+    getFormData: () => formData,
+    validate: () => {
+      const nextErrors = collectErrors(FoodInfantProductSchema, formData, {
+        productCategory: 'Product Category is required',
+        productSubCategory: 'Product Sub Category is required',
+        productForm: 'Product Form is required',
+        ageGroup: 'Age Group is required',
+        netQuantityUnit: 'Net Quantity Unit is required',
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
   }));
 
   // Find the selected unit label for display

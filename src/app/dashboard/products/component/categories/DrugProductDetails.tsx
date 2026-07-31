@@ -4,10 +4,12 @@ import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { Plus, Minus } from 'lucide-react';
 import { DrugProductSchema, MoleculeSchema } from '@/app/schema/ProductSchemas';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
@@ -118,7 +120,25 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     getFormData: () => ({
       ...formData,
       drugSchedule: finalDrugSchedule
-    })
+    }),
+    validate: () => {
+      const nextErrors = collectErrors(DrugProductSchema, formData, {
+        gst: 'GST is required',
+      });
+
+      // Molecule rows are keyed by row id, so validate them individually
+      // instead of relying on the array path Zod reports.
+      delete nextErrors.molecules;
+      formData.molecules.forEach((mol) => {
+        nextErrors[`mol_${mol.id}_name`] = mol.name ? '' : 'Molecule is required';
+
+        const strength = MoleculeSchema.pick({ strength: true }).safeParse({ strength: mol.strength });
+        nextErrors[`mol_${mol.id}_strength`] = strength.success ? '' : strength.error.issues[0].message;
+      });
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
   }));
 
   return (
@@ -152,6 +172,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             options={moleculeOptions} 
             value={mol.name} 
             onChange={(val) => updateMolecule(mol.id, 'name', val)} 
+            error={errors[`mol_${mol.id}_name`]}
           />
           <div className="flex items-end gap-2 w-full">
             <div className="flex-1">
@@ -211,6 +232,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
+        error={errors.gst}
       />
       
       <Input 

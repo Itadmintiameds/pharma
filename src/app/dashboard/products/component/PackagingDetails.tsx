@@ -2,10 +2,12 @@ import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
+import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { z } from 'zod';
 
 export interface PackagingDetailsRef {
   getFormData: () => any;
+  validate: () => boolean;
 }
 
 const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
@@ -26,14 +28,6 @@ const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
     }
   };
 
-  useImperativeHandle(ref, () => ({
-    getFormData: () => ({
-      purchaseUnit,
-      eachStripContains,
-      smallestUnit
-    })
-  }));
-
   const purchaseUnitOptions = [
     { label: 'Box', value: 'BOX' },
     { label: 'Carton', value: 'CARTON' }
@@ -41,6 +35,28 @@ const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
 
   const selectedPurchaseUnit = purchaseUnitOptions.find(opt => opt.value === purchaseUnit);
   const purchaseUnitLabel = selectedPurchaseUnit ? selectedPurchaseUnit.label : 'Unit';
+
+  useImperativeHandle(ref, () => ({
+    getFormData: () => ({
+      purchaseUnit,
+      eachStripContains,
+      smallestUnit
+    }),
+    validate: () => {
+      const nextErrors = collectErrors(
+        PackagingSchema,
+        { purchaseUnit, eachStripContains, smallestUnit },
+        {
+          purchaseUnit: 'Purchase Unit is required',
+          eachStripContains: `Each ${purchaseUnitLabel} Contains is required`,
+          smallestUnit: 'Smallest Unit is required',
+        }
+      );
+
+      setErrors(nextErrors);
+      return !hasErrors(nextErrors);
+    }
+  }));
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-sm">
@@ -58,6 +74,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
               options={purchaseUnitOptions}
               value={purchaseUnit}
               onChange={(val) => setPurchaseUnit(val)}
+              error={errors.purchaseUnit}
             />
 
             {/*
@@ -100,6 +117,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
               value={smallestUnit}
               onChange={(val) => setSmallestUnit(val)}
               menuPlacement="top"
+              error={errors.smallestUnit}
             />
           </div>
         </div>
