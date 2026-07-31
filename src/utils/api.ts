@@ -1,3 +1,4 @@
+import { usePharmacyStore } from "@/store/pharmacyStore";
 import axios from "axios";
 
 const api = axios.create({
@@ -61,16 +62,16 @@ api.interceptors.response.use(
       try {
         // Attempt to silently refresh the access token via the refreshToken endpoint
         await api.post("/auth/refreshToken");
-        
+
         // Success: tell all queued requests to proceed
         processQueue(null);
-        
+
         // Retry the original request
         return api(originalRequest);
       } catch (refreshError) {
         // Failure: reject all queued requests
         processQueue(refreshError);
-        
+
         // Refresh token is expired or invalid -> force redirect to login
         if (typeof window !== "undefined") {
           window.location.href = "/login";
@@ -85,6 +86,21 @@ api.interceptors.response.use(
   }
 );
 
+api.interceptors.request.use(
+  (config) => {
+    const pharmacy =
+      usePharmacyStore.getState().selectedPharmacy;
+
+    if (pharmacy?.pharmacyId) {
+      config.headers["X-Pharmacy-Id"] =
+        pharmacy.pharmacyId;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 //console.log("ADMIN API URL:", process.env.NEXT_PUBLIC_ADMIN_API_URL);
 export const adminApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_ADMIN_API_URL,
@@ -93,6 +109,21 @@ export const adminApi = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+adminApi.interceptors.request.use(
+  (config) => {
+    const pharmacy =
+      usePharmacyStore.getState().selectedPharmacy;
+
+    if (pharmacy?.pharmacyId) {
+      config.headers["X-Pharmacy-Id"] =
+        pharmacy.pharmacyId;
+    }
+
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
 adminApi.interceptors.response.use(
   (response) => response,

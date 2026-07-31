@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
   useReactTable,
-} from '@tanstack/react-table';
+} from "@tanstack/react-table";
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
@@ -27,10 +27,7 @@ export default function DataTable<TData>({
       <table className="w-full border-collapse">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr
-              key={headerGroup.id}
-              className="bg-secondary-600 h-18 "
-            >
+            <tr key={headerGroup.id} className="bg-secondary-600 h-18 ">
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
@@ -38,7 +35,7 @@ export default function DataTable<TData>({
                 >
                   {flexRender(
                     header.column.columnDef.header,
-                    header.getContext()
+                    header.getContext(),
                   )}
                 </th>
               ))}
@@ -48,19 +45,13 @@ export default function DataTable<TData>({
 
         <tbody>
           {table.getRowModel().rows.map((row) => (
-            <tr
-              key={row.id}
-              className="border border-pneutral-200"
-            >
+            <tr key={row.id} className="border border-pneutral-200 h-17">
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className="px-4 py-6 border border-pneutral-200 text-pneutral-900 text-label-l4"
+                  className="px-4 border border-pneutral-200 text-pneutral-900 text-label-l4 align-middle"
                 >
-                  {flexRender(
-                    cell.column.columnDef.cell,
-                    cell.getContext()
-                  )}
+                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
             </tr>

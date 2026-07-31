@@ -18,10 +18,13 @@ import {
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
+import { usePharmacyStore } from "@/store/pharmacyStore";
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
+  const { clearPharmacy } = usePharmacyStore.getState();
+
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
 
@@ -57,6 +60,7 @@ const Sidebar = () => {
   const handleLogout = async () => {
     try {
       await logout();
+      clearPharmacy();
     } catch (err) {
       console.error("Logout failed:", err);
     }
