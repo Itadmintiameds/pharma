@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import GoodsReceipt from "./components/GoodsReceipt";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import SearchInput from "@/app/components/common/SearchInput";
@@ -8,18 +8,11 @@ import Image from "next/image";
 import { ColumnDef } from "@tanstack/react-table";
 import { Eye, Download } from "lucide-react";
 import DataTable from "@/app/components/common/table/DataTable";
+import { PurchaseData } from "@/types/PurchaseData";
+import { getAllPurchases } from "@/services/PurchaseServiceNew";
+import { getSupplierById } from "@/services/SupplierService";
 
-export interface Purchase {
-  id: number;
-  invoiceDate: string;
-  supplier: string;
-  invoiceNo: string;
-  paymentType: "Credit" | "Debit";
-  creditDays: string;
-  amount: number;
-}
-
-export const columns: ColumnDef<Purchase>[] = [
+export const columns: ColumnDef<PurchaseData>[] = [
   {
     header: "#",
     cell: ({ row }) => row.index + 1,
@@ -31,8 +24,10 @@ export const columns: ColumnDef<Purchase>[] = [
   },
 
   {
-    accessorKey: "supplier",
+    accessorKey: "supplierName",
     header: "Supplier",
+
+    cell: ({ row }) => row.original.supplierName ?? "—",
   },
 
   {
@@ -65,14 +60,19 @@ export const columns: ColumnDef<Purchase>[] = [
   {
     accessorKey: "creditDays",
     header: "Credit Days",
+
+    cell: ({ row }) => {
+      const creditDays = row.original.creditDays;
+      return creditDays ? `${creditDays} Days` : "N/A";
+    },
   },
 
   {
-    accessorKey: "amount",
+    accessorKey: "totalNetAmount",
     header: "Amount (₹)",
 
     cell: ({ row }) =>
-      Number(row.original.amount).toLocaleString("en-IN", {
+      Number(row.original.totalNetAmount).toLocaleString("en-IN", {
         minimumFractionDigits: 2,
       }),
   },
@@ -102,40 +102,53 @@ export const columns: ColumnDef<Purchase>[] = [
   },
 ];
 
-export const purchaseData: Purchase[] = [
-  {
-    id: 1,
-    invoiceDate: "02/12/2032",
-    supplier: "ABC Pharma Distributor",
-    invoiceNo: "012315",
-    paymentType: "Credit",
-    creditDays: "15 Days",
-    amount: 56662.25,
-  },
-  {
-    id: 2,
-    invoiceDate: "24/05/2026",
-    supplier: "Cipla Ltd.",
-    invoiceNo: "012315",
-    paymentType: "Credit",
-    creditDays: "15 Days",
-    amount: 64646.25,
-  },
-  {
-    id: 3,
-    invoiceDate: "04/11/2026",
-    supplier: "Reddy Labs",
-    invoiceNo: "012315",
-    paymentType: "Debit",
-    creditDays: "N/A",
-    amount: 56646.225,
-  },
-];
-
 const Page = () => {
   const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
-  const [open, setOpen] = useState(true);
   const [search, setSearch] = useState("");
+  const [purchases, setPurchases] = useState<PurchaseData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchPurchases = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await getAllPurchases();
+
+        const uniqueSupplierIds = Array.from(
+          new Set(data.map((purchase) => purchase.supplierId).filter(Boolean))
+        );
+
+        const supplierEntries = await Promise.all(
+          uniqueSupplierIds.map(async (supplierId) => {
+            try {
+              const supplier = await getSupplierById(supplierId);
+              return [supplierId, supplier.supplierName] as const;
+            } catch (err) {
+              console.error(`Failed to fetch supplier ${supplierId}:`, err);
+              return [supplierId, undefined] as const;
+            }
+          })
+        );
+        const supplierNameById = new Map(supplierEntries);
+
+        const enrichedData = data.map((purchase) => ({
+          ...purchase,
+          supplierName:
+            purchase.supplierName ?? supplierNameById.get(purchase.supplierId),
+        }));
+
+        setPurchases(enrichedData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to fetch purchases.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPurchases();
+  }, []);
 
   return (
     <>
@@ -171,7 +184,17 @@ const Page = () => {
             </div>
 
             <div>
-              <DataTable columns={columns} data={purchaseData} />
+              {loading ? (
+                <div className="text-p3 font-normal text-pneutral-500 py-8 text-center">
+                  Loading purchases...
+                </div>
+              ) : error ? (
+                <div className="text-p3 font-normal text-danger-600 py-8 text-center">
+                  {error}
+                </div>
+              ) : (
+                <DataTable columns={columns} data={purchases} />
+              )}
             </div>
           </div>
           {/* <PurchaseSuccessModal
