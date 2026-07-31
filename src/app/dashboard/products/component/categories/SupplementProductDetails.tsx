@@ -21,7 +21,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     strength: "",
     netQuantity: "",
     netQuantityUnit: "",
-    ageGroup: "",
+    ageGroup: [] as string[],
     gender: "",
     manufacturerName: "",
     fssaiLicense: "",
@@ -216,6 +216,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={ageGroupOptions}
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
+        multiple
       />
       
       <Dropdown

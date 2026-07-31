@@ -2,6 +2,8 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { ProductMasterService } from '@/services/ProductMasterService';
+import { ConsumableProductSchema } from '@/app/schema/ProductSchemas';
+import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
@@ -24,6 +26,8 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     gst: "",
     hsnCode: ""
   });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [deviceCategoryOptions, setDeviceCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [deviceSubCategoryOptions, setDeviceSubCategoryOptions] = useState<{label: string, value: string}[]>([]);
@@ -61,8 +65,21 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   }, [formData.deviceCategory]);
 
-  const handleChange = (field: string, value: string) => {
+  const validateField = (field: keyof typeof formData, value: any) => {
+    try {
+      ConsumableProductSchema.pick({ [field]: true } as any).parse({ [field]: value });
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const zodError = error as z.ZodError;
+        setErrors(prev => ({ ...prev, [field]: zodError.issues[0].message }));
+      }
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   useImperativeHandle(ref, () => ({
@@ -71,8 +88,8 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} />
-      <Input label="Brand Name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} />
+      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} />
+      <Input label="Brand Name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} />
       
       <Dropdown
         label="Device Category"
@@ -103,7 +120,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.materialType}
         onChange={(val) => handleChange('materialType', val)}
       />
-      <Input label="Size / Dimension / Gauge" required placeholder="Enter Size/Dimension/Gauge" value={formData.sizeDimensionGauge} onChange={(e) => handleChange('sizeDimensionGauge', e.target.value)} />
+      <Input label="Size / Dimension / Gauge" placeholder="Enter Size/Dimension/Gauge" value={formData.sizeDimensionGauge} onChange={(e) => handleChange('sizeDimensionGauge', e.target.value)} error={errors.sizeDimensionGauge} />
       
       <div className="flex flex-col gap-1 w-full">
         <label className="text-label-l4 font-medium text-pneutral-900">
@@ -137,9 +154,9 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         </div>
       </div>
       
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} />
-      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} />
-      <Input label="Manufacturer Licence Number" required placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} />
+      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} />
+      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} />
+      <Input label="Manufacturer Licence Number" required placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} error={errors.manufacturerLicenseNumber} />
 
       <Dropdown
         label="Is ISO Certified?"
@@ -165,9 +182,10 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
+        error={errors.gst}
       />
       
-      <Input label="HSN" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} />
+      <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} error={errors.hsnCode} />
     </>
   );
 });

@@ -18,7 +18,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     productSubCategory: "",
     variantName: "",
     productForm: "",
-    ageGroup: "",
+    ageGroup: [] as string[],
     netQuantity: "",
     netQuantityUnit: "",
     manufacturerName: "",
@@ -162,6 +162,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={ageGroupOptions}
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
+        multiple
       />
       
       <div className="flex flex-col gap-1 w-full">

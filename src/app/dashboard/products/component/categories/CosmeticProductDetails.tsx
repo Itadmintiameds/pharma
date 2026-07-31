@@ -21,7 +21,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     intendedUseArea: "",
     skinType: "",
     hairType: "",
-    ageGroup: "",
+    ageGroup: [] as string[],
     gender: "",
     fragrance: "",
     netQuantity: "",
@@ -248,6 +248,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={ageGroupOptions}
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
+        multiple
       />
       
       <Dropdown

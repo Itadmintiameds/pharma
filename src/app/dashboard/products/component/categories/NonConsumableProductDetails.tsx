@@ -2,6 +2,8 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'rea
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { ProductMasterService } from '@/services/ProductMasterService';
+import { NonConsumableProductSchema } from '@/app/schema/ProductSchemas';
+import { z } from 'zod';
 
 export interface ProductDetailsRef {
   getFormData: () => any;
@@ -16,16 +18,18 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
     modelName: "",
     deviceClassification: "",
     intendedUse: "",
-    technicalDimension: "",
+    technicalDimensions: "",
     materialBuildType: "",
     powerSource: "",
-    warranty: "",
+    warrantyPeriod: "",
     amcServiceAvailability: "",
     manufacturerName: "",
     countryOfOrigin: "",
     gst: "",
     hsnCode: ""
   });
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [deviceCategoryOptions, setDeviceCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [deviceSubCategoryOptions, setDeviceSubCategoryOptions] = useState<{label: string, value: string}[]>([]);
@@ -69,8 +73,24 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
     }
   }, [formData.deviceCategory]);
 
-  const handleChange = (field: string, value: string) => {
+  const validateField = (field: keyof typeof formData, value: any) => {
+    try {
+      NonConsumableProductSchema.pick({ [field]: true } as any).parse({ [field]: value });
+      setErrors(prev => ({ ...prev, [field]: '' }));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        const zodError = error as z.ZodError;
+        setErrors(prev => ({ ...prev, [field]: zodError.issues[0].message }));
+      }
+    }
+  };
+
+  const handleChange = (field: keyof typeof formData, value: string) => {
+    if (field === 'warrantyPeriod' && value !== '' && !/^\d*$/.test(value)) {
+      return;
+    }
     setFormData(prev => ({ ...prev, [field]: value }));
+    validateField(field, value);
   };
 
   useImperativeHandle(ref, () => ({
@@ -79,8 +99,8 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} />
-      <Input label="Brand name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} />
+      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} />
+      <Input label="Brand name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} />
       
       <Dropdown
         label="Device Category"
@@ -104,10 +124,25 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         disabled={!formData.deviceCategory}
       />
       
-      <Input label="Model Name" placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} />
-      <Input label="Device Classification" required placeholder="Enter Classification (e.g. Class I)" value={formData.deviceClassification} onChange={(e) => handleChange('deviceClassification', e.target.value)} />
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} />
-      <Input label="Technical Dimension / Capacity / Caonfiguration" required placeholder="Enter Dimension/Capacity" value={formData.technicalDimension} onChange={(e) => handleChange('technicalDimension', e.target.value)} />
+      <Input label="Model Name" required placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} />
+      
+      <Dropdown
+        label="Device Classification (Class A/B/C/D)"
+        required
+        placeholder="Select Classification"
+        options={[
+          { label: 'Class A', value: 'Class A' },
+          { label: 'Class B', value: 'Class B' },
+          { label: 'Class C', value: 'Class C' },
+          { label: 'Class D', value: 'Class D' }
+        ]}
+        value={formData.deviceClassification}
+        onChange={(val) => handleChange('deviceClassification', val)}
+        error={errors.deviceClassification}
+      />
+      
+      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} />
+      <Input label="Technical Dimensions / Capacity / Configuration" required placeholder="Enter Dimension/Capacity" value={formData.technicalDimensions} onChange={(e) => handleChange('technicalDimensions', e.target.value)} error={errors.technicalDimensions} />
       <Dropdown
         label="Material / Build Type"
         placeholder="Select Material/Build Type"
@@ -124,9 +159,22 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         onChange={(val) => handleChange('powerSource', val)}
       />
       
-      <Input label="Warranty" required placeholder="Enter Warranty" value={formData.warranty} onChange={(e) => handleChange('warranty', e.target.value)} />
-      <Input label="AMC / Service Avaliability" placeholder="Enter AMC/Service Availability" value={formData.amcServiceAvailability} onChange={(e) => handleChange('amcServiceAvailability', e.target.value)} />
-      <Input label="Manufacture Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} />
+      <Input label="Warranty Period (in months)" required placeholder="Enter Warranty" value={formData.warrantyPeriod} onChange={(e) => handleChange('warrantyPeriod', e.target.value)} error={errors.warrantyPeriod} />
+      
+      <Dropdown
+        label="AMC / Service Availability"
+        required
+        placeholder="Select Availability"
+        options={[
+          { label: 'Yes', value: 'Yes' },
+          { label: 'No', value: 'No' }
+        ]}
+        value={formData.amcServiceAvailability}
+        onChange={(val) => handleChange('amcServiceAvailability', val)}
+        error={errors.amcServiceAvailability}
+      />
+      
+      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} />
       
       <Dropdown
         label="Country of Origin"
@@ -151,9 +199,10 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
+        error={errors.gst}
       />
       
-      <Input label="HSN" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} />
+      <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} error={errors.hsnCode} />
     </>
   );
 });
