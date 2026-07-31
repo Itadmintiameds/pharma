@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
 import { z } from 'zod';
 
-const PackagingDetails = () => {
+export interface PackagingDetailsRef {
+  getFormData: () => any;
+}
+
+const PackagingDetails = forwardRef<PackagingDetailsRef>((props, ref) => {
   const [purchaseUnit, setPurchaseUnit] = useState('');
   const [eachStripContains, setEachStripContains] = useState<string>('');
+  const [smallestUnit, setSmallestUnit] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validateField = (value: string) => {
@@ -21,9 +26,17 @@ const PackagingDetails = () => {
     }
   };
 
+  useImperativeHandle(ref, () => ({
+    getFormData: () => ({
+      purchaseUnit,
+      eachStripContains,
+      smallestUnit
+    })
+  }));
+
   const purchaseUnitOptions = [
-    { label: 'Box', value: 'box' },
-    { label: 'Carton', value: 'carton' }
+    { label: 'Box', value: 'BOX' },
+    { label: 'Carton', value: 'CARTON' }
   ];
 
   const selectedPurchaseUnit = purchaseUnitOptions.find(opt => opt.value === purchaseUnit);
@@ -46,7 +59,7 @@ const PackagingDetails = () => {
               value={purchaseUnit}
               onChange={(val) => setPurchaseUnit(val)}
             />
-            
+
             {/*
             <Input 
               label="Contains" 
@@ -83,9 +96,9 @@ const PackagingDetails = () => {
               label="Select Unit(Smallest)"
               required
               placeholder="Select Smallest Unit"
-              options={[{ label: 'Tablet', value: 'tablet' }, { label: 'Capsule', value: 'capsule' }]}
-              value=""
-              onChange={() => {}}
+              options={[{ label: 'Tablet', value: 'TABLET' }, { label: 'Capsule', value: 'CAPSULE' }, { label: 'Strip', value: 'STRIP' }]}
+              value={smallestUnit}
+              onChange={(val) => setSmallestUnit(val)}
               menuPlacement="top"
             />
           </div>
@@ -93,6 +106,7 @@ const PackagingDetails = () => {
       </div>
     </div>
   );
-};
+});
 
+PackagingDetails.displayName = 'PackagingDetails';
 export default PackagingDetails;

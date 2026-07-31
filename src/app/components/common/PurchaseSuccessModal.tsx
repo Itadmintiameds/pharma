@@ -8,6 +8,10 @@ interface PurchaseSuccessModalProps {
   onClose: () => void;
   onAddProduct: () => void;
   onViewSummary: () => void;
+  grnNo?: string;
+  totalItems?: number;
+  totalPurchaseQty?: number;
+  totalFreeQty?: number;
 }
 
 export default function PurchaseSuccessModal({
@@ -15,6 +19,10 @@ export default function PurchaseSuccessModal({
   onClose,
   onAddProduct,
   onViewSummary,
+  grnNo,
+  totalItems,
+  totalPurchaseQty,
+  totalFreeQty,
 }: PurchaseSuccessModalProps) {
   if (!isOpen) return null;
 
@@ -57,26 +65,26 @@ export default function PurchaseSuccessModal({
         <div className="w-full h-11 border border-pneutral-200 rounded-lg flex justify-around items-center">
           <div className="text-label-l3 font-semibold">GIRN Number</div>
           <div className="text-p3 font-medium font-noto-sans text-success-900">
-            GRN-250716-001
+            {grnNo || "N/A"}
           </div>
         </div>
 
         <div className="flex gap-3">
           <div className="w-full h-29.5 border border-pneutral-100 rounded-lg flex flex-col items-center justify-center">
             <div className="text-label-l4 font-medium">Total Items</div>
-            <div className="text-h4 font-semibold">2</div>
+            <div className="text-h4 font-semibold">{totalItems || 0}</div>
           </div>
 
           <div className="w-full h-29.5 border border-pneutral-100 rounded-lg flex flex-col items-center justify-center">
             <div className="text-label-l4 font-medium text-center">
               Total Purchase Qty
             </div>
-            <div className="text-h4 font-semibold">15</div>
+            <div className="text-h4 font-semibold">{totalPurchaseQty || 0}</div>
           </div>
 
           <div className="w-full h-29.5 border border-pneutral-100 rounded-lg flex flex-col items-center justify-center">
             <div className="text-label-l4 font-medium">Total Free Qty</div>
-            <div className="text-h4 font-semibold">1</div>
+            <div className="text-h4 font-semibold">{totalFreeQty || 0}</div>
           </div>
         </div>
 

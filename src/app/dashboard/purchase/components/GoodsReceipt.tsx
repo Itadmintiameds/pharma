@@ -1,18 +1,138 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AddProducts from "./AddProducts";
 import Input from "@/app/components/common/Input";
+import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import Image from "next/image";
+import { usePurchaseStore } from "@/store/usePurchaseStore";
+import { getAllSupplier, createSupplier } from "@/services/SupplierService";
+import { SupplierData } from "@/types/SupplierData";
+import toast from "react-hot-toast";
 
-const GoodsReceipt = () => {
+interface GoodsReceiptProps {
+  onClose?: () => void;
+}
+
+const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
+  const { 
+    setPurchaseHeader, 
+    supplierId, 
+    supplierName: storeSupplierName,
+    invoiceNo: storeInvoiceNo, 
+    invoiceDate: storeInvoiceDate, 
+    grnNo: storeGrnNo, 
+    paymentType: storePaymentType, 
+    creditDays: storeCreditDays 
+  } = usePurchaseStore();
+
   const [showAddProducts, setShowAddProducts] = useState(false);
-  const [paymentType, setPaymentType] = useState<"" | "CASH" | "CREDIT">("");
-  const [creditDays, setCreditDays] = useState("");
-  const [invoiceDate, setInvoiceDate] = useState("");
+  const [supplierName, setSupplierName] = useState(storeSupplierName || "");
+  const [invoiceNo, setInvoiceNo] = useState(storeInvoiceNo || "");
+  const [invoiceDate, setInvoiceDate] = useState(storeInvoiceDate || "");
+  const [grnNo, setGrnNo] = useState(storeGrnNo || "");
+  const [paymentType, setPaymentType] = useState<"" | "CASH" | "CREDIT">(storePaymentType || "");
+  const [creditDays, setCreditDays] = useState(storeCreditDays ? String(storeCreditDays) : "");
+
+  // Supplier Master states
+  const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
+  const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(supplierId || null);
+  const [isAddingNewSupplier, setIsAddingNewSupplier] = useState(false);
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
+  const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
+
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        setIsLoadingSuppliers(true);
+        const data = await getAllSupplier();
+        setSuppliers(data || []);
+        if (supplierId && data && data.length > 0) {
+          const matched = data.find((s) => s.supplierId === supplierId);
+          if (matched && matched.supplierId) {
+            setSelectedSupplierId(matched.supplierId);
+            setSupplierName(matched.supplierName);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load suppliers:", error);
+      } finally {
+        setIsLoadingSuppliers(false);
+      }
+    };
+    fetchSuppliers();
+  }, [supplierId]);
+
+  const supplierOptions: DropdownOption[] = [
+    ...suppliers.map((s) => ({ label: s.supplierName, value: s.supplierId || "" })),
+    { label: "+ Add New Supplier", value: "ADD_NEW" },
+  ];
+
+  const handleNext = async () => {
+    if (!invoiceNo.trim()) {
+      toast.error("Please enter Invoice No.");
+      return;
+    }
+    if (!invoiceDate) {
+      toast.error("Please select Invoice Date");
+      return;
+    }
+    if (!grnNo.trim()) {
+      toast.error("Please enter GRN No.");
+      return;
+    }
+    if (!paymentType) {
+      toast.error("Please select Payment Type");
+      return;
+    }
+    if (paymentType === "CREDIT" && !creditDays) {
+      toast.error("Please enter Credit Days");
+      return;
+    }
+
+    let finalSupplierId = selectedSupplierId;
+    let finalSupplierName = supplierName;
+
+    if (isAddingNewSupplier) {
+      if (!newSupplierName.trim()) {
+        toast.error("Please enter the new Supplier Name");
+        return;
+      }
+      try {
+        setIsCreatingSupplier(true);
+        const created = await createSupplier({ supplierName: newSupplierName.trim() });
+        finalSupplierId = created.supplierId || null;
+        finalSupplierName = created.supplierName || newSupplierName.trim();
+        toast.success("New supplier created successfully!");
+      } catch (error) {
+        toast.error("Failed to create supplier");
+        setIsCreatingSupplier(false);
+        return;
+      } finally {
+        setIsCreatingSupplier(false);
+      }
+    } else {
+      if (!finalSupplierId) {
+        toast.error("Please select a supplier");
+        return;
+      }
+    }
+
+    setPurchaseHeader({
+      supplierId: finalSupplierId!,
+      supplierName: finalSupplierName,
+      invoiceNo,
+      invoiceDate,
+      grnNo,
+      paymentType,
+      creditDays: creditDays ? Number(creditDays) : 0,
+    });
+    setShowAddProducts(true);
+  };
 
   if (showAddProducts) {
-    return <AddProducts />;
+    return <AddProducts onClose={onClose} />;
   }
 
   const paymentDueDate =
@@ -38,16 +158,53 @@ const GoodsReceipt = () => {
           </div>
         </div>
 
-        <div className="h-50 bg-white p-4 border border-pneutral-100 rounded-xl">
-          <div className="grid grid-cols-3 gap-4">
-            <Input
-              label="Supplier Name"
-              placeholder="ABC Pharma Distributor"
-              type="text"
-              name="supplierName"
-              id="supplierName"
-              required
-            />
+        <div className="min-h-[180px] bg-white p-4 border border-pneutral-100 rounded-xl">
+          <div className="grid grid-cols-3 gap-4 items-start">
+            {!isAddingNewSupplier ? (
+              <Dropdown
+                label="Supplier Name"
+                placeholder="Select Supplier or Add New"
+                required
+                options={supplierOptions}
+                value={selectedSupplierId || ""}
+                isLoading={isLoadingSuppliers}
+                onChange={(val) => {
+                  if (val === "ADD_NEW") {
+                    setIsAddingNewSupplier(true);
+                    setSelectedSupplierId(null);
+                    setSupplierName("");
+                  } else {
+                    const id = Number(val);
+                    setSelectedSupplierId(id);
+                    const selected = suppliers.find((s) => s.supplierId === id);
+                    if (selected) setSupplierName(selected.supplierName);
+                  }
+                }}
+              />
+            ) : (
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-[11px] text-secondary-600 font-semibold">New Supplier</span>
+                  <button 
+                    type="button" 
+                    onClick={() => setIsAddingNewSupplier(false)} 
+                    className="text-[11px] text-primary-600 underline hover:text-primary-800 font-medium"
+                  >
+                    Select Existing
+                  </button>
+                </div>
+                <Input
+                  label="Enter Supplier Name"
+                  placeholder="e.g. ABC Pharma Distributor"
+                  type="text"
+                  name="newSupplierName"
+                  id="newSupplierName"
+                  value={newSupplierName}
+                  onChange={(e) => setNewSupplierName(e.target.value)}
+                  required
+                />
+              </div>
+            )}
 
             <Input
               label="Invoice No."
@@ -55,6 +212,8 @@ const GoodsReceipt = () => {
               type="text"
               name="invoiceNo"
               id="invoiceNo"
+              value={invoiceNo}
+              onChange={(e) => setInvoiceNo(e.target.value)}
               required
             />
 
@@ -73,6 +232,8 @@ const GoodsReceipt = () => {
               type="text"
               name="grnNo"
               id="grnNo"
+              value={grnNo}
+              onChange={(e) => setGrnNo(e.target.value)}
               required
             />
           </div>
@@ -164,14 +325,21 @@ const GoodsReceipt = () => {
         )}
 
         <div className="fixed bottom-6 right-6 flex gap-4">
-          <button className="w-27 h-9 rounded-lg bg-white border border-pneutral-50 shadow-[0_4px_12px_rgba(0,0,0,0.12)] active:shadow-md transition-all duration-200 text-label-l3 font-medium text-pneutral-900">
+          <button 
+            onClick={() => {
+              usePurchaseStore.getState().resetPurchase();
+              if (onClose) onClose();
+            }}
+            className="w-27 h-9 rounded-lg bg-white border border-pneutral-50 shadow-[0_4px_12px_rgba(0,0,0,0.12)] active:shadow-md transition-all duration-200 text-label-l3 font-medium text-pneutral-900"
+          >
             Cancel
           </button>
           <button
-            className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800"
-            onClick={() => setShowAddProducts(true)}
+            className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800 disabled:opacity-50"
+            onClick={handleNext}
+            disabled={isCreatingSupplier || isLoadingSuppliers}
           >
-            Next
+            {isCreatingSupplier ? "Creating..." : "Next"}
           </button>
         </div>
       </div>

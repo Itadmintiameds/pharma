@@ -205,7 +205,7 @@ const Page = () => {
           /> */}
         </>
       ) : (
-        <GoodsReceipt />
+        <GoodsReceipt onClose={() => setShowGoodsReceipt(false)} />
       )}
     </>
   );

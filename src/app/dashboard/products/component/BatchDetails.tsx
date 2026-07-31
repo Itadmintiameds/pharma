@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { BatchSchema } from '@/app/schema/BatchSchema';
@@ -13,7 +13,11 @@ const CalendarIcon = () => (
   </svg>
 )
 
-const BatchDetails = () => {
+export interface BatchDetailsRef {
+  getFormData: () => any;
+}
+
+const BatchDetails = forwardRef<BatchDetailsRef>((props, ref) => {
   const [formData, setFormData] = useState({
     batchNumber: '',
     manufacturingDate: '',
@@ -55,6 +59,9 @@ const BatchDetails = () => {
     validateField(field, value);
   };
 
+  useImperativeHandle(ref, () => ({
+    getFormData: () => formData
+  }));
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-sm">
@@ -100,7 +107,7 @@ const BatchDetails = () => {
               label="Purchase Unit" 
               required 
               placeholder="Select Unit" 
-              options={[{ label: 'Box', value: 'box' }, { label: 'Strip', value: 'strip' }, { label: 'Bottle', value: 'bottle' }]}
+              options={[{ label: 'Box', value: 'BOX' }, { label: 'Strip', value: 'STRIP' }, { label: 'Bottle', value: 'BOTTLE' }]}
               value={formData.purchaseUnit}
               onChange={(val) => handleChange('purchaseUnit', val)}
               error={errors.purchaseUnit}
@@ -118,7 +125,7 @@ const BatchDetails = () => {
               label="Free Unit" 
               required 
               placeholder="Select Unit"
-              options={[{ label: 'Box', value: 'box' }, { label: 'Strip', value: 'strip' }, { label: 'Bottle', value: 'bottle' }]}
+              options={[{ label: 'Box', value: 'BOX' }, { label: 'Strip', value: 'STRIP' }, { label: 'Bottle', value: 'BOTTLE' }]}
               value={formData.freeUnit}
               onChange={(val) => handleChange('freeUnit', val)}
               error={errors.freeUnit}
@@ -202,6 +209,7 @@ const BatchDetails = () => {
       </div>
     </div>
   )
-}
+});
 
-export default BatchDetails
+BatchDetails.displayName = 'BatchDetails';
+export default BatchDetails;
