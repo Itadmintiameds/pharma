@@ -88,10 +88,15 @@ export const ConsumableProductSchema = CommonProductSchema.extend({
     .optional(),
   intendedUse: z.string()
     .min(10, "Minimum 10 characters required")
+    .max(100, "Cannot exceed 100 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   manufacturerName: z.string()
     .min(1, "Manufacturer Name is required")
-    .max(100, "Cannot exceed 100 characters")
+    .max(60, "Cannot exceed 60 characters")
+    .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
+  manufacturerLicenseNumber: z.string()
+    .min(1, "Manufacturer Licence Number is required")
+    .max(30, "Cannot exceed 30 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
 });
 
@@ -103,6 +108,7 @@ export const NonConsumableProductSchema = CommonProductSchema.extend({
   deviceClassification: z.string().min(1, "Device Classification is required"),
   intendedUse: z.string()
     .min(10, "Minimum 10 characters required")
+    .max(100, "Cannot exceed 100 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   technicalDimensions: z.string()
     .min(1, "Technical Dimensions are required")
@@ -113,4 +119,8 @@ export const NonConsumableProductSchema = CommonProductSchema.extend({
     .max(3, "Cannot exceed 3 digits")
     .regex(/^\d*$/, "Must be numeric"),
   amcServiceAvailability: z.string().min(1, "AMC / Service Availability is required"),
+  manufacturerName: z.string()
+    .min(1, "Manufacturer Name is required")
+    .max(60, "Cannot exceed 60 characters")
+    .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
 });

@@ -159,6 +159,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.productName} 
         onChange={(e) => handleChange('productName', e.target.value)} 
         error={errors.productName}
+        maxLength={60}
       />
       <Input 
         label="Brand Name" 
@@ -167,6 +168,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.brandName} 
         onChange={(e) => handleChange('brandName', e.target.value)} 
         error={errors.brandName}
+        maxLength={60}
       />
       
       <Dropdown
@@ -208,6 +210,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.variant} 
         onChange={(e) => handleChange('variant', e.target.value)} 
         error={errors.variant}
+        maxLength={60}
       />
       
       <Dropdown
@@ -270,6 +273,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.fragrance} 
         onChange={(e) => handleChange('fragrance', e.target.value)} 
         error={errors.fragrance}
+        maxLength={60}
       />
       
       <div className="flex flex-col gap-1 w-full">
@@ -317,6 +321,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.manufacturerName} 
         onChange={(e) => handleChange('manufacturerName', e.target.value)} 
         error={errors.manufacturerName}
+        maxLength={60}
       />
 
       <Dropdown

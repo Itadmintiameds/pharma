@@ -165,10 +165,11 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       <Input 
         label="Strength / Composition" 
         required 
-        placeholder="Placeholder" 
+        placeholder="Enter Strength" 
         value={formData.strength} 
         onChange={(e) => handleChange('strength', e.target.value)} 
         error={errors.strength}
+        maxLength={30}
       />
       
       <div className="flex flex-col gap-1 w-full">
@@ -235,18 +236,20 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       <Input 
         label="Manufacturer Name" 
         required 
-        placeholder="Placeholder" 
+        placeholder="Enter Manufacturer Name" 
         value={formData.manufacturerName} 
         onChange={(e) => handleChange('manufacturerName', e.target.value)} 
         error={errors.manufacturerName}
+        maxLength={60}
       />
       <Input 
         label="FSSAI License number" 
         required 
-        placeholder="Placeholder" 
+        placeholder="Enter License Number" 
         value={formData.fssaiLicense} 
         onChange={(e) => handleChange('fssaiLicense', e.target.value)} 
         error={errors.fssaiLicense}
+        maxLength={14}
       />
 
       <Dropdown

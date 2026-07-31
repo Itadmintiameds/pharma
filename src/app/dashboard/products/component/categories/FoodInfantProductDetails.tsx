@@ -106,6 +106,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.productName} 
         onChange={(e) => handleChange('productName', e.target.value)} 
         error={errors.productName}
+        maxLength={60}
       />
       <Input 
         label="Brand Name" 
@@ -114,6 +115,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.brandName} 
         onChange={(e) => handleChange('brandName', e.target.value)} 
         error={errors.brandName}
+        maxLength={60}
       />
       
       <Dropdown

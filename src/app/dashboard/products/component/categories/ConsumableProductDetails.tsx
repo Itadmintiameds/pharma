@@ -88,8 +88,8 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} />
-      <Input label="Brand Name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} />
+      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} maxLength={60} />
+      <Input label="Brand Name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} maxLength={60} />
       
       <Dropdown
         label="Device Category"
@@ -120,7 +120,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.materialType}
         onChange={(val) => handleChange('materialType', val)}
       />
-      <Input label="Size / Dimension / Gauge" placeholder="Enter Size/Dimension/Gauge" value={formData.sizeDimensionGauge} onChange={(e) => handleChange('sizeDimensionGauge', e.target.value)} error={errors.sizeDimensionGauge} />
+      <Input label="Size / Dimension / Gauge" placeholder="Enter Size/Dimension/Gauge" value={formData.sizeDimensionGauge} onChange={(e) => handleChange('sizeDimensionGauge', e.target.value)} error={errors.sizeDimensionGauge} maxLength={20} />
       
       <div className="flex flex-col gap-1 w-full">
         <label className="text-label-l4 font-medium text-pneutral-900">
@@ -154,9 +154,9 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         </div>
       </div>
       
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} />
-      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} />
-      <Input label="Manufacturer Licence Number" required placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} error={errors.manufacturerLicenseNumber} />
+      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
+      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} maxLength={60} />
+      <Input label="Manufacturer Licence Number" required placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} error={errors.manufacturerLicenseNumber} maxLength={30} />
 
       <Dropdown
         label="Is ISO Certified?"

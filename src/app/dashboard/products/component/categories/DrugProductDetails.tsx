@@ -130,6 +130,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.productName} 
         onChange={(e) => handleChange('productName', e.target.value)} 
         error={errors.productName}
+        maxLength={60}
       />
       <Input 
         label="Brand name" 
@@ -138,6 +139,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.brandName} 
         onChange={(e) => handleChange('brandName', e.target.value)} 
         error={errors.brandName}
+        maxLength={60}
       />
 
       {formData.molecules.map((mol, index) => (
@@ -160,6 +162,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
                 value={mol.strength} 
                 onChange={(e) => updateMolecule(mol.id, 'strength', e.target.value)} 
                 error={errors[`mol_${mol.id}_strength`]}
+                maxLength={30}
               />
             </div>
             <div className="flex items-center gap-2 shrink-0 h-[48px]">

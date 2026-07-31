@@ -99,8 +99,8 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
 
   return (
     <>
-      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} />
-      <Input label="Brand name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} />
+      <Input label="Product Name" required placeholder="Enter Product Name" value={formData.productName} onChange={(e) => handleChange('productName', e.target.value)} error={errors.productName} maxLength={60} />
+      <Input label="Brand name" required placeholder="Enter Brand Name" value={formData.brandName} onChange={(e) => handleChange('brandName', e.target.value)} error={errors.brandName} maxLength={60} />
       
       <Dropdown
         label="Device Category"
@@ -124,7 +124,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         disabled={!formData.deviceCategory}
       />
       
-      <Input label="Model Name" required placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} />
+      <Input label="Model Name" required placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} maxLength={60} />
       
       <Dropdown
         label="Device Classification (Class A/B/C/D)"
@@ -141,8 +141,8 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         error={errors.deviceClassification}
       />
       
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} />
-      <Input label="Technical Dimensions / Capacity / Configuration" required placeholder="Enter Dimension/Capacity" value={formData.technicalDimensions} onChange={(e) => handleChange('technicalDimensions', e.target.value)} error={errors.technicalDimensions} />
+      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
+      <Input label="Technical Dimensions / Capacity / Configuration" required placeholder="Enter Dimension/Capacity" value={formData.technicalDimensions} onChange={(e) => handleChange('technicalDimensions', e.target.value)} error={errors.technicalDimensions} maxLength={30} />
       <Dropdown
         label="Material / Build Type"
         placeholder="Select Material/Build Type"
@@ -159,7 +159,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         onChange={(val) => handleChange('powerSource', val)}
       />
       
-      <Input label="Warranty Period (in months)" required placeholder="Enter Warranty" value={formData.warrantyPeriod} onChange={(e) => handleChange('warrantyPeriod', e.target.value)} error={errors.warrantyPeriod} />
+      <Input label="Warranty Period (in months)" required placeholder="Enter Warranty" value={formData.warrantyPeriod} onChange={(e) => handleChange('warrantyPeriod', e.target.value)} error={errors.warrantyPeriod} maxLength={3} />
       
       <Dropdown
         label="AMC / Service Availability"
@@ -174,7 +174,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         error={errors.amcServiceAvailability}
       />
       
-      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} />
+      <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} maxLength={60} />
       
       <Dropdown
         label="Country of Origin"
