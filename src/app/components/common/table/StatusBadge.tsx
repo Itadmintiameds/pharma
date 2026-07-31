@@ -6,7 +6,8 @@ export type BadgeStatus =
   | "Near Expiry"
   | "Near Expiry Batch"
   | "Expired"
-  | "Expired batch";
+  | "Expired batch"
+  | "Out of Stock";
 
 interface Props {
   status: BadgeStatus;
@@ -24,6 +25,8 @@ const styles: Record<BadgeStatus, string> = {
 
   Expired: "bg-warning-50 text-warning-600 border-warning-600",
   "Expired batch": "bg-warning-50 text-warning-600 border-warning-600",
+
+  "Out of Stock": "bg-pneutral-100 text-pneutral-600 border-pneutral-300",
 };
 
 export default function StatusBadge({ status }: Props) {

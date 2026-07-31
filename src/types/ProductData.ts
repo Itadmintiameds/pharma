@@ -102,12 +102,12 @@ export interface NonConsumableProductData {
   hsnCode: string;
 }
 
-export type AnyProductData = 
-  | DrugProductData 
-  | SupplementProductData 
-  | FoodInfantProductData 
-  | CosmeticProductData 
-  | ConsumableProductData 
+export type AnyProductData =
+  | DrugProductData
+  | SupplementProductData
+  | FoodInfantProductData
+  | CosmeticProductData
+  | ConsumableProductData
   | NonConsumableProductData;
 
 export interface PackagingDetailsData {
@@ -125,4 +125,103 @@ export interface FullProductSubmissionData {
   subCategoryId?: number;
   productDetails: AnyProductData;
   packagingDetails: PackagingDetailsData;
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Inventory / Stock APIs                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Overall stock status returned by the inventory APIs. */
+export type StockStatus =
+  | "ACTIVE"
+  | "NEAR_EXPIRY"
+  | "EXPIRED"
+  | "OUT_OF_STOCK";
+
+/**
+ * GET /api/v1/product/stock-summary
+ * One row per product in the inventory list (top-level table).
+ */
+export interface ProductStockSummary {
+  productId: string;
+  productName: string;
+  totalStock: number;
+  activeBatches: number;
+  nearExpiryBatches: number;
+  expiredBatches: number;
+  nearestExpiryDate: string | null;
+  overallStatus: StockStatus;
+}
+
+export interface ProductStockSummaryResponse {
+  data: ProductStockSummary[];
+  count: number;
+  message: string;
+}
+
+/**
+ * GET /api/v1/product/{productId}/details
+ * A single batch belonging to a package.
+ */
+export interface ProductBatchDetails {
+  batchId: string;
+  batchNumber: string;
+  packagingId: string;
+  manufacturingDate: string;
+  expiryDate: string;
+  stockQuantity: number;
+  purchaseUnit: string;
+  rackLocation: string | null;
+  mrp: number;
+  mrpPerUnit: number;
+  purchasePrice: number;
+  purchasePricePerUnit: number;
+  sellingPrice: number;
+  sellingPricePerUnit: number;
+  freeQuantity: number | null;
+  freeUnit: string | null;
+}
+
+/** A package (variant) of a product with its batches. */
+export interface ProductPackageDetails {
+  packagingId: string;
+  purchaseUnit: string;
+  purchaseUnitContains: number;
+  smallestUnit: string;
+  batches: ProductBatchDetails[];
+}
+
+/** The `data` payload of the product details response. */
+export interface ProductDetails {
+  productId: string;
+  productName: string;
+  brandName: string;
+  pharmacyId: string;
+  productCategoryId: number;
+  hsnNo: string;
+  gstPercentage: number;
+  packages: ProductPackageDetails[];
+  unassignedBatches: ProductBatchDetails[];
+}
+
+export interface ProductDetailsResponse {
+  data: ProductDetails;
+  message: string;
+}
+
+/**
+ * GET /api/v1/product/expiry-kpi
+ * Aggregate counts for the products page stat cards.
+ */
+export interface ProductExpiryKpi {
+  expired: number;
+  expiring0To30Days: number;
+  expiring31To60Days: number;
+  healthyAbove60Days: number;
+  totalProducts: number;
+}
+
+export interface ProductExpiryKpiResponse {
+  data: ProductExpiryKpi;
+  message: string;
 }
