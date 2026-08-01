@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useMemo } from "react";
+import React, { useState, useRef, useMemo, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
@@ -9,9 +9,16 @@ import PackagingDetails, { PackagingDetailsRef } from "@/app/dashboard/products/
 import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/component/BatchDetails";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import InvoiceSummary from "./InvoiceSummary";
+import ProductSearchTable from "./ProductSearchTable";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { ProductService } from "@/services/ProductService";
+import { getAllProducts } from "@/services/InventoryService";
+import {
+  matchesProductQuery,
+  toProductStockRow,
+  type ProductStockRow,
+} from "@/utils/productStock";
 import { buildProductAttributes } from "@/utils/productOnboardPayload";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
@@ -36,8 +43,13 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const [selectedSubCategory, setSelectedSubCategory] = useState(5); // 5: Consumable, 6: Non-Consumable
   const [viewState, setViewState] = useState<'search' | 'add' | 'summary'>('search');
   const [searchQuery, setSearchQuery] = useState('');
-  const [hasSearched, setHasSearched] = useState(false);
+  // Query the table is filtered by — only updated on submit, so typing alone
+  // narrows the dropdown without disturbing the list below it.
+  const [appliedQuery, setAppliedQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [productRows, setProductRows] = useState<ProductStockRow[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Bumped to remount the three step forms with blank state.
@@ -63,6 +75,46 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
     { accessorKey: 'gst', header: 'GST', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'netAmount', header: 'Net Amount', cell: (info) => <span className="font-semibold text-secondary-700">₹{Number(info.getValue() || 0).toFixed(2)}</span> },
   ], []);
+
+  // Product master, loaded once so both the search dropdown and the table
+  // below it filter the same client-side list.
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      setIsLoadingProducts(true);
+      setProductsError(null);
+      try {
+        const products = await getAllProducts();
+        if (active) setProductRows(products.map(toProductStockRow));
+      } catch (err) {
+        if (active) {
+          setProductsError(
+            err instanceof Error ? err.message : "Failed to load products."
+          );
+        }
+      } finally {
+        if (active) setIsLoadingProducts(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Dropdown follows what is being typed; the table follows the submitted query.
+  const dropdownRows = useMemo(
+    () => productRows.filter((row) => matchesProductQuery(row, searchQuery)).slice(0, 6),
+    [productRows, searchQuery]
+  );
+
+  const tableRows = useMemo(
+    () => productRows.filter((row) => matchesProductQuery(row, appliedQuery)),
+    [productRows, appliedQuery]
+  );
 
   const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
 
@@ -131,12 +183,15 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   };
 
   const handleSearch = () => {
-    if (searchQuery.trim()) {
-      setHasSearched(true);
-      // Actual API call would happen here
-    } else {
-      setHasSearched(false);
-    }
+    setAppliedQuery(searchQuery.trim());
+  };
+
+  // TODO: open the batch form pre-bound to this existing product once that
+  // "add batch to existing product" flow lands.
+  const handleAddStock = (row: ProductStockRow) => {
+    setShowDropdown(false);
+    console.log("Add stock for product", row.productId, row.productName);
+    toast(`Add stock for ${row.productName} is not wired up yet`);
   };
 
   const handleSubmit = async () => {
@@ -401,26 +456,37 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
                     <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Stock(Units)</div>
                     <div className="flex-1 border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Action</div>
                   </div>
-                  {/* Data Row (Dummy Data) */}
-                  {[1, 2, 3].map((item) => (
-                    <div key={item} className="flex w-full bg-white text-[14px] font-normal text-pneutral-900 h-[68px] hover:bg-gray-50">
-                      <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Paracetamol 500mg</div>
-                      <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Strip of 10 Tablets</div>
-                      <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">150</div>
-                      <div className="flex-1 border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">
-                        <button
-                          onClick={() => {
-                            console.log("Add stock clicked for product", item);
-                            setShowDropdown(false);
-                            // Call the component here later
-                          }}
-                          className="flex items-center justify-center bg-[#7D32FC] hover:bg-[#6823df] text-white rounded-[4px] px-[16px] h-[36px] min-w-[108px] w-[119px] max-h-[44px] transition-all duration-300 ease-out text-[14px] font-medium"
-                        >
-                          Add stock
-                        </button>
-                      </div>
+                  {/* Matches from the product master */}
+                  {isLoadingProducts ? (
+                    <div className="flex items-center justify-center h-[68px] text-[14px] text-pneutral-500">
+                      Loading products…
                     </div>
-                  ))}
+                  ) : dropdownRows.length === 0 ? (
+                    <div className="flex items-center justify-center h-[68px] text-[14px] text-pneutral-500">
+                      No matching products
+                    </div>
+                  ) : (
+                    dropdownRows.map((row) => (
+                      <div key={row.productId} className="flex w-full bg-white text-[14px] font-normal text-pneutral-900 h-[68px] hover:bg-gray-50">
+                        <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex flex-col items-center justify-center text-center">
+                          <span className="font-semibold">{row.productName}</span>
+                          {row.brandName && (
+                            <span className="text-[12px] text-pneutral-600">{row.brandName}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center text-center">{row.variant || "—"}</div>
+                        <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">{row.totalStock}</div>
+                        <div className="flex-1 border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">
+                          <button
+                            onClick={() => handleAddStock(row)}
+                            className="flex items-center justify-center bg-[#7D32FC] hover:bg-[#6823df] text-white rounded-[4px] px-[16px] h-[36px] min-w-[108px] w-[119px] max-h-[44px] transition-all duration-300 ease-out text-[14px] font-medium"
+                          >
+                            Add stock
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>
@@ -436,16 +502,19 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
             </button>
           </div>
 
-          {/* Search Results Placeholder */}
-          <div className="flex flex-col items-center justify-center h-[300px] w-full rounded-xl border border-dashed border-pneutral-300 bg-white mt-4">
-            <div className="flex flex-col items-center gap-2 text-pneutral-500">
-              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-2 opacity-50">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="9" y1="3" x2="9" y2="21"></line>
-              </svg>
-              <p className="text-[16px] font-medium text-pneutral-900">Search for a product</p>
-              <p className="text-[14px]">Or click '+ Add Item' to create a new one</p>
-            </div>
+          {/* Product master list */}
+          <div className="mt-4">
+            <ProductSearchTable
+              rows={tableRows}
+              loading={isLoadingProducts}
+              error={productsError}
+              emptyMessage={
+                appliedQuery
+                  ? `No products match "${appliedQuery}". Click '+ Add Item' to create one.`
+                  : "No products yet. Click '+ Add Item' to create one."
+              }
+              onAddStock={handleAddStock}
+            />
           </div>
         </>
       ) : (

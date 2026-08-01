@@ -1,6 +1,8 @@
 import type {
   ProductDetails,
   ProductDetailsResponse,
+  ProductListItem,
+  ProductListResponse,
   ProductExpiryKpi,
   ProductExpiryKpiResponse,
   ProductStockSummary,
@@ -22,6 +24,18 @@ export const getProductStockSummary = async (): Promise<ProductStockSummary[]> =
     return res.data.data;
   } catch (error) {
     throw handleApiError(error, "Failed to load product stock summary.");
+  }
+};
+
+// GET /product -> the full product master list used by the purchase search.
+export const getAllProducts = async (): Promise<ProductListItem[]> => {
+  try {
+    const res = await api.get<ProductListResponse | ProductListItem[]>("product");
+    // Most endpoints wrap the payload in { data, message }; tolerate a bare array too.
+    const payload = Array.isArray(res.data) ? res.data : res.data?.data;
+    return payload ?? [];
+  } catch (error) {
+    throw handleApiError(error, "Failed to load products.");
   }
 };
 
