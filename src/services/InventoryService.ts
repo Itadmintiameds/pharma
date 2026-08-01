@@ -65,7 +65,7 @@ export const addProductPackage = async (
       `product/${productId}/package`,
       payload
     );
-    return res.data.data;
+    return res.data?.data ?? (res.data as unknown as ProductDetails);
   } catch (error) {
     throw handleApiError(error, "Failed to add package.");
   }
@@ -84,7 +84,8 @@ export const addProductBatches = async (
       `product/${productId}/batch`,
       payload
     );
-    return res.data.data;
+    // This endpoint's body is an array even for a single batch.
+    return res.data?.data ?? (res.data as unknown as ProductDetails);
   } catch (error) {
     throw handleApiError(error, "Failed to add batch.");
   }

@@ -36,25 +36,36 @@ const allBatches = (details: ProductDetails): ProductBatchDetails[] => [
 ];
 
 /**
- * Both POST endpoints answer with the product's full details rather than just
- * the row they created, so the new batch is whichever id wasn't there before.
- * Falls back to matching on batch number + expiry.
+ * Both POST endpoints answer with the product's full details rather than the
+ * row they created, so the new batch is whichever id wasn't there before.
+ * Falls back to matching on what was sent, since /batch can echo a snapshot
+ * taken before the insert.
  */
 const findNewBatch = (
-  updated: ProductDetails,
+  details: ProductDetails,
   knownBatchIds: Set<string>,
-  sent: NewBatchPayload
+  sent: NewBatchPayload,
+  packagingId: string
 ): ProductBatchDetails | undefined => {
-  const batches = allBatches(updated);
-  return (
-    batches.find((b) => !knownBatchIds.has(b.batchId)) ??
-    [...batches]
-      .reverse()
-      .find(
-        (b) =>
-          b.batchNumber === sent.batchNumber && b.expiryDate === sent.expiryDate
-      )
-  );
+  const batches = allBatches(details);
+
+  const unseen = batches.filter((b) => !knownBatchIds.has(b.batchId));
+  if (unseen.length) {
+    // With several unseen rows, prefer one under the package we targeted.
+    return (
+      (packagingId && unseen.find((b) => b.packagingId === packagingId)) ||
+      unseen[unseen.length - 1]
+    );
+  }
+
+  return [...batches]
+    .reverse()
+    .find(
+      (b) =>
+        b.batchNumber === sent.batchNumber &&
+        b.expiryDate === sent.expiryDate &&
+        (!packagingId || b.packagingId === packagingId)
+    );
 };
 
 /**
@@ -162,7 +173,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
       const knownBatchIds = new Set(allBatches(details).map((b) => b.batchId));
       const existingPackagingId: string = packagingData?.packagingId || "";
 
-      const updated = existingPackagingId
+      let updated = existingPackagingId
         ? await addProductBatches(productId, [
             { packagingId: existingPackagingId, ...batchPayload },
           ])
@@ -173,7 +184,25 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             batches: [batchPayload],
           });
 
-      const newBatch = findNewBatch(updated, knownBatchIds, batchPayload);
+      let newBatch = findNewBatch(
+        updated,
+        knownBatchIds,
+        batchPayload,
+        existingPackagingId
+      );
+
+      // /batch answers with a snapshot taken before the insert, so the batch it
+      // just created isn't in its own response — read the product back to get it.
+      if (!newBatch) {
+        updated = await getProductDetails(productId);
+        newBatch = findNewBatch(
+          updated,
+          knownBatchIds,
+          batchPayload,
+          existingPackagingId
+        );
+      }
+
       const batchId = newBatch?.batchId || "";
       const packagingId = newBatch?.packagingId || existingPackagingId;
 
