@@ -210,6 +210,38 @@ export interface ProductDetailsResponse {
 }
 
 /**
+ * A batch as sent when adding stock to an existing product.
+ * Stock/free quantities are deliberately absent — they belong to the purchase,
+ * not the batch master, and are carried in the /purchase payload instead.
+ */
+export interface NewBatchPayload {
+  batchNumber: string;
+  manufacturingDate: string;
+  expiryDate: string;
+  purchaseUnit: string;
+  purchasePrice: number;
+  mrp: number;
+  sellingPrice: number;
+  purchasePricePerUnit: number;
+  mrpPerUnit: number;
+  sellingPricePerUnit: number;
+  rackLocation: string;
+}
+
+/** POST /api/v1/product/{productId}/package — new package plus its first batch. */
+export interface AddPackagePayload {
+  purchaseUnit: string;
+  purchaseUnitContains: number;
+  smallestUnit: string;
+  batches: NewBatchPayload[];
+}
+
+/** POST /api/v1/product/{productId}/batch — new batches on existing packages. */
+export interface AddBatchPayload extends NewBatchPayload {
+  packagingId: string;
+}
+
+/**
  * GET /api/v1/product
  * One entry per product in the master list. Stock/expiry are derived from the
  * nested batches; some deployments answer with the flattened stock-summary

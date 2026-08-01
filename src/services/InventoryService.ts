@@ -1,4 +1,6 @@
 import type {
+  AddBatchPayload,
+  AddPackagePayload,
   ProductDetails,
   ProductDetailsResponse,
   ProductListItem,
@@ -46,6 +48,45 @@ export const getProductExpiryKpi = async (): Promise<ProductExpiryKpi> => {
     return res.data.data;
   } catch (error) {
     throw handleApiError(error, "Failed to load product expiry KPIs.");
+  }
+};
+
+/**
+ * POST /product/{productId}/package -> add a new package (with its first batch)
+ * to an existing product. Answers with the product's *full* details, so callers
+ * diff against the ids they held before the call to find what was created.
+ */
+export const addProductPackage = async (
+  productId: string,
+  payload: AddPackagePayload
+): Promise<ProductDetails> => {
+  try {
+    const res = await api.post<ProductDetailsResponse>(
+      `product/${productId}/package`,
+      payload
+    );
+    return res.data.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to add package.");
+  }
+};
+
+/**
+ * POST /product/{productId}/batch -> add batches to existing packages.
+ * Takes an array and, like the package call, returns the full product details.
+ */
+export const addProductBatches = async (
+  productId: string,
+  payload: AddBatchPayload[]
+): Promise<ProductDetails> => {
+  try {
+    const res = await api.post<ProductDetailsResponse>(
+      `product/${productId}/batch`,
+      payload
+    );
+    return res.data.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to add batch.");
   }
 };
 

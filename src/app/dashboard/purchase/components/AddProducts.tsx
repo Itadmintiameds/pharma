@@ -10,6 +10,7 @@ import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/componen
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import InvoiceSummary from "./InvoiceSummary";
 import ProductSearchTable from "./ProductSearchTable";
+import AddStockToProduct from "./AddStockToProduct";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { ProductService } from "@/services/ProductService";
@@ -41,7 +42,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState("Product Details");
   const [selectedCategory, setSelectedCategory] = useState(1);
   const [selectedSubCategory, setSelectedSubCategory] = useState(5); // 5: Consumable, 6: Non-Consumable
-  const [viewState, setViewState] = useState<'search' | 'add' | 'summary'>('search');
+  const [viewState, setViewState] = useState<'search' | 'add' | 'addStock' | 'summary'>('search');
+  const [stockTarget, setStockTarget] = useState<ProductStockRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // Query the table is filtered by — only updated on submit, so typing alone
   // narrows the dropdown without disturbing the list below it.
@@ -186,12 +188,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
     setAppliedQuery(searchQuery.trim());
   };
 
-  // TODO: open the batch form pre-bound to this existing product once that
-  // "add batch to existing product" flow lands.
+  // Existing product: skip the product step and go straight to package + batch.
   const handleAddStock = (row: ProductStockRow) => {
     setShowDropdown(false);
-    console.log("Add stock for product", row.productId, row.productName);
-    toast(`Add stock for ${row.productName} is not wired up yet`);
+    setStockTarget(row);
+    setViewState('addStock');
   };
 
   const handleSubmit = async () => {
@@ -403,10 +404,24 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
       )}
 
       {viewState === 'summary' ? (
-        <InvoiceSummary 
-          onCancel={() => setViewState('search')} 
+        <InvoiceSummary
+          onCancel={() => setViewState('search')}
           onSubmit={handlePurchaseSubmit}
-          onSuccessGoToPurchase={handleGoToPurchase} 
+          onSuccessGoToPurchase={handleGoToPurchase}
+        />
+      ) : viewState === 'addStock' && stockTarget ? (
+        <AddStockToProduct
+          productId={stockTarget.productId}
+          fallbackName={stockTarget.productName}
+          onCancel={() => {
+            setStockTarget(null);
+            setViewState('search');
+          }}
+          onAdded={() => {
+            setStockTarget(null);
+            setViewState('search');
+            setShowSuccessModal(true);
+          }}
         />
       ) : viewState === 'search' ? (
         <>
