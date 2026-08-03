@@ -6,6 +6,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import ConfirmationPopup from "@/app/components/common/ConfirmationPopup";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 
 interface InvoiceSummaryProps {
   onCancel?: () => void;
@@ -19,11 +20,46 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   const [currentMode, setCurrentMode] = useState<'create' | 'view' | 'download'>(mode);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [discount, setDiscount] = useState<number>(0);
+  const [discountError, setDiscountError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const store = usePurchaseStore();
   const router = useRouter();
 
+  const grossAmt = store.totalGrossAmount || 0;
+  const gstAmt = store.totalGst || 0;
+  const netAmt = (grossAmt - discount) + gstAmt;
+
+  // A negative discount would inflate the payable, and one above the gross
+  // would make it negative — neither is a valid invoice.
+  const validateDiscount = (value: number): string => {
+    if (value < 0) return "Discount cannot be negative";
+    if (value > grossAmt) return "Discount cannot exceed the gross amount";
+    return "";
+  };
+
+  const handleDiscountChange = (raw: string) => {
+    if (raw.trim() === "") {
+      setDiscount(0);
+      setDiscountError("");
+      return;
+    }
+
+    const value = Number(raw);
+    if (Number.isNaN(value)) return;
+
+    // Clamp rather than store the negative, so the totals never show it.
+    setDiscount(Math.max(0, value));
+    setDiscountError(validateDiscount(value));
+  };
+
   const handleSaveTaxInvoice = async () => {
+    const error = validateDiscount(discount);
+    if (error) {
+      setDiscountError(error);
+      toast.error(error);
+      return;
+    }
+
     if (onSubmit) {
       setIsSubmitting(true);
       try {
@@ -39,10 +75,6 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     }
   };
 
-  const grossAmt = store.totalGrossAmount || 0;
-  const gstAmt = store.totalGst || 0;
-  const netAmt = (grossAmt - discount) + gstAmt;
-  
   const totalItemsCount = store.purchaseDetails.length || 0;
   const totalQtyCount = store.purchaseDetails.reduce((acc, i) => acc + i.purchaseQuantity, 0);
 
@@ -192,18 +224,33 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
             <span className="text-pneutral-600 text-[14px]">Gross AMT</span>
             <span className="font-semibold text-[14px] text-pneutral-900">₹ {grossAmt.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-pneutral-600 text-[14px]">DIS.AMT</span>
-            {currentMode === 'create' ? (
-              <input 
-                type="number" 
-                value={discount || ""} 
-                onChange={(e) => setDiscount(Number(e.target.value) || 0)} 
-                className="w-20 h-7 border border-pneutral-200 rounded bg-white text-right px-2 text-pneutral-900 text-[12px] outline-none focus:border-primary-500" 
-                placeholder="0.00" 
-              />
-            ) : (
-              <span className="font-medium text-[14px] text-pneutral-900">₹ {discount.toFixed(2)}</span>
+          <div className="flex flex-col gap-1">
+            <div className="flex justify-between items-center">
+              <span className="text-pneutral-600 text-[14px]">DIS.AMT</span>
+              {currentMode === 'create' ? (
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={discount || ""}
+                  onChange={(e) => handleDiscountChange(e.target.value)}
+                  // The spinner and paste can still deliver "-", so block it here too.
+                  onKeyDown={(e) => {
+                    if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault();
+                  }}
+                  className={`w-20 h-7 border rounded bg-white text-right px-2 text-pneutral-900 text-[12px] outline-none ${
+                    discountError
+                      ? "border-warning-500"
+                      : "border-pneutral-200 focus:border-primary-500"
+                  }`}
+                  placeholder="0.00"
+                />
+              ) : (
+                <span className="font-medium text-[14px] text-pneutral-900">₹ {discount.toFixed(2)}</span>
+              )}
+            </div>
+            {discountError && (
+              <span className="self-end text-[11px] text-warning-500">{discountError}</span>
             )}
           </div>
           <div className="flex justify-between items-center">

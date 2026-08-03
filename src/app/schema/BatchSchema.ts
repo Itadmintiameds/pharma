@@ -1,5 +1,29 @@
 import { z } from 'zod';
 
+/** Stock must have at least this much shelf life left to be worth receiving. */
+export const MIN_EXPIRY_MONTHS = 3;
+
+const startOfDay = (date: Date): Date => {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+};
+
+const today = (): Date => startOfDay(new Date());
+
+/** Earliest expiry date accepted: today + MIN_EXPIRY_MONTHS. */
+const earliestExpiry = (): Date => {
+  const date = today();
+  date.setMonth(date.getMonth() + MIN_EXPIRY_MONTHS);
+  return date;
+};
+
+/** Parses an input date at day precision; null when unparseable. */
+const asDate = (value: string): Date | null => {
+  const date = startOfDay(new Date(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 export const BatchSchema = z.object({
   batchNumber: z.string()
     .min(3, "Must be at least 3 characters")
@@ -7,16 +31,22 @@ export const BatchSchema = z.object({
     .regex(/^[a-zA-Z0-9]+$/, "Must be alphanumeric only"),
   
   manufacturingDate: z.string().min(1, "Manufacturing Date is required")
-    .refine(dateStr => {
-      const date = new Date(dateStr);
-      const now = new Date();
-      // Compare year and month (cannot be in a strictly future month)
-      const isFuture = date.getFullYear() > now.getFullYear() || 
-                       (date.getFullYear() === now.getFullYear() && date.getMonth() > now.getMonth());
-      return !isFuture;
-    }, "Cannot be a future month"),
-    
-  expiryDate: z.string().min(1, "Expiry Date is required"),
+    .refine(value => asDate(value) !== null, "Enter a valid date")
+    .refine(value => {
+      const date = asDate(value);
+      return date ? date <= today() : true;
+    }, "Cannot be a future date"),
+
+  expiryDate: z.string().min(1, "Expiry Date is required")
+    .refine(value => asDate(value) !== null, "Enter a valid date")
+    .refine(value => {
+      const date = asDate(value);
+      return date ? date > today() : true;
+    }, "Must be a future date")
+    .refine(value => {
+      const date = asDate(value);
+      return date ? date >= earliestExpiry() : true;
+    }, `Must be at least ${MIN_EXPIRY_MONTHS} months from today`),
   
   purchaseUnit: z.string().min(1, "Purchase Unit is required"),
   purchaseQuantity: z.coerce.number().min(0, "Must be positive number"),
