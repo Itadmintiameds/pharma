@@ -1,10 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
-import Image from "next/image";
+import Dropdown from "@/app/components/common/Dropdown";
 import Input from "@/app/components/common/Input";
 import { setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
-import { z } from "zod";
+import Image from "next/image";
+import React, { useState } from "react";
+
+const OWNERSHIP_TYPE_OPTIONS = [
+  "Private Limited Company",
+  "Public Limited Company",
+  "Limited Liability Partnership (LLP)",
+  "Proprietorship",
+  "One Person Company (OPC)",
+  "Section 8 Company",
+  "Producer Company",
+  "Nidhi Company",
+  "Government Company",
+  "Foreign Company",
+  "Holding Company",
+  "Subsidiary Company",
+  "Associate Company",
+  "Dormant Company",
+].map((name) => ({ label: name, value: name }));
 
 interface SetupBusinessViewProps {
   businessName: string;
@@ -52,20 +69,20 @@ export default function SetupBusinessView({
       field: K,
       setter: (val: string) => void
     ) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value;
-      if (field === "panNumber" || field === "gstNumber") {
-        setter(value.toUpperCase());
-        validateField(field, value.toUpperCase());
-      } else {
-        setter(value);
-        validateField(field, value);
-      }
-    };
+      (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (field === "panNumber" || field === "gstNumber") {
+          setter(value.toUpperCase());
+          validateField(field, value.toUpperCase());
+        } else {
+          setter(value);
+          validateField(field, value);
+        }
+      };
 
   return (
     <div className="flex flex-col gap-6 w-full select-none">
-      
+
       {/* Title */}
       <h1 className="font-work-sans font-semibold text-[24px] leading-[44px] text-pneutral-900">
         Setup Your Business
@@ -93,12 +110,17 @@ export default function SetupBusinessView({
             error={errors.businessName}
             required
           />
-          <Input
+          <Dropdown
             label="Ownership Type"
-            placeholder="Proprietorship"
+            placeholder="Select ownership type"
+            options={OWNERSHIP_TYPE_OPTIONS}
             value={ownershipType}
-            onChange={handleFieldChange("ownershipType", setOwnershipType)}
+            onChange={(value: string) => {
+              setOwnershipType(value);
+              // validateField("ownershipType", value);
+            }}
             error={errors.ownershipType}
+            searchable
             required
           />
           <Input
@@ -134,15 +156,14 @@ export default function SetupBusinessView({
 
         {/* Radio Option Cards */}
         <div className="w-full grid grid-cols-2 gap-[16px]">
-          
+
           {/* One Location Option */}
-          <div 
+          <div
             onClick={() => setLocationType("single")}
-            className={`w-full h-[94px] p-[12px] gap-[16px] rounded-[20px] border flex items-center cursor-pointer transition-all duration-200 select-none ${
-              locationType === "single" 
-                ? "border-[#EBE3FE] bg-[#F8F5FF]" 
+            className={`w-full h-[94px] p-[12px] gap-[16px] rounded-[20px] border flex items-center cursor-pointer transition-all duration-200 select-none ${locationType === "single"
+                ? "border-[#EBE3FE] bg-[#F8F5FF]"
                 : "border-pneutral-200 bg-white hover:border-pneutral-300"
-            }`}
+              }`}
           >
             {/* Custom Radio Button Indicator */}
             <div className="flex items-center justify-center shrink-0">
@@ -157,11 +178,11 @@ export default function SetupBusinessView({
               )}
             </div>
 
-            <Image 
-              src="/dashboard/setupBusiness/one-location.svg" 
-              alt="One Location" 
-              width={68} 
-              height={68} 
+            <Image
+              src="/dashboard/setupBusiness/one-location.svg"
+              alt="One Location"
+              width={68}
+              height={68}
               className="shrink-0 object-contain"
             />
 
@@ -177,13 +198,12 @@ export default function SetupBusinessView({
           </div>
 
           {/* Multiple Locations Option */}
-          <div 
+          <div
             onClick={() => setLocationType("multiple")}
-            className={`w-full h-[94px] p-[12px] gap-[16px] rounded-[20px] border flex items-center cursor-pointer transition-all duration-200 select-none ${
-              locationType === "multiple" 
-                ? "border-[#EBE3FE] bg-[#F8F5FF]" 
+            className={`w-full h-[94px] p-[12px] gap-[16px] rounded-[20px] border flex items-center cursor-pointer transition-all duration-200 select-none ${locationType === "multiple"
+                ? "border-[#EBE3FE] bg-[#F8F5FF]"
                 : "border-pneutral-200 bg-white hover:border-pneutral-300"
-            }`}
+              }`}
           >
             {/* Custom Radio Button Indicator */}
             <div className="flex items-center justify-center shrink-0">
@@ -198,11 +218,11 @@ export default function SetupBusinessView({
               )}
             </div>
 
-            <Image 
-              src="/dashboard/setupBusiness/multiple-location.svg" 
-              alt="Multiple Locations" 
-              width={68} 
-              height={68} 
+            <Image
+              src="/dashboard/setupBusiness/multiple-location.svg"
+              alt="Multiple Locations"
+              width={68}
+              height={68}
               className="shrink-0 object-contain"
             />
 

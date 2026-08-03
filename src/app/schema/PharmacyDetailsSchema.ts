@@ -162,7 +162,7 @@ export const setupBusinessSchema = z.object({
         .min(1, "Ownership Type is required")
         .max(50, "Ownership Type cannot exceed 50 characters")
         .regex(
-            /^[a-zA-Z0-9\s\-&*#.!@"]+$/,
+            /^[a-zA-Z0-9\s\-&*#.!@"()]+$/,
             "Ownership Type contains invalid characters"
         ),
 
