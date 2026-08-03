@@ -8,7 +8,7 @@ interface PurchaseSuccessModalProps {
   onClose: () => void;
   onAddProduct: () => void;
   onViewSummary: () => void;
-  grnNo?: string;
+  invoiceNo?: string;
   totalItems?: number;
   totalPurchaseQty?: number;
   totalFreeQty?: number;
@@ -19,7 +19,7 @@ export default function PurchaseSuccessModal({
   onClose,
   onAddProduct,
   onViewSummary,
-  grnNo,
+  invoiceNo,
   totalItems,
   totalPurchaseQty,
   totalFreeQty,
@@ -63,9 +63,9 @@ export default function PurchaseSuccessModal({
         </div>
 
         <div className="w-full h-11 border border-pneutral-200 rounded-lg flex justify-around items-center">
-          <div className="text-label-l3 font-semibold">GIRN Number</div>
+          <div className="text-label-l3 font-semibold">Invoice Number</div>
           <div className="text-p3 font-medium font-noto-sans text-success-900">
-            {grnNo || "N/A"}
+            {invoiceNo || "N/A"}
           </div>
         </div>
 

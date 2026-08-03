@@ -1,12 +1,5 @@
 import type { BadgeStatus } from "@/app/components/common/table/StatusBadge";
-import type {
-  ProductBatchDetails,
-  ProductListItem,
-  StockStatus,
-} from "@/types/ProductData";
-
-/** A batch expiring within this many days is flagged "Near Expiry". */
-export const NEAR_EXPIRY_DAYS = 30;
+import type { ProductStockSummary, StockStatus } from "@/types/ProductData";
 
 /** Whole days from today (midnight) to the given date; negative if past. */
 export const daysUntil = (iso: string): number => {
@@ -36,78 +29,38 @@ const STOCK_STATUS_BADGE: Record<StockStatus, BadgeStatus> = {
 export interface ProductStockRow {
   productId: string;
   productName: string;
-  brandName: string;
-  /** Pack description, e.g. "1 Box = 15 Tablet". Empty when the product has no package. */
-  variant: string;
   totalStock: number;
   nearestExpiryDate: string | null;
   status: BadgeStatus;
-  /** The source item, so callers can reach batches/HSN/GST when adding stock. */
-  source: ProductListItem;
+  /** The source row, so callers can reach the batch counts. */
+  source: ProductStockSummary;
 }
 
-/** Every batch of a product, whether it sits under a package or unassigned. */
-const allBatches = (item: ProductListItem): ProductBatchDetails[] => [
-  ...(item.packages?.flatMap((pkg) => pkg.batches ?? []) ?? []),
-  ...(item.unassignedBatches ?? []),
-];
-
-const firstVariant = (item: ProductListItem): string => {
-  const pkg = item.packages?.[0];
-  if (!pkg) return "";
-  return `1 ${pkg.purchaseUnit} = ${pkg.purchaseUnitContains} ${pkg.smallestUnit}`;
-};
-
 /**
- * Collapse a product into the single row the search table renders.
- * Stock and expiry come from the batches when present, otherwise from the
- * pre-aggregated fields the stock-summary shape provides.
+ * Maps a stock-summary row onto the search table's row shape. The status comes
+ * straight from `overallStatus` — the backend derives it from batch-level data
+ * the summary doesn't expose, so it is more accurate than anything we could
+ * recompute from `nearestExpiryDate` alone.
  */
-export const toProductStockRow = (item: ProductListItem): ProductStockRow => {
-  const batches = allBatches(item);
+export const toProductStockRow = (item: ProductStockSummary): ProductStockRow => ({
+  productId: item.productId,
+  productName: item.productName,
+  totalStock: item.totalStock ?? 0,
+  nearestExpiryDate: item.nearestExpiryDate ?? null,
+  status: item.overallStatus
+    ? STOCK_STATUS_BADGE[item.overallStatus]
+    : (item.totalStock ?? 0) > 0
+      ? "Healthy"
+      : "Out of Stock",
+  source: item,
+});
 
-  const totalStock = batches.length
-    ? batches.reduce((sum, b) => sum + (b.stockQuantity ?? 0), 0)
-    : item.totalStock ?? 0;
-
-  const inStockExpiries = batches
-    .filter((b) => (b.stockQuantity ?? 0) > 0)
-    .map((b) => b.expiryDate)
-    .filter(Boolean);
-
-  const nearestExpiryDate = inStockExpiries.length
-    ? inStockExpiries.reduce((earliest, d) => (d < earliest ? d : earliest))
-    : item.nearestExpiryDate ?? null;
-
-  let status: BadgeStatus;
-  if (totalStock <= 0) {
-    status = "Out of Stock";
-  } else if (nearestExpiryDate) {
-    const days = daysUntil(nearestExpiryDate);
-    status = days < 0 ? "Expired" : days <= NEAR_EXPIRY_DAYS ? "Near Expiry" : "Healthy";
-  } else {
-    status = item.overallStatus ? STOCK_STATUS_BADGE[item.overallStatus] : "Healthy";
-  }
-
-  return {
-    productId: item.productId,
-    productName: item.productName,
-    brandName: item.brandName ?? "",
-    variant: firstVariant(item),
-    totalStock,
-    nearestExpiryDate,
-    status,
-    source: item,
-  };
-};
-
-/** Case-insensitive match on product name, brand, or product id. */
+/** Case-insensitive match on product name or product id. */
 export const matchesProductQuery = (row: ProductStockRow, query: string): boolean => {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   return (
     row.productName.toLowerCase().includes(q) ||
-    row.brandName.toLowerCase().includes(q) ||
     row.productId.toLowerCase().includes(q)
   );
 };

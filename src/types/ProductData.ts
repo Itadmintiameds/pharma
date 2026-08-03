@@ -242,34 +242,6 @@ export interface AddBatchPayload extends NewBatchPayload {
 }
 
 /**
- * GET /api/v1/product
- * One entry per product in the master list. Stock/expiry are derived from the
- * nested batches; some deployments answer with the flattened stock-summary
- * fields instead, so both are optional and handled by `toProductStockRow`.
- */
-export interface ProductListItem {
-  productId: string;
-  productName: string;
-  brandName?: string;
-  pharmacyId?: string;
-  productCategoryId?: number;
-  hsnNo?: string;
-  gstPercentage?: number;
-  packages?: ProductPackageDetails[];
-  unassignedBatches?: ProductBatchDetails[];
-  /** Present only when the API returns pre-aggregated stock instead of batches. */
-  totalStock?: number;
-  nearestExpiryDate?: string | null;
-  overallStatus?: StockStatus;
-}
-
-export interface ProductListResponse {
-  data: ProductListItem[];
-  count?: number;
-  message?: string;
-}
-
-/**
  * GET /api/v1/product/expiry-kpi
  * Aggregate counts for the products page stat cards.
  */

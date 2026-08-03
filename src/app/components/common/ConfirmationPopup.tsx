@@ -9,6 +9,8 @@ interface ConfirmationPopupProps {
   onViewTaxInvoice: () => void;
   onGoToPurchase: () => void;
   invoiceNo?: string;
+  /** Backend-generated GRN; the line is omitted when absent. */
+  grnNo?: string;
 }
 
 const ConfirmationPopup: React.FC<ConfirmationPopupProps> = ({
@@ -17,6 +19,7 @@ const ConfirmationPopup: React.FC<ConfirmationPopupProps> = ({
   onViewTaxInvoice,
   onGoToPurchase,
   invoiceNo = "201233",
+  grnNo,
 }) => {
   if (!isOpen) return null;
 
@@ -53,6 +56,11 @@ const ConfirmationPopup: React.FC<ConfirmationPopupProps> = ({
             <span className="font-semibold text-[20px] leading-[32px]">
               Your Tax Invoice no. {invoiceNo} is Saved Successfully.
             </span>
+            {grnNo && (
+              <span className="block text-p3 font-medium font-noto-sans text-success-900">
+                GRN No. {grnNo}
+              </span>
+            )}
           </div>
         </div>
 

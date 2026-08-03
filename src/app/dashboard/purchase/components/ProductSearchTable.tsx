@@ -71,9 +71,7 @@ const ProductSearchTable: React.FC<ProductSearchTableProps> = ({
                 <td className={BODY_CELL}>
                   <div className="flex flex-col gap-[2px]">
                     <span className="font-bold text-pneutral-900">{row.productName}</span>
-                    <span className="text-[13px] text-pneutral-600">
-                      {row.brandName || row.variant || "—"}
-                    </span>
+                    <span className="text-[13px] text-pneutral-600">{row.productId}</span>
                   </div>
                 </td>
                 <td className={`${BODY_CELL} text-center`}>{row.totalStock}</td>

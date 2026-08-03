@@ -14,8 +14,9 @@ import AddStockToProduct from "./AddStockToProduct";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { ProductService } from "@/services/ProductService";
-import { getAllProducts } from "@/services/InventoryService";
+import { getProductStockSummary } from "@/services/InventoryService";
 import {
+  formatShelfLife,
   matchesProductQuery,
   toProductStockRow,
   type ProductStockRow,
@@ -87,7 +88,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
       setIsLoadingProducts(true);
       setProductsError(null);
       try {
-        const products = await getAllProducts();
+        const products = await getProductStockSummary();
         if (active) setProductRows(products.map(toProductStockRow));
       } catch (err) {
         if (active) {
@@ -328,7 +329,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         pharmacyId: selectedPharmacy?.pharmacyId || "",
         supplierId: storeState.supplierId,
         supplierName: storeState.supplierName || "Default Supplier",
-        grnNo: storeState.grnNo,
+        // grnNo is intentionally omitted — the backend generates it.
         invoiceNo: storeState.invoiceNo,
         invoiceDate: formattedInvoiceDate,
         paymentType: storeState.paymentType,
@@ -353,7 +354,17 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         }))
       };
 
-      await import('@/services/PurchaseService').then(m => m.PurchaseService.createPurchase(payload));
+      const response = await import('@/services/PurchaseService').then(m =>
+        m.PurchaseService.createPurchase(payload)
+      );
+
+      // Keep the GRN the backend generated so the summary and the saved-invoice
+      // popup can show it.
+      const createdGrnNo = response?.data?.grnNo || response?.grnNo || "";
+      if (createdGrnNo) {
+        usePurchaseStore.getState().setPurchaseHeader({ grnNo: createdGrnNo });
+      }
+
       toast.success("Purchase created successfully!");
       return true;
     } catch (error: any) {
@@ -389,7 +400,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         <div className="flex flex-col gap-3 w-full bg-white p-4 rounded-xl border border-pneutral-200 shadow-sm mb-3">
           <div className="flex justify-between items-center w-full">
             <div className="flex flex-col">
-              <h3 className="text-base font-bold text-pneutral-900">Onboarded Items ({store.invoiceNo || store.grnNo})</h3>
+              <h3 className="text-base font-bold text-pneutral-900">Onboarded Items ({store.invoiceNo})</h3>
               <p className="text-xs text-pneutral-600">Total Items: {store.purchaseDetails.length} | Net Payable: ₹{store.totalNetAmount.toFixed(2)}</p>
             </div>
             <button
@@ -467,7 +478,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
                   {/* Header Row */}
                   <div className="flex w-full bg-[#EAEAE9] text-[14px] font-semibold text-pneutral-900 h-[72px]">
                     <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Product Name</div>
-                    <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Varient</div>
+                    <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Shelf Life</div>
                     <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Stock(Units)</div>
                     <div className="flex-1 border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">Action</div>
                   </div>
@@ -485,11 +496,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
                       <div key={row.productId} className="flex w-full bg-white text-[14px] font-normal text-pneutral-900 h-[68px] hover:bg-gray-50">
                         <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex flex-col items-center justify-center text-center">
                           <span className="font-semibold">{row.productName}</span>
-                          {row.brandName && (
-                            <span className="text-[12px] text-pneutral-600">{row.brandName}</span>
-                          )}
+                          <span className="text-[12px] text-pneutral-600">{row.productId}</span>
                         </div>
-                        <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center text-center">{row.variant || "—"}</div>
+                        <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center text-center">{formatShelfLife(row.nearestExpiryDate)}</div>
                         <div className="flex-1 border-r border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">{row.totalStock}</div>
                         <div className="flex-1 border-b border-pneutral-200 p-[16px_8px] flex items-center justify-center">
                           <button
@@ -678,7 +687,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
           setShowSuccessModal(false);
           setViewState('summary');
         }}
-        grnNo={usePurchaseStore.getState().grnNo}
+        invoiceNo={usePurchaseStore.getState().invoiceNo}
         totalItems={usePurchaseStore.getState().purchaseDetails.length}
         totalPurchaseQty={usePurchaseStore.getState().purchaseDetails.reduce((sum, item) => sum + item.purchaseQuantity, 0)}
         totalFreeQty={usePurchaseStore.getState().purchaseDetails.reduce((sum, item) => sum + Number(item.freeQty || 0), 0)}
