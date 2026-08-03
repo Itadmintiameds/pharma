@@ -1,13 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import Button from "@/app/components/common/Button";
-import { getUserPharmacyRegistrations, getUserPharmacyKPIs, getPharmacyRegistrationDetails, getUserOrganization, deletePharmacyRegistration } from "@/services/SetupBusinessService";
-import PharmacyDetailsModal from "./PharmacyDetailsModal";
+import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import { showToast } from "@/app/components/common/Toast";
+import { deletePharmacyRegistration, getPharmacyRegistrationDetails, getUserOrganization, getUserPharmacyKPIs, getUserPharmacyRegistrations } from "@/services/SetupBusinessService";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import PharmacyDetailsModal from "./PharmacyDetailsModal";
 
 export default function DashboardMain() {
   /*
@@ -67,10 +66,17 @@ export default function DashboardMain() {
   };
 
   const [deleting, setDeleting] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  const handleDelete = async () => {
+  // Delete button in the details modal only opens the confirmation popup;
+  // the actual delete runs from confirmDelete once the user confirms.
+  const handleDelete = () => {
     if (!selectedCard) return;
-    if (!window.confirm("Delete this draft registration? This action cannot be undone.")) return;
+    setConfirmDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedCard) return;
 
     setDeleting(true);
     try {
@@ -81,6 +87,7 @@ export default function DashboardMain() {
         totalPharmacies: Math.max(0, prev.totalPharmacies - 1),
       }));
       showToast.success("Draft deleted successfully!");
+      setConfirmDeleteOpen(false);
       setIsModalOpen(false);
       setSelectedDetails(null);
       setSelectedCard(null);
@@ -671,6 +678,18 @@ export default function DashboardMain() {
         onEdit={handleEdit}
         onDelete={handleDelete}
         deleting={deleting}
+      />
+
+      <ConfirmDialog
+        isOpen={confirmDeleteOpen}
+        title="Delete Draft"
+        message="Are you sure you want to delete this draft registration? This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDeleteOpen(false)}
       />
     </>
   );

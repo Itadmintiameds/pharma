@@ -214,12 +214,23 @@ const SetupPharmacy = ({
               ? preserve.city
               : cityList[0] || "",
         });
+
+        // Matched a location — clear any earlier "no location" message
+        setErrors((prev) => ({ ...prev, pharmacyPincode: "" }));
       } else {
         resetAddress(pincode);
+        setErrors((prev) => ({
+          ...prev,
+          pharmacyPincode: "No location found for this PIN code.",
+        }));
       }
     } catch (error) {
       console.error("Pincode lookup failed:", error);
       resetAddress(pincode);
+      setErrors((prev) => ({
+        ...prev,
+        pharmacyPincode: "Unable to verify PIN code. Please try again.",
+      }));
     } finally {
       setLoadingPincode(false);
     }
