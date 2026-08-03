@@ -84,9 +84,16 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Which saved package the user picked, so the batch picker can list its
+  // batches. null means "Add New Package", where the batch is new by definition.
+  const [selectedPackagingId, setSelectedPackagingId] = useState<string | null>(null);
 
   const packagingRef = useRef<PackagingDetailsRef>(null);
   const batchRef = useRef<BatchDetailsRef>(null);
+
+  const selectedPackage = details?.packages?.find(
+    (pkg) => pkg.packagingId === selectedPackagingId
+  );
 
   useEffect(() => {
     let active = true;
@@ -172,44 +179,53 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
 
       const knownBatchIds = new Set(allBatches(details).map((b) => b.batchId));
       const existingPackagingId: string = packagingData?.packagingId || "";
+      const existingBatchId: string = batchData?.batchId || "";
 
-      let updated = existingPackagingId
-        ? await addProductBatches(productId, [
-            { packagingId: existingPackagingId, ...batchPayload },
-          ])
-        : await addProductPackage(productId, {
-            purchaseUnit: packagingData?.purchaseUnit || "",
-            purchaseUnitContains: Number(packagingData?.eachStripContains || 0),
-            smallestUnit: packagingData?.smallestUnit || "",
-            batches: [batchPayload],
-          });
+      let updated = details;
+      let batchId = existingBatchId;
+      let packagingId = existingPackagingId;
 
-      let newBatch = findNewBatch(
-        updated,
-        knownBatchIds,
-        batchPayload,
-        existingPackagingId
-      );
+      // Booking against a batch that already exists creates nothing — only the
+      // quantities below are new, and /purchase/create is what records them.
+      if (!existingBatchId) {
+        updated = existingPackagingId
+          ? await addProductBatches(productId, [
+              { packagingId: existingPackagingId, ...batchPayload },
+            ])
+          : await addProductPackage(productId, {
+              purchaseUnit: packagingData?.purchaseUnit || "",
+              purchaseUnitContains: Number(packagingData?.eachStripContains || 0),
+              smallestUnit: packagingData?.smallestUnit || "",
+              batches: [batchPayload],
+            });
 
-      // /batch answers with a snapshot taken before the insert, so the batch it
-      // just created isn't in its own response — read the product back to get it.
-      if (!newBatch) {
-        updated = await getProductDetails(productId);
-        newBatch = findNewBatch(
+        let newBatch = findNewBatch(
           updated,
           knownBatchIds,
           batchPayload,
           existingPackagingId
         );
-      }
 
-      const batchId = newBatch?.batchId || "";
-      const packagingId = newBatch?.packagingId || existingPackagingId;
+        // /batch answers with a snapshot taken before the insert, so the batch it
+        // just created isn't in its own response — read the product back to get it.
+        if (!newBatch) {
+          updated = await getProductDetails(productId);
+          newBatch = findNewBatch(
+            updated,
+            knownBatchIds,
+            batchPayload,
+            existingPackagingId
+          );
+        }
 
-      if (!batchId) {
-        console.warn("Could not identify the created batch in:", updated);
-        toast.error("Stock was saved but the new batch could not be identified");
-        return;
+        batchId = newBatch?.batchId || "";
+        packagingId = newBatch?.packagingId || existingPackagingId;
+
+        if (!batchId) {
+          console.warn("Could not identify the created batch in:", updated);
+          toast.error("Stock was saved but the new batch could not be identified");
+          return;
+        }
       }
 
       const pkg = updated.packages?.find((p) => p.packagingId === packagingId);
@@ -243,9 +259,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
           batchData?.mrpPerSmallestUnit || batchData?.mrpPerBox || 0
         ),
         freeQty: String(batchData?.freeQuantity || 0),
-        freeQtyUnit: !isNaN(Number(batchData?.freeUnit))
-          ? Number(batchData?.freeUnit)
-          : 1,
+        freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
         grossAmount,
         gst,
@@ -349,10 +363,22 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
           ref={packagingRef}
           mode="existing"
           packages={details.packages ?? []}
+          onPackageChange={setSelectedPackagingId}
         />
       </div>
       <div className={activeTab === TABS[1] ? "block w-full" : "hidden"}>
-        <BatchDetails ref={batchRef} />
+        {/* Remounted per package so the batch picker resets with its own list.
+            A new package has no saved batches, so the batch is new too. */}
+        {selectedPackagingId ? (
+          <BatchDetails
+            key={selectedPackagingId}
+            ref={batchRef}
+            mode="existing"
+            batches={selectedPackage?.batches ?? []}
+          />
+        ) : (
+          <BatchDetails key="new-package" ref={batchRef} />
+        )}
       </div>
 
       <div className="mt-4 flex w-full items-center justify-between border-t border-gray-100 pb-8 pt-4">

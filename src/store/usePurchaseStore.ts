@@ -12,7 +12,8 @@ export interface PurchaseDetail {
   variant?: string;
   mrp?: number;
   freeQty: string | number;
-  freeQtyUnit: number;
+  /** Unit name, e.g. "BOX" — the backend column is a varchar. */
+  freeQtyUnit: string;
   purchaseQuantity: number;
   grossAmount: number;
   gst: number;

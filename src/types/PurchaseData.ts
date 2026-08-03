@@ -25,7 +25,7 @@ export interface PurchaseDetailsData {
   packagingId?: number;
   packagingName?: string;
   purchaseQuantity: number;
-  freeUnit?: number;
+  freeUnit?: string;
   freeQuantity?: number;
   grossAmount: number;
   gst: number;

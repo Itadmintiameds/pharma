@@ -20,6 +20,12 @@ export interface PackagingDetailsProps {
   mode?: 'new' | 'existing';
   /** Packages already on the product. Only read when mode is "existing". */
   packages?: ProductPackageDetails[];
+  /**
+   * Fires with the chosen packagingId, or null for "Add New Package". The
+   * parent needs this reactively to drive the batch picker; getFormData() is
+   * only readable on demand.
+   */
+  onPackageChange?: (packagingId: string | null) => void;
 }
 
 /** Dropdown label for an existing package, e.g. "1X10 Box". */
@@ -29,7 +35,7 @@ export const packageLabel = (pkg: ProductPackageDetails) =>
 const ADD_NEW_PACKAGE = 'ADD_NEW';
 
 const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>((
-  { mode = 'new', packages = [] },
+  { mode = 'new', packages = [], onPackageChange },
   ref
 ) => {
   const [purchaseUnit, setPurchaseUnit] = useState('');
@@ -66,6 +72,8 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
       setEachStripContains('');
       setSmallestUnit('');
     }
+
+    onPackageChange?.(pkg ? pkg.packagingId : null);
   };
 
   const validateField = (value: string) => {
