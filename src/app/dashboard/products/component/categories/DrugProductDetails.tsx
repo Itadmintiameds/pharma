@@ -126,11 +126,19 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         gst: 'GST is required',
       });
 
-      // Molecule rows are keyed by row id, so validate them individually
-      // instead of relying on the array path Zod reports.
-      delete nextErrors.molecules;
+      // Molecules are optional: an untouched row is ignored, but a half-filled
+      // one still has to be completed.
       formData.molecules.forEach((mol) => {
-        nextErrors[`mol_${mol.id}_name`] = mol.name ? '' : 'Molecule is required';
+        const hasName = !!mol.name;
+        const hasStrength = mol.strength.trim() !== '';
+
+        if (!hasName && !hasStrength) {
+          nextErrors[`mol_${mol.id}_name`] = '';
+          nextErrors[`mol_${mol.id}_strength`] = '';
+          return;
+        }
+
+        nextErrors[`mol_${mol.id}_name`] = hasName ? '' : 'Molecule is required';
 
         const strength = MoleculeSchema.pick({ strength: true }).safeParse({ strength: mol.strength });
         nextErrors[`mol_${mol.id}_strength`] = strength.success ? '' : strength.error.issues[0].message;
@@ -164,11 +172,10 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
       {formData.molecules.map((mol, index) => (
         <React.Fragment key={mol.id}>
-          <Dropdown 
-            label="Molecule" 
+          <Dropdown
+            label="Molecule"
             searchable
-            required 
-            placeholder="Select Molecule" 
+            placeholder="Select Molecule"
             options={moleculeOptions} 
             value={mol.name} 
             onChange={(val) => updateMolecule(mol.id, 'name', val)} 
@@ -176,10 +183,9 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           />
           <div className="flex items-end gap-2 w-full">
             <div className="flex-1">
-              <Input 
-                label="Molecule Strength" 
-                required 
-                placeholder="e.g. 500mg, 10mg/ml" 
+              <Input
+                label="Molecule Strength"
+                placeholder="e.g. 500mg, 10mg/ml"
                 value={mol.strength} 
                 onChange={(e) => updateMolecule(mol.id, 'strength', e.target.value)} 
                 error={errors[`mol_${mol.id}_strength`]}
@@ -210,10 +216,9 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         </React.Fragment>
       ))}
 
-      <Input 
-        label="Drug Schedule" 
-        required 
-        placeholder="Auto-generated" 
+      <Input
+        label="Drug Schedule"
+        placeholder="Auto-generated"
         value={finalDrugSchedule}
         readOnly
         disabled

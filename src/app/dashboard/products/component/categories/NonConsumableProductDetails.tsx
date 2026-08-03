@@ -100,7 +100,6 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
     validate: () => {
       const nextErrors = collectErrors(NonConsumableProductSchema, formData, {
         deviceCategory: 'Device Category is required',
-        deviceSubCategory: 'Device Sub - Category is required',
       });
 
       setErrors(nextErrors);
@@ -128,7 +127,6 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
       
       <Dropdown
         label="Device Sub - Category"
-        required
         placeholder="Select Sub Category"
         options={deviceSubCategoryOptions}
         value={formData.deviceSubCategory}
@@ -137,7 +135,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         error={errors.deviceSubCategory}
       />
       
-      <Input label="Model Name" required placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} maxLength={60} />
+      <Input label="Model Name" placeholder="Enter Model Name" value={formData.modelName} onChange={(e) => handleChange('modelName', e.target.value)} error={errors.modelName} maxLength={60} />
       
       <Dropdown
         label="Device Classification (Class A/B/C/D)"
@@ -154,8 +152,8 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
         error={errors.deviceClassification}
       />
       
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
-      <Input label="Technical Dimensions / Capacity / Configuration" required placeholder="Enter Dimension/Capacity" value={formData.technicalDimensions} onChange={(e) => handleChange('technicalDimensions', e.target.value)} error={errors.technicalDimensions} maxLength={30} />
+      <Input label="Intended Use / Purpose" placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
+      <Input label="Technical Dimensions / Capacity / Configuration" placeholder="Enter Dimension/Capacity" value={formData.technicalDimensions} onChange={(e) => handleChange('technicalDimensions', e.target.value)} error={errors.technicalDimensions} maxLength={30} />
       <Dropdown
         label="Material / Build Type"
         placeholder="Select Material/Build Type"

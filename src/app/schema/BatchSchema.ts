@@ -30,8 +30,9 @@ export const BatchSchema = z.object({
     .max(20, "Cannot exceed 20 characters")
     .regex(/^[a-zA-Z0-9]+$/, "Must be alphanumeric only"),
   
-  manufacturingDate: z.string().min(1, "Manufacturing Date is required")
-    .refine(value => asDate(value) !== null, "Enter a valid date")
+  // Optional, but must be a sane past date once entered.
+  manufacturingDate: z.string()
+    .refine(value => value === '' || asDate(value) !== null, "Enter a valid date")
     .refine(value => {
       const date = asDate(value);
       return date ? date <= today() : true;
@@ -50,8 +51,9 @@ export const BatchSchema = z.object({
   
   purchaseUnit: z.string().min(1, "Purchase Unit is required"),
   purchaseQuantity: z.coerce.number().min(0, "Must be positive number"),
-  freeUnit: z.string().min(1, "Free Unit is required"),
-  freeQuantity: z.coerce.number().min(0, "Must be positive number"),
+  // Free goods are optional; a blank quantity coerces to 0.
+  freeUnit: z.string(),
+  freeQuantity: z.coerce.number().min(0, "Cannot be negative"),
   
   purchasePricePerBox: z.coerce.number().min(0, "Must be positive number"),
   mrpPerBox: z.coerce.number().min(0, "Must be positive number"),

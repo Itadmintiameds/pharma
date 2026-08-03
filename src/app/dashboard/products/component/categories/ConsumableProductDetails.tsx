@@ -89,9 +89,9 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     validate: () => {
       const nextErrors = collectErrors(ConsumableProductSchema, formData, {
         deviceCategory: 'Device Category is required',
-        deviceSubCategory: 'Device Sub - Category is required',
         sterile: 'Sterility Classification is required',
         disposable: 'Usage Type is required',
+        isIsoCertified: 'ISO Certification is required',
       });
 
       setErrors(nextErrors);
@@ -119,7 +119,6 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Device Sub - Category"
-        required
         placeholder="Select Sub Category"
         options={deviceSubCategoryOptions}
         value={formData.deviceSubCategory}
@@ -171,12 +170,13 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         {errors.disposable && <p className="text-p2 text-warning-500">{errors.disposable}</p>}
       </div>
       
-      <Input label="Intended Use / Purpose" required placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
+      <Input label="Intended Use / Purpose" placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
       <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} maxLength={60} />
-      <Input label="Manufacturer Licence Number" required placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} error={errors.manufacturerLicenseNumber} maxLength={30} />
+      <Input label="Manufacturer Licence Number" placeholder="Enter Licence Number" value={formData.manufacturerLicenseNumber} onChange={(e) => handleChange('manufacturerLicenseNumber', e.target.value)} error={errors.manufacturerLicenseNumber} maxLength={30} />
 
       <Dropdown
         label="Is ISO Certified?"
+        required
         placeholder="Select"
         options={[
           { label: 'Yes', value: 'Yes' },
@@ -184,6 +184,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         ]}
         value={formData.isIsoCertified}
         onChange={(val) => handleChange('isIsoCertified', val)}
+        error={errors.isIsoCertified}
       />
 
       <Dropdown

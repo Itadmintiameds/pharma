@@ -114,36 +114,28 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
   const selectedProductTypeName = productTypeOptions.find(opt => opt.value === formData.productType)?.label;
 
+  // Skin / hair type are optional, but only shown where they make sense.
   let showSkinType = false;
-  let skinTypeRequired = false;
   let showHairType = false;
-  let hairTypeRequired = false;
 
   if (selectedProductTypeName) {
     switch (selectedProductTypeName) {
       case 'Hair Care':
         showHairType = true;
-        hairTypeRequired = true;
         break;
       case 'Skin Care (Face)':
       case 'Body Care':
       case 'Lip Care':
       case 'Eye Care':
-        showSkinType = true;
-        skinTypeRequired = true;
-        break;
       case 'Personal Hygiene':
       case 'Makeup / Color Cosmetics':
         showSkinType = true;
-        skinTypeRequired = false;
         break;
       case 'Fragrance':
         break;
       case "Men's Grooming":
         showSkinType = true;
-        skinTypeRequired = false;
         showHairType = true;
-        hairTypeRequired = false;
         break;
     }
   }
@@ -153,15 +145,9 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     validate: () => {
       const nextErrors = collectErrors(CosmeticProductSchema, formData, {
         productType: 'Product Type is required',
-        productSubType: 'Product Sub Type is required',
-        productForm: 'Product Form is required',
-        intendedUseArea: 'Intended Use Area is required',
         ageGroup: 'Age Group is required',
         gender: 'Gender is required',
         netQuantityUnit: 'Net Quantity Unit is required',
-        // Skin / hair type are only mandatory for certain product types.
-        ...(skinTypeRequired ? { skinType: 'Skin Type is required' } : {}),
-        ...(hairTypeRequired ? { hairType: 'Hair Type is required' } : {}),
       });
 
       setErrors(nextErrors);
@@ -207,7 +193,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Product Sub Type"
-        required
         placeholder="Select Product Sub Type"
         options={productSubTypeOptions}
         value={formData.productSubType}
@@ -218,7 +203,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Product Form"
-        required
         placeholder="Select Product Form"
         options={productFormOptions}
         value={formData.productForm}
@@ -237,7 +221,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Intended Use Area"
-        required
         placeholder="Select Intended Use Area"
         options={intendedUseAreaOptions}
         value={formData.intendedUseArea}
@@ -248,7 +231,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       {showSkinType && (
         <Dropdown
           label="Skin Type"
-          required={skinTypeRequired}
           placeholder="Select Skin Type"
           options={skinTypeOptions}
           value={formData.skinType}
@@ -260,7 +242,6 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       {showHairType && (
         <Dropdown
           label="Hair Type"
-          required={hairTypeRequired}
           placeholder="Select Hair Type"
           options={hairTypeOptions}
           value={formData.hairType}
@@ -320,7 +301,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             />
           </div>
           <div className={`relative w-[140px] shrink-0 border rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer ${
-            errors.netQuantity ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
+            errors.netQuantity || errors.netQuantityUnit ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
           }`}>
             <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
@@ -338,7 +319,9 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             </select>
           </div>
         </div>
-        {errors.netQuantity && <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity}</p>}
+        {(errors.netQuantity || errors.netQuantityUnit) && (
+          <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity || errors.netQuantityUnit}</p>
+        )}
       </div>
 
       <Input 

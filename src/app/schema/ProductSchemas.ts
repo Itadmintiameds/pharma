@@ -27,9 +27,12 @@ export const MoleculeSchema = z.object({
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces")
 });
 
-export const DrugProductSchema = CommonProductSchema.extend({
-  molecules: z.array(MoleculeSchema).min(1, "At least one molecule is required"),
-});
+/**
+ * Molecules are optional, so they are not part of the schema — the component
+ * validates each row individually with MoleculeSchema, and only rows the user
+ * actually started filling in.
+ */
+export const DrugProductSchema = CommonProductSchema;
 
 export const SupplementProductSchema = CommonProductSchema.extend({
   strength: z.string()
@@ -44,8 +47,12 @@ export const SupplementProductSchema = CommonProductSchema.extend({
     .max(60, "Cannot exceed 60 characters")
     .regex(/^[a-zA-Z0-9\s]*$/, "Must be alphanumeric")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
+  // Optional: only checked once something has been typed.
   fssaiLicense: z.string()
-    .regex(/^[123]\d{13}$/, "Must be exactly 14 digits starting with 1, 2, or 3")
+    .refine(
+      val => val === '' || /^[123]\d{13}$/.test(val),
+      "Must be exactly 14 digits starting with 1, 2, or 3"
+    )
 });
 
 export const CosmeticProductSchema = CommonProductSchema.extend({
@@ -86,32 +93,31 @@ export const ConsumableProductSchema = CommonProductSchema.extend({
     .max(20, "Cannot exceed 20 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces")
     .optional(),
+  // Optional, but still length-checked once filled in.
   intendedUse: z.string()
-    .min(10, "Minimum 10 characters required")
     .max(100, "Cannot exceed 100 characters")
+    .refine(val => val === '' || val.length >= 10, "Minimum 10 characters required")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   manufacturerName: z.string()
     .min(1, "Manufacturer Name is required")
     .max(60, "Cannot exceed 60 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   manufacturerLicenseNumber: z.string()
-    .min(1, "Manufacturer Licence Number is required")
     .max(30, "Cannot exceed 30 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
 });
 
 export const NonConsumableProductSchema = CommonProductSchema.extend({
+  // Optional, but still length-checked once filled in.
   modelName: z.string()
-    .min(1, "Model Name is required")
     .max(60, "Cannot exceed 60 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   deviceClassification: z.string().min(1, "Device Classification is required"),
   intendedUse: z.string()
-    .min(10, "Minimum 10 characters required")
     .max(100, "Cannot exceed 100 characters")
+    .refine(val => val === '' || val.length >= 10, "Minimum 10 characters required")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   technicalDimensions: z.string()
-    .min(1, "Technical Dimensions are required")
     .max(30, "Cannot exceed 30 characters")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
   warrantyPeriod: z.string()

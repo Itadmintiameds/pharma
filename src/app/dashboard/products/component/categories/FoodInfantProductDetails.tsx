@@ -97,8 +97,6 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     validate: () => {
       const nextErrors = collectErrors(FoodInfantProductSchema, formData, {
         productCategory: 'Product Category is required',
-        productSubCategory: 'Product Sub Category is required',
-        productForm: 'Product Form is required',
         ageGroup: 'Age Group is required',
         netQuantityUnit: 'Net Quantity Unit is required',
       });
@@ -146,7 +144,6 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Product Sub Category"
-        required
         placeholder="Select Sub Category"
         options={productSubCategoryOptions}
         value={formData.productSubCategory}
@@ -164,7 +161,6 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Product Form"
-        required
         placeholder="Select Product Form"
         options={productFormOptions}
         value={formData.productForm}
@@ -198,7 +194,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             />
           </div>
           <div className={`relative w-[140px] shrink-0 border rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer ${
-            errors.netQuantity ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
+            errors.netQuantity || errors.netQuantityUnit ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
           }`}>
             <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
@@ -216,7 +212,9 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             </select>
           </div>
         </div>
-        {errors.netQuantity && <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity}</p>}
+        {(errors.netQuantity || errors.netQuantityUnit) && (
+          <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity || errors.netQuantityUnit}</p>
+        )}
       </div>
 
       <Input 

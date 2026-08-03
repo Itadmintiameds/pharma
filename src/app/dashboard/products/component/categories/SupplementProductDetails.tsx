@@ -102,9 +102,6 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     getFormData: () => formData,
     validate: () => {
       const nextErrors = collectErrors(SupplementProductSchema, formData, {
-        therapeuticCategory: 'Therapeutic Category is required',
-        therapeuticSubcategory: 'Therapeutic Subcategory is required',
-        flavor: 'Flavor is required',
         dosageForm: 'Dosage Form is required',
         ageGroup: 'Age Group is required',
         netQuantityUnit: 'Net Quantity Unit is required',
@@ -131,7 +128,6 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Therapeutic Category"
-        required
         placeholder="Select Category"
         options={therapeuticCategoryOptions}
         value={formData.therapeuticCategory}
@@ -143,7 +139,6 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
       <Dropdown
         label="Therapeutic Subcategory"
-        required
         placeholder="Select Subcategory"
         options={therapeuticSubcategoryOptions}
         value={formData.therapeuticSubcategory}
@@ -162,7 +157,6 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
       <Dropdown
         label="Flavor"
-        required
         placeholder="Select Flavor"
         options={flavorOptions}
         value={formData.flavor}
@@ -204,7 +198,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             />
           </div>
           <div className={`relative w-[140px] shrink-0 border rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer ${
-            errors.netQuantity ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
+            errors.netQuantity || errors.netQuantityUnit ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
           }`}>
             <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">{selectedUnitLabel}</span>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
@@ -222,7 +216,9 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             </select>
           </div>
         </div>
-        {errors.netQuantity && <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity}</p>}
+        {(errors.netQuantity || errors.netQuantityUnit) && (
+          <p className="mt-1 text-p2 text-warning-500">{errors.netQuantity || errors.netQuantityUnit}</p>
+        )}
       </div>
 
       <Dropdown
@@ -258,9 +254,8 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         maxLength={60}
       />
       <Input 
-        label="FSSAI License number" 
-        required 
-        placeholder="Enter License Number" 
+        label="FSSAI License number"
+        placeholder="Enter License Number"
         value={formData.fssaiLicense} 
         onChange={(e) => handleChange('fssaiLicense', e.target.value)} 
         error={errors.fssaiLicense}

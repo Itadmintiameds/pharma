@@ -81,15 +81,15 @@ const buildDrugAttributes = (data: any) => ({
 const buildSupplementAttributes = (data: any) => ({
   productAttributeSupplements: [
     {
-      therapeuticCategoryId: Number(data?.therapeuticCategory || 0),
-      therapeuticSubcategoryId: Number(data?.therapeuticSubcategory || 0),
-      flavourId: Number(data?.flavor || 0),
-      dosageFormId: Number(data?.dosageForm || 0),
+      therapeuticCategoryId: toId(data?.therapeuticCategory),
+      therapeuticSubcategoryId: toId(data?.therapeuticSubcategory),
+      flavourId: toId(data?.flavor),
+      dosageFormId: toId(data?.dosageForm),
       // Backend takes a single age group here, unlike the other categories.
-      ageGroupId: toIdList(data?.ageGroup)[0] || 0,
+      ageGroupId: toIdList(data?.ageGroup)[0] ?? null,
       strengthComposition: data?.strength || "",
       netQuantity: toNumber(data?.netQuantity),
-      netQuantityUnitId: Number(data?.netQuantityUnit || 0),
+      netQuantityUnitId: toId(data?.netQuantityUnit),
       gender: data?.gender ? toEnum(data.gender) : "UNISEX",
       manufacturerName: data?.manufacturerName || "",
       fssaiLicenseNumber: data?.fssaiLicense || "",
@@ -100,13 +100,13 @@ const buildSupplementAttributes = (data: any) => ({
 const buildFoodInfantAttributes = (data: any) => ({
   productAttributeFoodInfants: [
     {
-      productTypeId: Number(data?.productCategory || 0),
-      productSubTypeId: Number(data?.productSubCategory || 0),
-      productFormId: Number(data?.productForm || 0),
+      productTypeId: toId(data?.productCategory),
+      productSubTypeId: toId(data?.productSubCategory),
+      productFormId: toId(data?.productForm),
       variantName: data?.variantName || "",
       ageGroupIds: toIdList(data?.ageGroup),
       netQuantity: toNumber(data?.netQuantity),
-      netQuantityUnitId: Number(data?.netQuantityUnit || 0),
+      netQuantityUnitId: toId(data?.netQuantityUnit),
       manufacturerName: data?.manufacturerName || "",
     },
   ],

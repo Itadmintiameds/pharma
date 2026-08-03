@@ -136,7 +136,10 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     });
   };
 
-  /** Only the three purchase fields are user-supplied for a saved batch. */
+  /**
+   * For a saved batch only the purchase fields are user-supplied, and of those
+   * just the quantity is mandatory — free goods are optional.
+   */
   const validatePurchaseFields = (): Record<string, string> => {
     const next: Record<string, string> = {};
 
@@ -146,13 +149,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       next.purchaseQuantity = 'Must be greater than 0';
     }
 
-    if (!formData.freeUnit) {
-      next.freeUnit = 'Free Unit is required';
-    }
-
-    if (String(formData.freeQuantity).trim() === '') {
-      next.freeQuantity = 'Free Quantity is required';
-    } else if (Number(formData.freeQuantity) < 0) {
+    if (String(formData.freeQuantity).trim() !== '' && Number(formData.freeQuantity) < 0) {
       next.freeQuantity = 'Cannot be negative';
     }
 
@@ -183,15 +180,12 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       const nextErrors = collectErrors(BatchSchema, formData, {
         purchaseUnit: 'Purchase Unit is required',
         purchaseQuantity: 'Purchase Quantity is required',
-        freeUnit: 'Free Unit is required',
-        freeQuantity: 'Free Quantity is required',
         purchasePricePerBox: 'Purchase Price (per Box) is required',
         mrpPerBox: 'MRP (per Box) is required',
         sellingPricePerBox: 'Selling Price (per Box) is required',
         purchasePricePerSmallestUnit: 'Purchase Price (per Smallest Unit) is required',
         mrpPerSmallestUnit: 'MRP (per Smallest Unit) is required',
         sellingPricePerSmallestUnit: 'Selling Price (per Smallest Unit) is required',
-        rackLocation: 'Rack / Location is required',
       });
 
       setErrors(nextErrors);
@@ -259,7 +253,6 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             <Input
               label="Manufacturing Date"
               type={isLocked ? 'text' : 'date'}
-              required={!isLocked}
               placeholder="Enter Manufacturing Date"
               leftIcon={<CalendarIcon />}
               value={formData.manufacturingDate}
@@ -310,7 +303,6 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             />
             <Dropdown
               label="Free Unit"
-              required
               placeholder="Select Unit"
               options={UNIT_OPTIONS}
               value={formData.freeUnit}
@@ -320,7 +312,6 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             />
             <Input
               label="Free Quantity"
-              required
               type="number"
               placeholder="0"
               value={formData.freeQuantity}
@@ -393,7 +384,6 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
 
             <Input
               label="Rack / Location"
-              required={!isLocked}
               placeholder="Enter Rack / Location"
               value={formData.rackLocation}
               onChange={(e) => handleChange('rackLocation', e.target.value)}
