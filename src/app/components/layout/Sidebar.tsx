@@ -156,21 +156,9 @@ const Sidebar = () => {
   ];
 
   return (
-    <aside className="w-[244px] h-screen bg-secondary-900 text-white px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
-      {/* Top Section: Logo & Navigation */}
+    <aside className="w-[244px] h-full bg-secondary-600 text-pneutral-50 px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
+      {/* Top Section: Navigation */}
       <div className="flex flex-col gap-8">
-        {/* Logo Container */}
-        <div className="w-[204px] h-[75px] px-2 py-1 rounded-[52px] flex items-center justify-center select-none">
-          <Image
-            src="/Logo/tiameds logo.svg"
-            alt="TiaMeds Logo"
-            width={176}
-            height={75}
-            className="w-full h-full object-contain"
-            priority
-          />
-        </div>
-
         {/* Navigation Menu */}
         <nav className="w-[204px] flex flex-col gap-[8px]">
           {navGroups.map((group) => (
@@ -198,10 +186,10 @@ const Sidebar = () => {
                     }}
                     className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
                       isActive
-                        ? "bg-secondary-200 text-secondary-900 shadow-sm font-semibold"
+                        ? "bg-secondary-50 text-pneutral-800 shadow-sm font-semibold"
                         : item.isLocked
                           ? "text-pneutral-50 cursor-not-allowed"
-                          : "text-pneutral-50 hover:bg-secondary-800 hover:text-white cursor-pointer"
+                          : "text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer"
                     }`}
                   >
                     <Icon size={18} className="shrink-0" />

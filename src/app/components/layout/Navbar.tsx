@@ -2,23 +2,17 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { getUserOrganization } from "@/services/SetupBusinessService";
+import { getById } from "@/services/UserManagementService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 
 interface NavbarProps {
-  hospitalName?: string;
   userRole?: string;
 }
 
-const Navbar = ({
-  hospitalName: initialHospitalName,
-  userRole = "Super Admin",
-}: NavbarProps) => {
+const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [hospitalName, setHospitalName] = useState(
-    initialHospitalName || "ABC Hospital",
-  );
+  const [fullName, setFullName] = useState("");
 
   const { pharmacies, selectedPharmacy, selectPharmacy, loading } =
     usePharmacyStore();
@@ -33,18 +27,24 @@ const Navbar = ({
   );
 
   useEffect(() => {
-    const fetchOrg = async () => {
+    const fetchUser = async () => {
       try {
-        const org = await getUserOrganization();
-        if (org?.organizationName) {
-          setHospitalName(org.organizationName);
+        const userRes = await fetch("/api/user-info");
+        if (!userRes.ok) return;
+
+        const { userId } = await userRes.json();
+        if (!userId) return;
+
+        const user = await getById(userId);
+        if (user?.fullName) {
+          setFullName(user.fullName);
         }
       } catch (error) {
-        console.error("Failed to fetch organization for Navbar", error);
+        console.error("Failed to fetch user for Navbar", error);
       }
     };
 
-    fetchOrg();
+    fetchUser();
   }, []);
 
   return (
@@ -52,20 +52,31 @@ const Navbar = ({
       className="w-full h-[61.5px] bg-white border-b border-pneutral-100 flex items-center justify-between px-6 shrink-0"
       style={{ fontFamily: '"Inter", sans-serif' }}
     >
-      <div className="flex flex-col gap-1 select-none">
-        <h1
-          className="text-[13px] font-semibold leading-none"
-          style={{ color: "#3C3D3A" }}
-        >
-          Welcome, {hospitalName}
-        </h1>
+      <div className="flex items-center gap-4 select-none">
+        <Image
+          src="/Logo/tiameds logo.svg"
+          alt="TiaMeds Logo"
+          width={108}
+          height={34}
+          className="object-contain"
+          priority
+        />
 
-        <p
-          className="text-[11.5px] font-normal leading-none"
-          style={{ color: "#969793" }}
-        >
-          {userRole}
-        </p>
+        <div className="flex flex-col gap-1 ml-26">
+          <h1
+            className="text-[13px] font-semibold leading-none font-noto-sans"
+            style={{ color: "#3C3D3A" }}
+          >
+            Welcome, {fullName}
+          </h1>
+
+          <p
+            className="text-[11.5px] font-normal leading-none"
+            style={{ color: "#969793" }}
+          >
+            {userRole}
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">

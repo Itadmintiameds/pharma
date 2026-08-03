@@ -8,6 +8,8 @@ import Button from "@/app/components/common/Button";
 import { register, sendEmailOtp, verifyEmailOtp } from "@/services/AuthService";
 import { useRouter } from "next/navigation";
 import { showToast } from "@/app/components/common/Toast";
+import { Eye, EyeOff } from "lucide-react";
+import { fullNameSchema } from "@/app/schema/AuthSchema";
 
 const page = () => {
   const router = useRouter();
@@ -21,6 +23,8 @@ const page = () => {
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [showOtp, setShowOtp] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [fullNameError, setFullNameError] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -97,10 +101,18 @@ const page = () => {
 
   const handleSubmit = async () => {
     let hasError = false;
+    setFullNameError("");
     setEmailError("");
     setPasswordError("");
     setConfirmPasswordError("");
     setTermsError("");
+
+    // Full name validation
+    const fullNameResult = fullNameSchema.safeParse(fullName);
+    if (!fullNameResult.success) {
+      setFullNameError(fullNameResult.error.issues[0].message);
+      hasError = true;
+    }
 
     // Email validation
     if (!userEmail.trim()) {
@@ -144,6 +156,7 @@ const page = () => {
 
     try {
       const payload = {
+        fullName,
         userEmail,
         password,
       };
@@ -159,6 +172,15 @@ const page = () => {
         showToast.error("Invalid Credentials");
       }
     }
+  };
+
+  const handleFullNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    setFullName(value);
+
+    const result = fullNameSchema.safeParse(value);
+    setFullNameError(result.success ? "" : result.error.issues[0].message);
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -278,15 +300,14 @@ const page = () => {
         <div className="px-10 py-6 w-137.5 bg-secondary-50 flex flex-col">
           <div className="flex gap-3">
             <Image
-              src="/Login&RegistrationIcons/PharmaIcon.svg"
+              src="/TiamedsLogo.svg"
               alt="Login"
-              width={28}
-              height={28}
+              width={126}
+              height={43}
             />
-            <div className="text-[#6C5CE7] font-bold text-lg">TiaMeds</div>
           </div>
 
-          <div className="mt-2 flex flex-col gap-5">
+          <div className="mt-4 flex flex-col gap-5">
             <div className="font-semibold text-h4 text-[#1A1F3A]">
               One Platform for <br /> Compliance-Driven <br /> Inventory
               Management
@@ -297,7 +318,7 @@ const page = () => {
               TiaMeds Inventory.
             </div>
 
-            <div className="flex flex-col font-noto-sans text-p3 font-medium gap-3.5">
+            <div className="grid grid-cols-4 font-noto-sans text-p3 font-medium gap-3.5">
               <span className="flex items-center gap-3">
                 <Image
                   src="/Login&RegistrationIcons/PharmacyIcon.svg"
@@ -334,7 +355,7 @@ const page = () => {
                 />
                 Doctor
               </span>
-              <span className="flex items-center gap-3">
+              <span className="flex items-center gap-3 whitespace-nowrap">
                 <Image
                   src="/Login&RegistrationIcons/NursingHomeIcon.svg"
                   alt="Login"
@@ -357,7 +378,7 @@ const page = () => {
           </div>
         </div>
 
-        <div className="flex-1 px-14 py-14 flex flex-col gap-7 justify-center">
+        <div className="flex-1 p-36 flex flex-col gap-7 justify-center">
           <div className="flex flex-col gap-2">
             <div className="text-h5 font-semibold">Create Your Account</div>
             <div className="text-p3 font-normal font-noto-sans text-[#4B5563]">
@@ -368,6 +389,25 @@ const page = () => {
           <div className="flex flex-col gap-5">
             <div className="text-p4 font-semibold text-[#6C5CE7] font-noto-sans">
               User Details
+            </div>
+
+            <div className="space-y-2">
+              <Input
+                label="Full Name"
+                placeholder="John Doe"
+                value={fullName}
+                maxLength={50}
+                onChange={handleFullNameChange}
+                error={fullNameError}
+                leftIcon={
+                  <Image
+                    src="/Login&RegistrationIcons/UsernameIcon.svg"
+                    alt="Full Name"
+                    width={20}
+                    height={20}
+                  />
+                }
+              />
             </div>
 
             <div className="space-y-2">
@@ -466,12 +506,19 @@ const page = () => {
                       onClick={() => setShowPassword((prev) => !prev)}
                       className="flex items-center cursor-pointer"
                     >
-                      <Image
-                        src="/Login&RegistrationIcons/PasswordIcon.svg"
-                        alt={showPassword ? "Hide Password" : "Show Password"}
-                        width={20}
-                        height={20}
-                      />
+                      {showPassword ? (
+                        <EyeOff
+                          size={20}
+                          className="text-pneutral-500"
+                          aria-label="Hide Password"
+                        />
+                      ) : (
+                        <Eye
+                          size={20}
+                          className="text-pneutral-500"
+                          aria-label="Show Password"
+                        />
+                      )}
                     </button>
                   }
                 />
@@ -490,16 +537,19 @@ const page = () => {
                       onClick={() => setShowConfirmPassword((prev) => !prev)}
                       className="flex items-center cursor-pointer"
                     >
-                      <Image
-                        src="/Login&RegistrationIcons/PasswordIcon.svg"
-                        alt={
-                          showConfirmPassword
-                            ? "Hide Password"
-                            : "Show Password"
-                        }
-                        width={20}
-                        height={20}
-                      />
+                      {showConfirmPassword ? (
+                        <EyeOff
+                          size={20}
+                          className="text-pneutral-500"
+                          aria-label="Hide Password"
+                        />
+                      ) : (
+                        <Eye
+                          size={20}
+                          className="text-pneutral-500"
+                          aria-label="Show Password"
+                        />
+                      )}
                     </button>
                   }
                 />

@@ -10,18 +10,16 @@ export default function layout({
 }) {
   return (
     <DashboardProvider>
-    <div className="flex h-screen">
-      <Sidebar />
-
-      <div className="flex flex-1 flex-col">
+      <div className="flex h-screen flex-col">
         <Navbar />
 
-        <main className="flex-1 overflow-y-auto p-6 bg-secondary-50">{children}</main>
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar />
+
+          <main className="flex-1 overflow-y-auto p-6 bg-secondary-50">{children}</main>
+        </div>
       </div>
-    </div>
-
     </DashboardProvider>
-
   );
 }
 
