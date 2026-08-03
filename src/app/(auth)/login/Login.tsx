@@ -95,9 +95,10 @@ const Login = ({ onSubmit }: LoginProps) => {
             }
           />
 
-          <span className="text-p2 font-semibold font-noto-sans text-secondary-700 flex justify-end mt-1">
+          <Link href="\forgot-password"
+              className="text-p2 font-semibold font-noto-sans text-secondary-700 flex justify-end mt-1 hover:underline">
             Forgot Password?
-          </span>
+          </Link>
         </div>
 
         <div className="flex items-center gap-3 font-noto-sans">

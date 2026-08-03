@@ -29,12 +29,11 @@ const page = () => {
         <div className="p-14 w-136.75 bg-secondary-50 flex flex-col gap-14">
           <div className="flex gap-3">
             <Image
-              src="/Login&RegistrationIcons/PharmaIcon.svg"
+              src="\Logo\tiameds logo.svg"
               alt="Login"
-              width={28}
-              height={28}
+              width={150}
+              height={75}
             />
-            <div className="text-[#6C5CE7] font-bold text-lg">TiaMeds</div>
           </div>
 
           <div className="flex flex-col gap-3.5">

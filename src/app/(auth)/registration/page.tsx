@@ -278,15 +278,14 @@ const page = () => {
         <div className="px-10 py-6 w-137.5 bg-secondary-50 flex flex-col">
           <div className="flex gap-3">
             <Image
-              src="/Login&RegistrationIcons/PharmaIcon.svg"
+              src="Logo\tiameds logo.svg"
               alt="Login"
-              width={28}
-              height={28}
+              width={150}
+              height={75}
             />
-            <div className="text-[#6C5CE7] font-bold text-lg">TiaMeds</div>
           </div>
 
-          <div className="mt-2 flex flex-col gap-5">
+          <div className="mt-7 flex flex-col gap-5">
             <div className="font-semibold text-h4 text-[#1A1F3A]">
               One Platform for <br /> Compliance-Driven <br /> Inventory
               Management
@@ -297,7 +296,7 @@ const page = () => {
               TiaMeds Inventory.
             </div>
 
-            <div className="flex flex-col font-noto-sans text-p3 font-medium gap-3.5">
+            <div className="flex flex-wrap font-noto-sans text-p3 font-medium gap-3.5">
               <span className="flex items-center gap-3">
                 <Image
                   src="/Login&RegistrationIcons/PharmacyIcon.svg"
@@ -357,17 +356,18 @@ const page = () => {
           </div>
         </div>
 
-        <div className="flex-1 px-14 py-14 flex flex-col gap-7 justify-center">
+        <div className="flex-1 flex items-center justify-center px-10">
+        <form onSubmit={handleSubmit} className="w-full max-w-[430px] flex flex-col gap-7">
           <div className="flex flex-col gap-2">
-            <div className="text-h5 font-semibold">Create Your Account</div>
-            <div className="text-p3 font-normal font-noto-sans text-[#4B5563]">
+            <h1 className="text-h5 font-semibold">Create Your Account</h1>
+            <p className="text-p3 font-normal font-noto-sans text-[#4B5563]">
               Enter your details to register your healthcare entity.
-            </div>
+            </p>
           </div>
 
           <div className="flex flex-col gap-5">
             <div className="text-p4 font-semibold text-[#6C5CE7] font-noto-sans">
-              User Details
+              Healthcare Entity Details
             </div>
 
             <div className="space-y-2">
@@ -455,7 +455,6 @@ const page = () => {
               <div className="flex-1">
                 <Input
                   label="Password"
-                  placeholder="Enter password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={handlePasswordChange}
@@ -533,7 +532,7 @@ const page = () => {
               )}
             </div>
 
-            <Button fullWidth onClick={handleSubmit}>
+            <Button type="submit" fullWidth>
               Register
             </Button>
 
@@ -549,6 +548,7 @@ const page = () => {
               </button>
             </div>
           </div>
+        </form>
         </div>
       </div>
     </>
