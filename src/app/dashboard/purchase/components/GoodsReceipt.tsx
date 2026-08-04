@@ -5,6 +5,7 @@ import AddProducts from "./AddProducts";
 import Input from "@/app/components/common/Input";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import Image from "next/image";
+import { X } from "lucide-react";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { getAllSupplier, createSupplier } from "@/services/SupplierService";
 import { SupplierData } from "@/types/SupplierData";
@@ -175,28 +176,33 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
                 }}
               />
             ) : (
-              <div className="flex flex-col gap-1">
-                <div className="flex justify-between items-center px-1">
-                  <span className="text-[11px] text-secondary-600 font-semibold">New Supplier</span>
-                  <button 
-                    type="button" 
-                    onClick={() => setIsAddingNewSupplier(false)} 
-                    className="text-[11px] text-primary-600 underline hover:text-primary-800 font-medium"
+              /* Same label and no extra rows, so this stays aligned with the
+                 other fields in the grid. The trailing × goes back to the
+                 dropdown. */
+              <Input
+                label="Supplier Name"
+                placeholder="e.g. ABC Pharma Distributor"
+                type="text"
+                name="newSupplierName"
+                id="newSupplierName"
+                value={newSupplierName}
+                onChange={(e) => setNewSupplierName(e.target.value)}
+                required
+                rightIcon={
+                  <button
+                    type="button"
+                    aria-label="Select an existing supplier instead"
+                    title="Select an existing supplier instead"
+                    onClick={() => {
+                      setIsAddingNewSupplier(false);
+                      setNewSupplierName("");
+                    }}
+                    className="flex items-center text-pneutral-500 hover:text-pneutral-900 transition-colors"
                   >
-                    Select Existing
+                    <X size={16} />
                   </button>
-                </div>
-                <Input
-                  label="Enter Supplier Name"
-                  placeholder="e.g. ABC Pharma Distributor"
-                  type="text"
-                  name="newSupplierName"
-                  id="newSupplierName"
-                  value={newSupplierName}
-                  onChange={(e) => setNewSupplierName(e.target.value)}
-                  required
-                />
-              </div>
+                }
+              />
             )}
 
             <Input

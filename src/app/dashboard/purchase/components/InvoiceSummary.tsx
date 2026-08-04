@@ -7,16 +7,23 @@ import ConfirmationPopup from "@/app/components/common/ConfirmationPopup";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import type { PurchaseData } from "@/types/PurchaseData";
 
 interface InvoiceSummaryProps {
   onCancel?: () => void;
   onSubmit?: (discount: number) => Promise<boolean | void> | boolean | void;
   onSuccessGoToPurchase?: () => void;
   mode?: 'create' | 'view' | 'download';
-  data?: any; // To receive data from API easily later
+  data?: any; // Pre-built table rows; wins over anything derived here.
+  /**
+   * A purchase already saved on the server. When given, the header and totals
+   * come from it instead of the in-progress purchase store, so the same layout
+   * renders for view / download from the purchase list.
+   */
+  purchase?: PurchaseData;
 }
 
-const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data }) => {
+const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data, purchase }) => {
   const [currentMode, setCurrentMode] = useState<'create' | 'view' | 'download'>(mode);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [discount, setDiscount] = useState<number>(0);
@@ -25,9 +32,29 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   const store = usePurchaseStore();
   const router = useRouter();
 
-  const grossAmt = store.totalGrossAmount || 0;
-  const gstAmt = store.totalGst || 0;
-  const netAmt = (grossAmt - discount) + gstAmt;
+  // A saved purchase is read-only: its own stored totals and discount win.
+  const isSaved = !!purchase;
+  const grossAmt = Number(purchase?.totalGrossAmount ?? store.totalGrossAmount) || 0;
+  const gstAmt = Number(purchase?.totalGst ?? store.totalGst) || 0;
+  const appliedDiscount = isSaved ? Number(purchase?.totalDiscount || 0) : discount;
+  const netAmt = isSaved
+    ? Number(purchase?.totalNetAmount || 0)
+    : (grossAmt - discount) + gstAmt;
+
+  // Header fields: the saved record if we have one, otherwise the live store.
+  const header = {
+    supplierName:
+      purchase?.supplierName ??
+      store.supplierName ??
+      "",
+    supplierId: purchase?.supplierId ?? store.supplierId,
+    invoiceNo: purchase?.invoiceNo ?? store.invoiceNo,
+    invoiceDate: purchase?.invoiceDate ?? store.invoiceDate,
+    grnNo: purchase?.grnNo ?? store.grnNo,
+    paymentType: purchase?.paymentType ?? store.paymentType,
+    creditDays: purchase?.creditDays ?? store.creditDays,
+    status: purchase?.supplierPaymentStatus ?? store.supplierPaymentStatus,
+  };
 
   // A negative discount would inflate the payable, and one above the gross
   // would make it negative — neither is a valid invoice.
@@ -75,11 +102,36 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     }
   };
 
-  const totalItemsCount = store.purchaseDetails.length || 0;
-  const totalQtyCount = store.purchaseDetails.reduce((acc, i) => acc + i.purchaseQuantity, 0);
+  // Memoised so the `?? []` fallback doesn't hand useMemo a new array each render.
+  const savedLines = useMemo(() => purchase?.purchaseDetails ?? [], [purchase]);
+
+  const totalItemsCount = isSaved ? savedLines.length : store.purchaseDetails.length || 0;
+  const totalQtyCount = isSaved
+    ? savedLines.reduce((acc, i) => acc + Number(i.purchaseQuantity || 0), 0)
+    : store.purchaseDetails.reduce((acc, i) => acc + i.purchaseQuantity, 0);
 
   const tableData = useMemo(() => {
     if (data && Array.isArray(data) && data.length > 0) return data;
+    // A saved purchase carries only the line fields the purchase API returns;
+    // the caller can pass richer rows via `data`.
+    if (savedLines.length > 0) {
+      return savedLines.map((item, idx) => ({
+        id: idx + 1,
+        brand: '—',
+        qty: Number(item.purchaseQuantity || 0),
+        free: Number(item.freeQuantity || 0),
+        variant: item.packagingName || '—',
+        name: item.productName || item.productId,
+        hsn: '—',
+        batch: item.batchNumber || item.batchId,
+        expiry: '—',
+        mrp: 0,
+        value: Number(item.grossAmount || 0),
+        dis: 0,
+        gst: Number(item.gst || 0),
+        amount: Number(item.netAmount || 0)
+      }));
+    }
     if (store.purchaseDetails && store.purchaseDetails.length > 0) {
       return store.purchaseDetails.map((item, idx) => ({
         id: idx + 1,
@@ -99,7 +151,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       }));
     }
     return [];
-  }, [data, store.purchaseDetails]);
+  }, [data, savedLines, store.purchaseDetails]);
 
   const columns = useMemo<ColumnDef<any, any>[]>(() => [
     { accessorKey: 'id', header: '#' },
@@ -132,15 +184,15 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         {/* Inner Box */}
         <div className="w-full h-full px-4 py-3 bg-secondary-50 border border-pneutral-200 rounded-lg flex items-start">
           <div className="flex-1 flex flex-col gap-3 text-[14px]">
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Supplier</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.supplierName || (store.supplierId ? `Supplier #${store.supplierId}` : '-')}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice No</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.invoiceNo || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice Date</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.invoiceDate || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">GRN</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.grnNo || "-"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Supplier</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.supplierName || (header.supplierId ? `Supplier #${header.supplierId}` : '-')}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice No</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.invoiceNo || "-"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice Date</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.invoiceDate || "-"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">GRN</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.grnNo || "-"}</span></div>
           </div>
           <div className="flex-1 flex flex-col gap-3 text-[14px]">
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Payment Type</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.paymentType || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Credit Days</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.creditDays ? `${store.creditDays} Days` : "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Status</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{store.supplierPaymentStatus || "PENDING"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Payment Type</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.paymentType || "-"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Credit Days</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.creditDays ? `${header.creditDays} Days` : "-"}</span></div>
+            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Status</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.status || "PENDING"}</span></div>
           </div>
         </div>
       </div>
@@ -172,7 +224,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
           <div className="w-full bg-white border border-pneutral-200 rounded-lg p-3 flex gap-4 text-[13px] items-center justify-between">
             <div className="flex flex-col gap-1">
               <span className="text-pneutral-600">Taxable</span>
-              <span className="font-semibold text-pneutral-900">₹ {(grossAmt - discount).toFixed(2)}</span>
+              <span className="font-semibold text-pneutral-900">₹ {(grossAmt - appliedDiscount).toFixed(2)}</span>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-pneutral-600">CGST Amt</span>
@@ -246,7 +298,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
                   placeholder="0.00"
                 />
               ) : (
-                <span className="font-medium text-[14px] text-pneutral-900">₹ {discount.toFixed(2)}</span>
+                <span className="font-medium text-[14px] text-pneutral-900">₹ {appliedDiscount.toFixed(2)}</span>
               )}
             </div>
             {discountError && (
@@ -255,7 +307,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
           </div>
           <div className="flex justify-between items-center">
             <span className="text-pneutral-600 text-[14px]">Taxable Amt</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ {(grossAmt - discount).toFixed(2)}</span>
+            <span className="font-semibold text-[14px] text-pneutral-900">₹ {(grossAmt - appliedDiscount).toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-pneutral-600 text-[14px]">SGST AMT</span>

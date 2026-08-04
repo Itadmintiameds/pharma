@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import GoodsReceipt from "./components/GoodsReceipt";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import SearchInput from "@/app/components/common/SearchInput";
@@ -11,8 +11,91 @@ import DataTable from "@/app/components/common/table/DataTable";
 import { PurchaseData } from "@/types/PurchaseData";
 import { getAllPurchases } from "@/services/PurchaseServiceNew";
 import { getSupplierById } from "@/services/SupplierService";
+import { getProductDetails } from "@/services/InventoryService";
+import type { ProductDetails } from "@/types/ProductData";
+import InvoiceSummary from "./components/InvoiceSummary";
+import OffscreenPortal from "@/app/components/common/OffscreenPortal";
+import { downloadElementAsPdf } from "@/utils/downloadPdf";
+import toast from "react-hot-toast";
 
-export const columns: ColumnDef<PurchaseData>[] = [
+/** One row of the tax-invoice table. */
+interface InvoiceLine {
+  id: number;
+  brand: string;
+  qty: number;
+  free: number;
+  variant: string;
+  name: string;
+  hsn: string;
+  batch: string;
+  expiry: string;
+  mrp: number;
+  value: number;
+  dis: number;
+  gst: number;
+  amount: number;
+}
+
+/**
+ * The purchase API returns only ids and amounts per line, so brand / variant /
+ * HSN / expiry / MRP are pulled from each product's details. One call per
+ * distinct product, and any failure just leaves those cells blank.
+ */
+const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]> => {
+  const lines = purchase.purchaseDetails ?? [];
+  const productIds = Array.from(
+    new Set(lines.map((line) => line.productId).filter(Boolean))
+  );
+
+  const products = new Map<string, ProductDetails>();
+  await Promise.all(
+    productIds.map(async (productId) => {
+      try {
+        products.set(productId, await getProductDetails(productId));
+      } catch (err) {
+        console.error(`Could not load product ${productId} for the invoice`, err);
+      }
+    })
+  );
+
+  return lines.map((line, index) => {
+    const product = products.get(line.productId);
+    const batches = [
+      ...(product?.packages?.flatMap((pkg) => pkg.batches ?? []) ?? []),
+      ...(product?.unassignedBatches ?? []),
+    ];
+    const batch = batches.find((b) => b.batchId === line.batchId);
+    const pkg = product?.packages?.find(
+      (p) => p.packagingId === batch?.packagingId
+    );
+
+    return {
+      id: index + 1,
+      brand: product?.brandName || "—",
+      qty: Number(line.purchaseQuantity || 0),
+      free: Number(line.freeQuantity || 0),
+      variant: pkg ? `1x${pkg.purchaseUnitContains} ${pkg.smallestUnit}` : "—",
+      name: line.productName || line.productId,
+      hsn: product?.hsnNo || "—",
+      batch: line.batchNumber || line.batchId,
+      expiry: batch?.expiryDate || "—",
+      mrp: Number(batch?.mrpPerUnit ?? batch?.mrp ?? 0),
+      value: Number(line.grossAmount || 0),
+      dis: 0,
+      gst: Number(line.gst || 0),
+      amount: Number(line.netAmount || 0),
+    };
+  });
+};
+
+/**
+ * Built as a factory so the Action cell can reach the page's view / download
+ * handlers.
+ */
+export const buildColumns = (
+  onView: (purchase: PurchaseData) => void,
+  onDownload: (purchase: PurchaseData) => void
+): ColumnDef<PurchaseData>[] => [
   {
     header: "#",
     cell: ({ row }) => row.index + 1,
@@ -80,27 +163,51 @@ export const columns: ColumnDef<PurchaseData>[] = [
   {
     header: "Action",
 
-    cell: () => (
-      <div className="flex justify-center gap-5 cursor-pointer">
-        <Image
-          src="/Purchase/ViewIcon.svg"
-          alt="Close"
-          width={25}
-          height={19}
-          className="shrink-0"
-        />
+    cell: ({ row }) => (
+      <div className="flex justify-center gap-5">
+        <button
+          type="button"
+          aria-label="View tax invoice"
+          title="View tax invoice"
+          onClick={() => onView(row.original)}
+          className="cursor-pointer"
+        >
+          <Image
+            src="/Purchase/ViewIcon.svg"
+            alt="View"
+            width={25}
+            height={19}
+            className="shrink-0"
+          />
+        </button>
 
-        <Image
-          src="/Purchase/DownloadIcon.svg"
-          alt="Close"
-          width={25}
-          height={19}
-          className="shrink-0"
-        />
+        <button
+          type="button"
+          aria-label="Download tax invoice"
+          title="Download tax invoice"
+          onClick={() => onDownload(row.original)}
+          className="cursor-pointer"
+        >
+          <Image
+            src="/Purchase/DownloadIcon.svg"
+            alt="Download"
+            width={25}
+            height={19}
+            className="shrink-0"
+          />
+        </button>
       </div>
     ),
   },
 ];
+
+/** What the invoice view/print is currently showing. */
+interface OpenInvoice {
+  purchase: PurchaseData;
+  lines: InvoiceLine[];
+  /** True when opened for download — triggers the browser print dialog. */
+  print: boolean;
+}
 
 const Page = () => {
   const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
@@ -108,6 +215,55 @@ const Page = () => {
   const [purchases, setPurchases] = useState<PurchaseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<OpenInvoice | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+
+  const openInvoice = async (purchase: PurchaseData, print: boolean) => {
+    if (!purchase.purchaseDetails?.length) {
+      toast.error("This purchase has no line items to show.");
+      return;
+    }
+
+    setIsPreparing(true);
+    try {
+      setInvoice({ purchase, lines: await buildInvoiceLines(purchase), print });
+      // For a download the indicator stays up until the PDF has been written.
+      if (!print) setIsPreparing(false);
+    } catch (err) {
+      console.error("Failed to build the tax invoice", err);
+      toast.error("Could not open the tax invoice.");
+      setIsPreparing(false);
+    }
+  };
+
+  /**
+   * Called by OffscreenPortal once the invoice copy is laid out. Captures it to
+   * a PDF, then tears the copy down. The ref guards against a second capture if
+   * the callback identity changes while generation is still running.
+   */
+  const isCapturingRef = useRef(false);
+
+  const handleCaptureReady = useCallback(
+    async (node: HTMLElement) => {
+      if (isCapturingRef.current || !invoice) return;
+      isCapturingRef.current = true;
+
+      const label = invoice.purchase.invoiceNo || invoice.purchase.grnNo || "invoice";
+      const safeLabel = label.replace(/[^a-zA-Z0-9-_]+/g, "-");
+
+      try {
+        await downloadElementAsPdf(node, `tax-invoice-${safeLabel}.pdf`);
+      } catch (err) {
+        console.error("Failed to generate the invoice PDF", err);
+        toast.error("Could not generate the PDF.");
+      } finally {
+        isCapturingRef.current = false;
+        setIsPreparing(false);
+        setInvoice(null);
+      }
+    },
+    [invoice]
+  );
 
   useEffect(() => {
     const fetchPurchases = async () => {
@@ -150,8 +306,32 @@ const Page = () => {
     fetchPurchases();
   }, []);
 
+  // Viewing takes over the page. Downloading leaves the list on screen and
+  // renders an off-screen copy that only the printer sees.
+  if (invoice && !invoice.print) {
+    return (
+      <InvoiceSummary
+        mode="view"
+        purchase={invoice.purchase}
+        data={invoice.lines}
+        onCancel={() => setInvoice(null)}
+        onSuccessGoToPurchase={() => setInvoice(null)}
+      />
+    );
+  }
+
   return (
     <>
+      {invoice?.print && (
+        <OffscreenPortal width={1440} onReady={handleCaptureReady}>
+          <InvoiceSummary
+            mode="download"
+            purchase={invoice.purchase}
+            data={invoice.lines}
+          />
+        </OffscreenPortal>
+      )}
+
       {!showGoodsReceipt ? (
         <>
           <div className="flex flex-col gap-4">
@@ -183,6 +363,13 @@ const Page = () => {
               </div>
             </div>
 
+            {isPreparing && (
+              <div className="text-p3 font-normal text-pneutral-500">
+                Preparing tax invoice…
+              </div>
+            )}
+
+
             <div>
               {loading ? (
                 <div className="text-p3 font-normal text-pneutral-500 py-8 text-center">
@@ -193,7 +380,13 @@ const Page = () => {
                   {error}
                 </div>
               ) : (
-                <DataTable columns={columns} data={purchases} />
+                <DataTable
+                  columns={buildColumns(
+                    (purchase) => openInvoice(purchase, false),
+                    (purchase) => openInvoice(purchase, true)
+                  )}
+                  data={purchases}
+                />
               )}
             </div>
           </div>
