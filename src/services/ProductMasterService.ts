@@ -8,6 +8,15 @@ export const ProductMasterService = {
   // --- Common ---
   getAgeGroups: () => api.get('master/age-groups'),
 
+  /**
+   * Valid purchase-unit / smallest-unit pairs for a category, e.g. a Strip of
+   * Tablets or a Bottle of Syrup (ml). One row per pair, so the purchase-unit
+   * list is the distinct `purchaseUnitName` values and the smallest-unit list is
+   * the rows matching the chosen purchase unit.
+   */
+  getPurchaseSmallestUnits: (productCategoryId: string | number) =>
+    api.get(`master/product-categories/${productCategoryId}/purchase-smallest-units`),
+
   // --- Category: Drug (1) ---
   getMolecules: () => api.get('master/molecules'),
   

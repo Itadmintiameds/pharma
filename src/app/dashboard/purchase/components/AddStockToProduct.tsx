@@ -11,10 +11,11 @@ import BatchDetails, {
   BatchDetailsRef,
 } from "@/app/dashboard/products/component/BatchDetails";
 import { addProductBatches, addProductPackage, getProductDetails } from "@/services/InventoryService";
-import type {
-  NewBatchPayload,
-  ProductBatchDetails,
-  ProductDetails,
+import {
+  packageSmallestUnitName,
+  type NewBatchPayload,
+  type ProductBatchDetails,
+  type ProductDetails,
 } from "@/types/ProductData";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 
@@ -87,6 +88,8 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
   // Which saved package the user picked, so the batch picker can list its
   // batches. null means "Add New Package", where the batch is new by definition.
   const [selectedPackagingId, setSelectedPackagingId] = useState<string | null>(null);
+  // Purchase unit chosen on the packaging step; the batch form shows it read-only.
+  const [packagingPurchaseUnit, setPackagingPurchaseUnit] = useState("");
 
   const packagingRef = useRef<PackagingDetailsRef>(null);
   const batchRef = useRef<BatchDetailsRef>(null);
@@ -193,9 +196,8 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
               { packagingId: existingPackagingId, ...batchPayload },
             ])
           : await addProductPackage(productId, {
-              purchaseUnit: packagingData?.purchaseUnit || "",
               purchaseUnitContains: Number(packagingData?.eachStripContains || 0),
-              smallestUnit: packagingData?.smallestUnit || "",
+              purchaseSmallestUnitId: Number(packagingData?.purchaseSmallestUnitId || 0),
               batches: [batchPayload],
             });
 
@@ -230,7 +232,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
 
       const pkg = updated.packages?.find((p) => p.packagingId === packagingId);
       const variant = pkg
-        ? `1x${pkg.purchaseUnitContains} ${pkg.smallestUnit}`.trim()
+        ? `1x${pkg.purchaseUnitContains} ${packageSmallestUnitName(pkg)}`.trim()
         : `1x${packagingData?.eachStripContains || 1} ${packagingData?.smallestUnit || ""}`.trim();
 
       // Stock and free quantities aren't part of the batch master — they ride
@@ -299,7 +301,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
   }
 
   const headerVariant = details.packages?.[0]
-    ? `${details.packages[0].purchaseUnitContains}x${details.packages[0].smallestUnit}`
+    ? `${details.packages[0].purchaseUnitContains}x${packageSmallestUnitName(details.packages[0])}`
     : "";
 
   return (
@@ -362,8 +364,10 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         <PackagingDetails
           ref={packagingRef}
           mode="existing"
+          categoryId={details.productCategoryId}
           packages={details.packages ?? []}
           onPackageChange={setSelectedPackagingId}
+          onPurchaseUnitChange={setPackagingPurchaseUnit}
         />
       </div>
       <div className={activeTab === TABS[1] ? "block w-full" : "hidden"}>
@@ -375,9 +379,14 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             ref={batchRef}
             mode="existing"
             batches={selectedPackage?.batches ?? []}
+            purchaseUnit={packagingPurchaseUnit}
           />
         ) : (
-          <BatchDetails key="new-package" ref={batchRef} />
+          <BatchDetails
+            key="new-package"
+            ref={batchRef}
+            purchaseUnit={packagingPurchaseUnit}
+          />
         )}
       </div>
 

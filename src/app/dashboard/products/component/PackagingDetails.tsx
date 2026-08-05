@@ -1,9 +1,10 @@
-import React, { useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
 import { collectErrors, hasErrors } from '@/utils/formValidation';
-import type { ProductPackageDetails } from '@/types/ProductData';
+import { usePurchaseSmallestUnits } from '@/hooks/usePurchaseSmallestUnits';
+import { packageSmallestUnitName, type ProductPackageDetails } from '@/types/ProductData';
 import { z } from 'zod';
 
 export interface PackagingDetailsRef {
@@ -12,6 +13,8 @@ export interface PackagingDetailsRef {
 }
 
 export interface PackagingDetailsProps {
+  /** Drives the purchase-unit / smallest-unit master lookup. */
+  categoryId?: number;
   /**
    * "new" (default) is the product-onboarding flow: the package is always
    * created from scratch. "existing" adds a package picker on top, so stock can
@@ -26,6 +29,11 @@ export interface PackagingDetailsProps {
    * only readable on demand.
    */
   onPackageChange?: (packagingId: string | null) => void;
+  /**
+   * Fires with the chosen purchase-unit name so the batch form can show it
+   * read-only — a batch is always bought in its package's unit.
+   */
+  onPurchaseUnitChange?: (purchaseUnit: string) => void;
 }
 
 /** Dropdown label for an existing package, e.g. "1X10 Box". */
@@ -35,13 +43,17 @@ export const packageLabel = (pkg: ProductPackageDetails) =>
 const ADD_NEW_PACKAGE = 'ADD_NEW';
 
 const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>((
-  { mode = 'new', packages = [], onPackageChange },
+  { categoryId, mode = 'new', packages = [], onPackageChange, onPurchaseUnitChange },
   ref
 ) => {
   const [purchaseUnit, setPurchaseUnit] = useState('');
   const [eachStripContains, setEachStripContains] = useState<string>('');
   const [smallestUnit, setSmallestUnit] = useState('');
+  // The master row id for the chosen pairing — this is what the payload sends.
+  const [purchaseSmallestUnitId, setPurchaseSmallestUnitId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const { units: unitPairs, isLoading: isLoadingUnits } = usePurchaseSmallestUnits(categoryId);
   // "" = nothing picked yet, ADD_NEW_PACKAGE = create one, otherwise a packagingId.
   const [selectedPackage, setSelectedPackage] = useState('');
 
@@ -56,6 +68,40 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     { label: '+ Add New Package', value: ADD_NEW_PACKAGE },
   ];
 
+  // One master row per pairing, so the purchase units are the distinct names.
+  const purchaseUnitOptions = useMemo(() => {
+    const names = Array.from(new Set(unitPairs.map((pair) => pair.purchaseUnitName)));
+    return names.map((name) => ({ label: name, value: name }));
+  }, [unitPairs]);
+
+  // Smallest units are whatever pairs with the chosen purchase unit.
+  const smallestUnitOptions = useMemo(
+    () =>
+      unitPairs
+        .filter((pair) => pair.purchaseUnitName === purchaseUnit)
+        .map((pair) => ({
+          label: pair.purchaseSmallestUnitName,
+          value: String(pair.purchaseSmallestUnitId),
+        })),
+    [unitPairs, purchaseUnit]
+  );
+
+  // Changing the purchase unit invalidates the smallest unit paired with it.
+  const handlePurchaseUnitChange = (value: string) => {
+    setPurchaseUnit(value);
+    setSmallestUnit('');
+    setPurchaseSmallestUnitId('');
+    setErrors((prev) => ({ ...prev, purchaseUnit: '', smallestUnit: '' }));
+    onPurchaseUnitChange?.(value);
+  };
+
+  const handleSmallestUnitChange = (value: string) => {
+    setPurchaseSmallestUnitId(value);
+    const pair = unitPairs.find((p) => String(p.purchaseSmallestUnitId) === value);
+    setSmallestUnit(pair?.purchaseSmallestUnitName ?? '');
+    setErrors((prev) => ({ ...prev, smallestUnit: '' }));
+  };
+
   // Picking a saved package fills the three fields from it; "Add New" clears them.
   const handlePackageChange = (value: string) => {
     setSelectedPackage(value);
@@ -65,15 +111,18 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     if (pkg) {
       setPurchaseUnit(pkg.purchaseUnit);
       setEachStripContains(String(pkg.purchaseUnitContains));
-      setSmallestUnit(pkg.smallestUnit);
+      setSmallestUnit(packageSmallestUnitName(pkg, unitPairs));
       setErrors({});
     } else {
       setPurchaseUnit('');
       setEachStripContains('');
       setSmallestUnit('');
     }
+    // A saved package is identified by packagingId, not by a master pairing.
+    setPurchaseSmallestUnitId('');
 
     onPackageChange?.(pkg ? pkg.packagingId : null);
+    onPurchaseUnitChange?.(pkg ? pkg.purchaseUnit : '');
   };
 
   const validateField = (value: string) => {
@@ -88,22 +137,26 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     }
   };
 
-  const purchaseUnitOptions = [
-    { label: 'Box', value: 'BOX' },
-    { label: 'Carton', value: 'CARTON' }
-  ];
+  // Values are the master's unit names, so this doubles as the field label
+  // ("Each Strip Contains") for both a fresh pick and a saved package.
+  const purchaseUnitLabel = purchaseUnit || 'Unit';
 
-  const selectedPurchaseUnit = purchaseUnitOptions.find(opt => opt.value === purchaseUnit);
-  // A saved package stores its unit as free text ("Box", "BOTTLE"), which won't
-  // match an option value — fall back to the stored text before "Unit".
-  const purchaseUnitLabel =
-    selectedPurchaseUnit?.label ?? (isLocked && purchaseUnit ? purchaseUnit : 'Unit');
+  // Derived, not read from state, so a saved package's smallest unit still
+  // resolves when the unit master finishes loading after the package was picked.
+  const lockedPackage = isLocked
+    ? packages.find((pkg) => pkg.packagingId === selectedPackage)
+    : undefined;
+  const displaySmallestUnit = isLocked
+    ? packageSmallestUnitName(lockedPackage, unitPairs) || smallestUnit
+    : smallestUnit;
 
   useImperativeHandle(ref, () => ({
     getFormData: () => ({
       purchaseUnit,
       eachStripContains,
-      smallestUnit,
+      smallestUnit: displaySmallestUnit,
+      // The master pairing id — what /product/onboard and /{id}/package expect.
+      purchaseSmallestUnitId,
       // Empty unless an existing package was picked — that is what tells the
       // caller to POST a batch rather than a whole new package.
       packagingId: isLocked ? selectedPackage : ''
@@ -122,11 +175,11 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
 
       const nextErrors = collectErrors(
         PackagingSchema,
-        { purchaseUnit, eachStripContains, smallestUnit },
+        { purchaseUnit, eachStripContains, purchaseSmallestUnitId },
         {
           purchaseUnit: 'Purchase Unit is required',
           eachStripContains: `Each ${purchaseUnitLabel} Contains is required`,
-          smallestUnit: 'Smallest Unit is required',
+          purchaseSmallestUnitId: 'Smallest Unit is required',
         }
       );
 
@@ -176,7 +229,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                 />
                 <Input
                   label="Select Unit(Smallest)"
-                  value={smallestUnit}
+                  value={displaySmallestUnit}
                   readOnly
                   disabled
                   className="bg-gray-50"
@@ -190,8 +243,9 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   placeholder="Select Unit"
                   options={purchaseUnitOptions}
                   value={purchaseUnit}
-                  onChange={(val) => setPurchaseUnit(val)}
+                  onChange={handlePurchaseUnitChange}
                   error={errors.purchaseUnit}
+                  isLoading={isLoadingUnits}
                   disabled={awaitingPackageChoice}
                 />
 
@@ -214,13 +268,14 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                 <Dropdown
                   label="Select Unit(Smallest)"
                   required
-                  placeholder="Select Smallest Unit"
-                  options={[{ label: 'Tablet', value: 'TABLET' }, { label: 'Capsule', value: 'CAPSULE' }, { label: 'Strip', value: 'STRIP' }]}
-                  value={smallestUnit}
-                  onChange={(val) => setSmallestUnit(val)}
+                  placeholder={purchaseUnit ? 'Select Smallest Unit' : 'Select a Purchase Unit first'}
+                  options={smallestUnitOptions}
+                  value={purchaseSmallestUnitId}
+                  onChange={handleSmallestUnitChange}
                   menuPlacement="top"
-                  error={errors.smallestUnit}
-                  disabled={awaitingPackageChoice}
+                  error={errors.purchaseSmallestUnitId}
+                  // Only the units paired with the chosen purchase unit are valid.
+                  disabled={awaitingPackageChoice || !purchaseUnit}
                 />
               </>
             )}

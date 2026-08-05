@@ -75,9 +75,11 @@ const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]>
       qty: Number(line.purchaseQuantity || 0),
       free: Number(line.freeQuantity || 0),
       variant: pkg ? `1x${pkg.purchaseUnitContains} ${pkg.smallestUnit}` : "—",
-      name: line.productName || line.productId,
+      // The purchase API returns productName / batchNumber as null, so the
+      // fetched product and batch are the real source; the ids are last resort.
+      name: product?.productName || line.productName || line.productId,
       hsn: product?.hsnNo || "—",
-      batch: line.batchNumber || line.batchId,
+      batch: batch?.batchNumber || line.batchNumber || line.batchId,
       expiry: batch?.expiryDate || "—",
       mrp: Number(batch?.mrpPerUnit ?? batch?.mrp ?? 0),
       value: Number(line.grossAmount || 0),
@@ -104,6 +106,9 @@ export const buildColumns = (
   {
     accessorKey: "invoiceDate",
     header: "Invoice Date",
+
+    // Stored as "2026-08-03T00:00:00" — show just the date part.
+    cell: ({ row }) => row.original.invoiceDate?.split("T")[0] ?? "—",
   },
 
   {
@@ -219,14 +224,21 @@ const Page = () => {
   const [isPreparing, setIsPreparing] = useState(false);
 
   const openInvoice = async (purchase: PurchaseData, print: boolean) => {
-    if (!purchase.purchaseDetails?.length) {
-      toast.error("This purchase has no line items to show.");
-      return;
-    }
-
     setIsPreparing(true);
     try {
-      setInvoice({ purchase, lines: await buildInvoiceLines(purchase), print });
+      const lines = await buildInvoiceLines(purchase);
+
+      // /purchase/allPurchase does not always nest the line items. Surface that
+      // rather than silently rendering an invoice with an empty table.
+      if (lines.length === 0) {
+        console.warn(
+          "No purchaseDetails on this purchase — the invoice table will be empty.",
+          purchase
+        );
+        toast.error("Line items for this invoice could not be loaded.");
+      }
+
+      setInvoice({ purchase, lines, print });
       // For a download the indicator stays up until the PDF has been written.
       if (!print) setIsPreparing(false);
     } catch (err) {

@@ -30,6 +30,11 @@ export interface BatchDetailsProps {
   mode?: 'new' | 'existing';
   /** Batches of the selected package. Only read when mode is "existing". */
   batches?: ProductBatchDetails[];
+  /**
+   * Purchase unit of the selected package. A batch is always bought in its
+   * package's unit, so the field is read-only and mirrors this.
+   */
+  purchaseUnit?: string;
 }
 
 const ADD_NEW_BATCH = 'ADD_NEW';
@@ -55,14 +60,9 @@ const EMPTY_FORM = {
 const str = (value: unknown): string =>
   value === null || value === undefined ? '' : String(value);
 
-const UNIT_OPTIONS = [
-  { label: 'Box', value: 'BOX' },
-  { label: 'Strip', value: 'STRIP' },
-  { label: 'Bottle', value: 'BOTTLE' }
-];
 
 const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
-  { mode = 'new', batches = [] },
+  { mode = 'new', batches = [], purchaseUnit = '' },
   ref
 ) => {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
@@ -75,6 +75,22 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const isLocked = isExistingMode && !!selectedBatch && selectedBatch !== ADD_NEW_BATCH;
   // Shown but inert until the user says which batch the stock belongs to.
   const awaitingBatchChoice = isExistingMode && !selectedBatch;
+
+  /**
+   * Never user-editable: a saved batch keeps the unit it was recorded with,
+   * anything new inherits the unit chosen on the packaging step.
+   */
+  const effectivePurchaseUnit = isLocked ? formData.purchaseUnit : purchaseUnit;
+
+  /**
+   * Free goods come in the same unit the stock was bought in, so the only
+   * option is the package's purchase unit. Still a dropdown rather than a
+   * read-only field, because free quantity is optional — the user may leave it
+   * unset. The unit name itself is stored, as before.
+   */
+  const freeUnitOptions = effectivePurchaseUnit
+    ? [{ label: effectivePurchaseUnit, value: effectivePurchaseUnit }]
+    : [];
 
   const batchOptions = [
     ...batches.map((batch) => ({ label: batch.batchNumber, value: batch.batchId })),
@@ -159,6 +175,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   useImperativeHandle(ref, () => ({
     getFormData: () => ({
       ...formData,
+      purchaseUnit: effectivePurchaseUnit,
       // Empty unless a saved batch was picked — that is what tells the caller
       // no batch needs creating.
       batchId: isLocked ? selectedBatch : ''
@@ -177,16 +194,21 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
 
       // z.coerce.number() turns "" into 0, so the numeric fields need an
       // explicit presence check on top of the schema.
-      const nextErrors = collectErrors(BatchSchema, formData, {
-        purchaseUnit: 'Purchase Unit is required',
-        purchaseQuantity: 'Purchase Quantity is required',
-        purchasePricePerBox: 'Purchase Price (per Box) is required',
-        mrpPerBox: 'MRP (per Box) is required',
-        sellingPricePerBox: 'Selling Price (per Box) is required',
-        purchasePricePerSmallestUnit: 'Purchase Price (per Smallest Unit) is required',
-        mrpPerSmallestUnit: 'MRP (per Smallest Unit) is required',
-        sellingPricePerSmallestUnit: 'Selling Price (per Smallest Unit) is required',
-      });
+      // purchaseUnit comes from the packaging step, not from this form.
+      const nextErrors = collectErrors(
+        BatchSchema,
+        { ...formData, purchaseUnit: effectivePurchaseUnit },
+        {
+          purchaseUnit: 'Select a Purchase Unit on the packaging step first',
+          purchaseQuantity: 'Purchase Quantity is required',
+          purchasePricePerBox: 'Purchase Price (per Box) is required',
+          mrpPerBox: 'MRP (per Box) is required',
+          sellingPricePerBox: 'Selling Price (per Box) is required',
+          purchasePricePerSmallestUnit: 'Purchase Price (per Smallest Unit) is required',
+          mrpPerSmallestUnit: 'MRP (per Smallest Unit) is required',
+          sellingPricePerSmallestUnit: 'Selling Price (per Smallest Unit) is required',
+        }
+      );
 
       setErrors(nextErrors);
       return !hasErrors(nextErrors);
@@ -273,22 +295,16 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               {...masterProps}
             />
 
-            {isLocked ? (
-              // A saved batch stores its unit as free text, which won't match an
-              // option value — show the stored text instead.
-              <Input label="Purchase Unit" value={formData.purchaseUnit} {...masterProps} />
-            ) : (
-              <Dropdown
-                label="Purchase Unit"
-                required
-                placeholder="Select Unit"
-                options={UNIT_OPTIONS}
-                value={formData.purchaseUnit}
-                onChange={(val) => handleChange('purchaseUnit', val)}
-                error={errors.purchaseUnit}
-                disabled={awaitingBatchChoice}
-              />
-            )}
+            {/* Always read-only: inherited from the package, never picked here. */}
+            <Input
+              label="Purchase Unit"
+              value={effectivePurchaseUnit}
+              placeholder="Set on the packaging step"
+              readOnly
+              disabled
+              className="bg-gray-50"
+              error={errors.purchaseUnit}
+            />
 
             {/* The three purchase fields stay editable for a saved batch. */}
             <Input
@@ -304,7 +320,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             <Dropdown
               label="Free Unit"
               placeholder="Select Unit"
-              options={UNIT_OPTIONS}
+              options={freeUnitOptions}
               value={formData.freeUnit}
               onChange={(val) => handleChange('freeUnit', val)}
               error={errors.freeUnit}

@@ -44,6 +44,19 @@ export default function DataTable<TData>({
         </thead>
 
         <tbody>
+          {/* Without this an empty dataset renders a bare header, which reads as
+              a broken table rather than "nothing to show". */}
+          {table.getRowModel().rows.length === 0 && (
+            <tr className="border border-pneutral-200 h-17">
+              <td
+                colSpan={columns.length}
+                className="px-4 border border-pneutral-200 text-center text-label-l4 text-pneutral-500"
+              >
+                No records found.
+              </td>
+            </tr>
+          )}
+
           {table.getRowModel().rows.map((row) => (
             <tr key={row.id} className="border border-pneutral-200 h-17">
               {row.getVisibleCells().map((cell) => (

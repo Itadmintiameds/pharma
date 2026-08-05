@@ -182,14 +182,40 @@ export interface ProductBatchDetails {
   freeUnit: string | null;
 }
 
-/** A package (variant) of a product with its batches. */
+/**
+ * A package (variant) of a product with its batches.
+ *
+ * Packaging is stored against a `purchaseSmallestUnitId` master pairing, so the
+ * smallest-unit name may come back under either key — or not at all, in which
+ * case `packageSmallestUnitName` resolves it from the master list.
+ */
 export interface ProductPackageDetails {
   packagingId: string;
   purchaseUnit: string;
   purchaseUnitContains: number;
-  smallestUnit: string;
+  smallestUnit?: string;
+  purchaseSmallestUnitName?: string;
+  purchaseSmallestUnitId?: number;
   batches: ProductBatchDetails[];
 }
+
+/**
+ * The smallest-unit name for a package, whichever way the API expressed it.
+ * Pass the category's unit master to resolve an id-only response.
+ */
+export const packageSmallestUnitName = (
+  pkg?: ProductPackageDetails | null,
+  unitPairs: PurchaseSmallestUnit[] = []
+): string => {
+  if (!pkg) return "";
+  if (pkg.smallestUnit) return pkg.smallestUnit;
+  if (pkg.purchaseSmallestUnitName) return pkg.purchaseSmallestUnitName;
+
+  const pair = unitPairs.find(
+    (unit) => unit.purchaseSmallestUnitId === pkg.purchaseSmallestUnitId
+  );
+  return pair?.purchaseSmallestUnitName ?? "";
+};
 
 /** The `data` payload of the product details response. */
 export interface ProductDetails {
@@ -207,6 +233,19 @@ export interface ProductDetails {
 export interface ProductDetailsResponse {
   data: ProductDetails;
   message: string;
+}
+
+/**
+ * GET /api/v1/master/product-categories/{id}/purchase-smallest-units
+ * One row per valid purchase-unit / smallest-unit pairing.
+ */
+export interface PurchaseSmallestUnit {
+  purchaseSmallestUnitId: number;
+  purchaseSmallestUnitName: string;
+  purchaseUnitName: string;
+  productCategoryId: number;
+  productCategoryName?: string;
+  isActive?: boolean;
 }
 
 /**
@@ -228,11 +267,14 @@ export interface NewBatchPayload {
   rackLocation: string;
 }
 
-/** POST /api/v1/product/{productId}/package — new package plus its first batch. */
+/**
+ * POST /api/v1/product/{productId}/package — new package plus its first batch.
+ * The unit names are implied by `purchaseSmallestUnitId`, which points at a
+ * purchase-unit / smallest-unit pairing in the master.
+ */
 export interface AddPackagePayload {
-  purchaseUnit: string;
   purchaseUnitContains: number;
-  smallestUnit: string;
+  purchaseSmallestUnitId: number;
   batches: NewBatchPayload[];
 }
 

@@ -49,7 +49,8 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       "",
     supplierId: purchase?.supplierId ?? store.supplierId,
     invoiceNo: purchase?.invoiceNo ?? store.invoiceNo,
-    invoiceDate: purchase?.invoiceDate ?? store.invoiceDate,
+    // Saved dates arrive as "2026-08-03T00:00:00"; the time is noise here.
+    invoiceDate: (purchase?.invoiceDate ?? store.invoiceDate)?.split("T")[0],
     grnNo: purchase?.grnNo ?? store.grnNo,
     paymentType: purchase?.paymentType ?? store.paymentType,
     creditDays: purchase?.creditDays ?? store.creditDays,
@@ -170,8 +171,12 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     { accessorKey: 'amount', header: 'Amount (₹)', cell: (info) => Number(info.getValue()).toFixed(2) },
   ], []);
 
+  // Deliberately no h-full on the root: inside the dashboard's fixed-height
+  // <main> it would cap the invoice at one viewport, and flex-shrink would then
+  // squeeze the table to nothing — the DataTable wrapper is overflow-hidden, so
+  // the rows simply vanish. Sizing to content lets <main> scroll instead.
   return (
-    <div className="flex flex-col gap-6 w-full h-full bg-transparent">
+    <div className="flex flex-col gap-6 w-full bg-transparent">
       {/* Title Header */}
       <div className="w-full h-[70px] p-4 flex items-center bg-secondary-600 border-t border-secondary-50 rounded-xl shadow-sm">
         <h1 className="text-white font-semibold text-[24px] leading-[32px]">
@@ -238,20 +243,23 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
               <span className="text-pneutral-600">Exempted</span>
               <span className="font-semibold text-pneutral-900">₹ 0.00</span>
             </div>
+            {/* Free GST — hidden for now.
             <div className="flex flex-col gap-1">
               <span className="text-pneutral-600">Free GST</span>
               <span className="font-semibold text-pneutral-900">₹ 0.00</span>
             </div>
+            */}
           </div>
 
-          {/* Bank Details */}
+          {/* Bank Details — hidden for now; no data source wired up yet.
           <div className="w-full bg-white border border-pneutral-200 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] items-center">
             <div className="flex items-center"><span className="w-24 text-pneutral-600">Bank Name</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
             <div className="flex items-center"><span className="w-24 text-pneutral-600">Branch</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
             <div className="flex items-center"><span className="w-24 text-pneutral-600">A/C No</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
             <div className="flex items-center"><span className="w-24 text-pneutral-600">IFSC</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
           </div>
-          
+          */}
+
         </div>
 
         {/* Middle: Items/Qty Summary */}

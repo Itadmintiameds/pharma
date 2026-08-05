@@ -57,6 +57,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Bumped to remount the three step forms with blank state.
   const [formKey, setFormKey] = useState(0);
+  // Purchase unit chosen on the packaging step; the batch form shows it read-only.
+  const [packagingPurchaseUnit, setPackagingPurchaseUnit] = useState("");
   
   const productDetailsRef = useRef<any>(null);
   const packagingDetailsRef = useRef<PackagingDetailsRef>(null);
@@ -178,6 +180,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const handleOpenAddProduct = () => {
     setActiveTab(TABS[0]);
     setFormKey((key) => key + 1);
+    setPackagingPurchaseUnit("");
     setViewState('add');
   };
 
@@ -229,9 +232,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         hsnNo: productData?.hsnCode || "",
         packagingDetails: [
           {
-            purchaseUnit: packagingData?.purchaseUnit || "",
             purchaseUnitContains: Number(packagingData?.eachStripContains || 0),
-            smallestUnit: packagingData?.smallestUnit || ""
+            // Unit names are implied by this master pairing id.
+            purchaseSmallestUnitId: Number(packagingData?.purchaseSmallestUnitId || 0)
           }
         ],
         batchDetails: [
@@ -638,10 +641,19 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
             <ProductDetails key={`product-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`} categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory} ref={productDetailsRef} />
           </div>
           <div className={activeTab === "Packaging & Order Details" ? "block w-full" : "hidden"}>
-            <PackagingDetails key={`packaging-${formKey}`} ref={packagingDetailsRef} />
+            <PackagingDetails
+              key={`packaging-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`}
+              categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory}
+              ref={packagingDetailsRef}
+              onPurchaseUnitChange={setPackagingPurchaseUnit}
+            />
           </div>
           <div className={activeTab === "Batch & Stock Details" ? "block w-full" : "hidden"}>
-            <BatchDetails key={`batch-${formKey}`} ref={batchDetailsRef} />
+            <BatchDetails
+              key={`batch-${formKey}`}
+              ref={batchDetailsRef}
+              purchaseUnit={packagingPurchaseUnit}
+            />
           </div>
           
           {/* Navigation Buttons */}
