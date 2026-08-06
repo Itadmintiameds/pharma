@@ -362,7 +362,7 @@ const Billing: React.FC<BillingProps> = ({
   ];
 
   return (
-    <div className="flex flex-col gap-5 p-2 sm:p-4 text-pneutral-900 pb-12">
+    <div className="flex flex-col gap-5 text-pneutral-900 pb-12">
       {/* Title */}
       <div className="text-[24px] font-semibold tracking-normal text-[#1E1E1D]">
         Billing POS
@@ -440,7 +440,7 @@ const Billing: React.FC<BillingProps> = ({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex-1 h-[36px] min-w-[108px] max-h-[44px] px-3 rounded-[8px] border border-[#7D32FC] bg-white hover:bg-[#F8F5FF] text-[#7D32FC] font-medium text-sm flex items-center justify-center gap-1.5 transition-all shadow-2xs"
+              className="w-[129px] h-[36px] px-3 rounded-[8px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 font-medium text-[14px] flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
             >
               <Upload size={16} />
               Upload
@@ -451,7 +451,7 @@ const Billing: React.FC<BillingProps> = ({
                 setPrescriptionName("Skipped");
                 toast.success("Prescription skipped for this bill.");
               }}
-              className="flex-1 h-[36px] px-3 rounded-[8px] border border-[#D5D5D4] bg-white hover:bg-gray-50 text-[#7D32FC] font-medium text-sm flex items-center justify-center transition-all shadow-2xs"
+              className="w-[129px] h-[36px] px-3 rounded-[8px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 font-medium text-[14px] flex items-center justify-center transition-all shadow-2xs cursor-pointer shrink-0"
             >
               Skip
             </button>

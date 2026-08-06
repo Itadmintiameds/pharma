@@ -17,7 +17,7 @@ import SearchInput from "@/app/components/common/SearchInput";
 import DataTable from "@/app/components/common/table/DataTable";
 import Billing from "./components/Billing";
 import BillingPayment from "./components/BillingPayment";
-import BillingPaymentInvoice from "./components/BillingPaymentInvoice";
+import PaymentSummary from "./components/PaymentSummary";
 import {
   BillLine,
   BillRecord,
@@ -108,6 +108,7 @@ const Page = () => {
   const [search, setSearch] = useState("");
   const [bills, setBills] = useState<BillRecord[]>(MOCK_BILLS);
   const [draft, setDraft] = useState<BillDraft>(EMPTY_DRAFT);
+  const [summaryMode, setSummaryMode] = useState<"create" | "view" | "download">("create");
 
   const totals = useMemo(
     () => calculateBillTotals(draft.lines, draft.billDiscountPercentage),
@@ -179,7 +180,51 @@ const Page = () => {
             type="button"
             aria-label={`View invoice ${row.original.invoiceNo}`}
             title="View invoice"
-            onClick={() => console.log("View bill", row.original.billId)}
+            onClick={() => {
+              setDraft({
+                customer: {
+                  customerType: "WALK_IN",
+                  customerName: row.original.customerName,
+                  mobileNo: row.original.mobileNo,
+                  age: "",
+                  gender: "",
+                  doctorName: "",
+                  address: "",
+                },
+                lines: [
+                  {
+                    lineId: "1",
+                    productId: "prod1",
+                    productName: "Paracetamol 500mg",
+                    batchId: "batch1",
+                    batchNumber: "BATCH-001",
+                    expiryDate: "2027-01",
+                    quantity: row.original.totalItems || 1,
+                    freeQuantity: 0,
+                    availableQuantity: 100,
+                    unit: "BOX",
+                    sellingPricePerUnit:
+                      row.original.netAmount / (row.original.totalItems || 1),
+                    mrpPerUnit:
+                      row.original.netAmount / (row.original.totalItems || 1),
+                    discountPercentage: 0,
+                    gstPercentage: 5,
+                  },
+                ],
+                payment: {
+                  paymentMode: row.original.paymentMode,
+                  amountReceived: row.original.netAmount,
+                  referenceNo: "",
+                  remarks: "",
+                  changeDue: 0,
+                },
+                invoiceNo: row.original.invoiceNo,
+                billDate: row.original.billDate,
+                billDiscountPercentage: 0,
+              });
+              setSummaryMode("view");
+              setStep("invoice");
+            }}
           >
             <Image
               src="/Purchase/ViewIcon.svg"
@@ -194,7 +239,51 @@ const Page = () => {
             type="button"
             aria-label={`Download invoice ${row.original.invoiceNo}`}
             title="Download invoice"
-            onClick={() => console.log("Download bill", row.original.billId)}
+            onClick={() => {
+              setDraft({
+                customer: {
+                  customerType: "WALK_IN",
+                  customerName: row.original.customerName,
+                  mobileNo: row.original.mobileNo,
+                  age: "",
+                  gender: "",
+                  doctorName: "",
+                  address: "",
+                },
+                lines: [
+                  {
+                    lineId: "1",
+                    productId: "prod1",
+                    productName: "Paracetamol 500mg",
+                    batchId: "batch1",
+                    batchNumber: "BATCH-001",
+                    expiryDate: "2027-01",
+                    quantity: row.original.totalItems || 1,
+                    freeQuantity: 0,
+                    availableQuantity: 100,
+                    unit: "BOX",
+                    sellingPricePerUnit:
+                      row.original.netAmount / (row.original.totalItems || 1),
+                    mrpPerUnit:
+                      row.original.netAmount / (row.original.totalItems || 1),
+                    discountPercentage: 0,
+                    gstPercentage: 5,
+                  },
+                ],
+                payment: {
+                  paymentMode: row.original.paymentMode,
+                  amountReceived: row.original.netAmount,
+                  referenceNo: "",
+                  remarks: "",
+                  changeDue: 0,
+                },
+                invoiceNo: row.original.invoiceNo,
+                billDate: row.original.billDate,
+                billDiscountPercentage: 0,
+              });
+              setSummaryMode("download");
+              setStep("invoice");
+            }}
           >
             <Image
               src="/Purchase/DownloadIcon.svg"
@@ -211,6 +300,7 @@ const Page = () => {
 
   const startNewBill = () => {
     setDraft(EMPTY_DRAFT);
+    setSummaryMode("create");
     setStep("billing");
   };
 
@@ -279,6 +369,7 @@ const Page = () => {
             ...prev,
           ]);
 
+          setSummaryMode("create");
           setStep("invoice");
         }}
       />
@@ -287,18 +378,27 @@ const Page = () => {
 
   if (step === "invoice" && draft.customer && draft.payment) {
     return (
-      <BillingPaymentInvoice
+      <PaymentSummary
         invoiceNo={draft.invoiceNo ?? "—"}
         billDate={draft.billDate ?? "—"}
         customer={draft.customer}
         lines={draft.lines}
         totals={totals}
         payment={draft.payment}
-        onNewBill={startNewBill}
+        mode={summaryMode}
+        onBack={() => {
+          if (summaryMode === "view" || summaryMode === "download") {
+            setDraft(EMPTY_DRAFT);
+            setStep("list");
+          } else {
+            setStep("payment");
+          }
+        }}
         onDone={() => {
           setDraft(EMPTY_DRAFT);
           setStep("list");
         }}
+        onNewBill={startNewBill}
       />
     );
   }

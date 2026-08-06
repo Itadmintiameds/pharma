@@ -3,17 +3,10 @@
 /**
  * Step 2 of the POS flow — collect the payment against the cart built in
  * Billing, then hand the finished bill to BillingPaymentInvoice.
+ * Designed according to the high-fidelity Payment POS specifications.
  */
 
 import React, { useMemo, useState } from "react";
-import {
-  Banknote,
-  CreditCard,
-  Smartphone,
-  CalendarClock,
-  ArrowLeft,
-} from "lucide-react";
-import Input from "@/app/components/common/Input";
 import {
   BillLine,
   BillTotals,
@@ -35,18 +28,12 @@ interface BillingPaymentProps {
 const PAYMENT_MODES: {
   label: string;
   value: PaymentMode;
-  icon: React.ReactNode;
-  hint: string;
+  iconPath: string;
 }[] = [
-  { label: "Cash", value: "CASH", icon: <Banknote size={22} />, hint: "Counter cash" },
-  { label: "Card", value: "CARD", icon: <CreditCard size={22} />, hint: "Debit / credit" },
-  { label: "UPI", value: "UPI", icon: <Smartphone size={22} />, hint: "GPay, PhonePe" },
-  {
-    label: "Credit",
-    value: "CREDIT",
-    icon: <CalendarClock size={22} />,
-    hint: "Pay later",
-  },
+  { label: "Cash", value: "CASH", iconPath: "/Billing/Cash.svg" },
+  { label: "UPI", value: "UPI", iconPath: "/Billing/UPI.svg" },
+  { label: "Card", value: "CARD", iconPath: "/Billing/CARD.svg" },
+  { label: "Credit", value: "CREDIT", iconPath: "/Billing/CARD.svg" },
 ];
 
 const BillingPayment: React.FC<BillingPaymentProps> = ({
@@ -57,18 +44,15 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   onGenerateInvoice,
 }) => {
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("CASH");
-  const [amountReceived, setAmountReceived] = useState("");
+  const [amountReceived, setAmountReceived] = useState(String(totals.netAmount));
   const [referenceNo, setReferenceNo] = useState("");
-  const [remarks, setRemarks] = useState("");
   const [creditDays, setCreditDays] = useState("");
 
   const received = Number(amountReceived) || 0;
 
-  // Credit bills are handed over unpaid, so nothing is due back and the balance
-  // is the whole bill.
+  // Credit bills are handed over unpaid, so nothing is due back and the balance is the whole bill.
   const changeDue = useMemo(
-    () =>
-      paymentMode === "CREDIT" ? 0 : Math.max(0, received - totals.netAmount),
+    () => (paymentMode === "CREDIT" ? 0 : Math.max(0, received - totals.netAmount)),
     [paymentMode, received, totals.netAmount]
   );
 
@@ -78,232 +62,195 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   const canGenerate =
     paymentMode === "CREDIT" ? Boolean(creditDays) : shortfall === 0;
 
-  const summaryRows = [
-    { label: "Sub Total", value: `₹ ${formatAmount(totals.grossAmount)}` },
-    { label: "Item Discount", value: `- ₹ ${formatAmount(totals.itemDiscount)}` },
-    { label: "Bill Discount", value: `- ₹ ${formatAmount(totals.billDiscount)}` },
-    { label: "Taxable Amount", value: `₹ ${formatAmount(totals.taxableAmount)}` },
-    { label: "GST", value: `₹ ${formatAmount(totals.gstAmount)}` },
-    { label: "Round Off", value: `₹ ${formatAmount(totals.roundOff)}` },
-  ];
-
   return (
-    <div className="flex flex-col gap-4 pb-24">
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex flex-col gap-1 text-pneutral-900">
-          <div className="text-h4 font-semibold">Payment</div>
-          <div className="text-p3 font-normal font-noto-sans">
-            Collect payment and generate the invoice
-          </div>
+    <div className="flex flex-col justify-between gap-6 text-pneutral-900 min-h-[700px] pb-12 w-full">
+      <div className="flex flex-col gap-5">
+        {/* Top Title */}
+        <div className="text-[24px] font-semibold tracking-normal text-[#1E1E1D]">
+          Billing POS
         </div>
 
-        <button
-          type="button"
-          onClick={onBack}
-          className="h-9 px-4 flex items-center gap-2 rounded-lg border border-pneutral-300 text-label-l3 font-medium text-pneutral-700"
-        >
-          <ArrowLeft size={16} />
-          Back to Cart
-        </button>
-      </div>
-
-      <div className="grid grid-cols-[1fr_400px] gap-4 items-start">
-        <div className="flex flex-col gap-4">
-          {/* Payment mode */}
-          <div className="bg-white p-4 border border-pneutral-100 rounded-xl flex flex-col gap-4">
-            <div className="text-label-l4 font-semibold text-pneutral-900">
+        {/* Main Columns - items-stretch guarantees equal height for both cards */}
+        <div className="flex flex-col lg:flex-row gap-6 items-stretch w-full">
+          {/* Left Card: Payment Mode & Details */}
+          <div className="flex-1 w-full rounded-[16px] border border-[#D5D5D4] bg-white p-[20px] shadow-sm flex flex-col gap-[20px] h-auto">
+            {/* Heading */}
+            <div className="text-[18px] font-semibold text-[#1E1E1D]">
               Payment Mode
-              <span className="ml-2 text-warning-500 font-semibold text-label-l2">
-                *
-              </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            {/* Payment Mode Selection Boxes */}
+            <div className="flex items-center gap-[16px] flex-wrap sm:flex-nowrap">
               {PAYMENT_MODES.map((mode) => {
                 const isSelected = paymentMode === mode.value;
                 return (
                   <button
                     key={mode.value}
                     type="button"
-                    onClick={() => setPaymentMode(mode.value)}
-                    className={`h-24 flex flex-col items-center justify-center gap-1 rounded-xl border-2 transition-all ${
+                    onClick={() => {
+                      setPaymentMode(mode.value);
+                      if (mode.value === "CREDIT") {
+                        setAmountReceived("0");
+                      } else if (!amountReceived || Number(amountReceived) === 0) {
+                        setAmountReceived(String(totals.netAmount));
+                      }
+                    }}
+                    className={`w-[98px] h-[102px] rounded-[12px] p-[12px] flex flex-col items-center justify-center gap-[8px] border transition-all cursor-pointer ${
                       isSelected
-                        ? "border-secondary-600 bg-secondary-50 text-secondary-800"
-                        : "border-pneutral-200 bg-white text-pneutral-700"
+                        ? "border-[#378200] bg-[#DCF7CB] shadow-2xs"
+                        : "border-[#D5D5D4] bg-white hover:bg-pneutral-50"
                     }`}
                   >
-                    {mode.icon}
-                    <span className="text-label-l3 font-medium">{mode.label}</span>
-                    <span className="text-p2 font-noto-sans text-pneutral-500">
-                      {mode.hint}
+                    <img
+                      src={mode.iconPath}
+                      alt={mode.label}
+                      className="h-[34px] w-auto object-contain"
+                    />
+                    <span
+                      className={`text-[14px] leading-none ${
+                        isSelected
+                          ? "font-bold text-[#378200]"
+                          : "font-semibold text-[#1E1E1D]"
+                      }`}
+                    >
+                      {mode.label}
                     </span>
                   </button>
                 );
               })}
             </div>
+
+            {/* Input Fields */}
+            <div className="flex flex-col gap-[16px] pt-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[15px] font-medium text-[#1E1E1D]">
+                  {paymentMode === "CREDIT" ? "Credit Days" : "Received Amount"}
+                </label>
+                <div className="h-[48px] w-full rounded-[8px] border border-[#D5D5D4] bg-white px-4 flex items-center shadow-2xs focus-within:border-[#7D32FC] transition-colors">
+                  <input
+                    type="number"
+                    value={paymentMode === "CREDIT" ? creditDays : amountReceived}
+                    onChange={(e) => {
+                      if (paymentMode === "CREDIT") setCreditDays(e.target.value);
+                      else setAmountReceived(e.target.value);
+                    }}
+                    placeholder={
+                      paymentMode === "CREDIT"
+                        ? "e.g., 30"
+                        : String(totals.netAmount)
+                    }
+                    className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none placeholder:text-pneutral-400"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[15px] font-medium text-[#1E1E1D]">
+                  UPI Reference/Transaction ID
+                </label>
+                <div className="h-[48px] w-full rounded-[8px] border border-[#D5D5D4] bg-white px-4 flex items-center shadow-2xs focus-within:border-[#7D32FC] transition-colors">
+                  <input
+                    type="text"
+                    value={referenceNo}
+                    onChange={(e) => setReferenceNo(e.target.value)}
+                    placeholder="UTR123456789012"
+                    disabled={paymentMode === "CASH"}
+                    className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none disabled:text-pneutral-400 disabled:cursor-not-allowed placeholder:text-pneutral-400"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* Payment capture */}
-          <div className="bg-white p-4 border border-pneutral-100 rounded-xl flex flex-col gap-4">
-            <div className="text-label-l4 font-semibold text-pneutral-900">
-              Payment Details
+          {/* Right Card: Billing Summary */}
+          <div className="w-full lg:w-[340px] rounded-[16px] border border-[#D5D5D4] bg-white p-[20px] shadow-sm flex flex-col justify-start gap-4 shrink-0 h-auto">
+            <div className="text-[20px] font-bold text-[#1E1E1D]">
+              Billing Summary
             </div>
 
-            <div className="grid grid-cols-2 gap-4 items-start">
-              {paymentMode === "CREDIT" ? (
-                <Input
-                  label="Credit Days"
-                  type="number"
-                  placeholder="30 Days"
-                  required
-                  value={creditDays}
-                  onChange={(e) => setCreditDays(e.target.value)}
-                />
-              ) : (
-                <Input
-                  label="Amount Received (₹)"
-                  type="number"
-                  placeholder={formatAmount(totals.netAmount)}
-                  required
-                  value={amountReceived}
-                  onChange={(e) => setAmountReceived(e.target.value)}
-                />
-              )}
-
-              <Input
-                label={paymentMode === "UPI" ? "UPI Ref. No." : "Reference No."}
-                placeholder="Transaction / approval reference"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                disabled={paymentMode === "CASH"}
-              />
-            </div>
-
-            {paymentMode !== "CREDIT" && (
-              <div className="flex flex-wrap gap-2">
-                {[totals.netAmount, 500, 1000, 2000].map((preset, index) => (
-                  <button
-                    key={`${preset}-${index}`}
-                    type="button"
-                    onClick={() => setAmountReceived(String(preset))}
-                    className="h-9 px-4 rounded-lg border border-pneutral-300 text-p3 font-medium text-pneutral-700"
-                  >
-                    {index === 0 ? "Exact" : `₹ ${preset}`}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-4 pt-1">
+              <div className="flex items-center justify-between text-[15px] text-[#5A5B57]">
+                <span>Gross Amount</span>
+                <div className="flex items-center">
+                  <span className="w-12 text-center text-transparent">()</span>
+                  <span className="min-w-[85px] text-right font-semibold text-[#1E1E1D]">
+                    ₹ {formatAmount(totals.grossAmount)}
+                  </span>
+                </div>
               </div>
-            )}
 
-            <div>
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
-                Remarks
-              </label>
-              <textarea
-                rows={3}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Any note to print on the invoice"
-                className="w-full rounded-md border border-pneutral-300 bg-white px-3 py-2 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500"
-              />
-            </div>
+              <div className="flex items-center justify-between text-[15px] text-[#5A5B57]">
+                <span>Discount</span>
+                <div className="flex items-center">
+                  <span className="w-12 text-center text-[#5A5B57]">(-)</span>
+                  <span className="min-w-[85px] text-right font-semibold text-[#1E1E1D]">
+                    ₹ {formatAmount(totals.itemDiscount + totals.billDiscount)}
+                  </span>
+                </div>
+              </div>
 
-            {paymentMode !== "CREDIT" && received > 0 && (
-              <div
-                className={`flex items-center justify-between rounded-lg px-3 py-2 text-p3 font-noto-sans ${
-                  shortfall > 0
-                    ? "bg-warning-50 text-warning-600"
-                    : "bg-success-50 text-success-800"
-                }`}
-              >
-                <span>{shortfall > 0 ? "Balance to collect" : "Change to return"}</span>
-                <span className="text-label-l3 font-semibold">
-                  ₹ {formatAmount(shortfall > 0 ? shortfall : changeDue)}
+              <div className="flex items-center justify-between text-[15px] text-[#5A5B57]">
+                <span>Taxable</span>
+                <div className="flex items-center">
+                  <span className="w-12 text-center text-transparent">()</span>
+                  <span className="min-w-[85px] text-right font-semibold text-[#1E1E1D]">
+                    ₹ {formatAmount(totals.taxableAmount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[15px] text-[#5A5B57] pb-4 border-b border-[#EAEAE9]">
+                <span>
+                  GST ({lines.length > 0 ? `${lines[0].gstPercentage}%` : "12%"})
+                </span>
+                <div className="flex items-center">
+                  <span className="w-12 text-center text-[#5A5B57]">(+)</span>
+                  <span className="min-w-[85px] text-right font-semibold text-[#1E1E1D]">
+                    ₹ {formatAmount(totals.gstAmount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 mb-4">
+                <span className="text-[20px] font-bold text-[#7D32FC]">
+                  Net Amount
+                </span>
+                <span className="text-[22px] font-bold text-[#7D32FC]">
+                  ₹ {formatAmount(totals.netAmount)}
                 </span>
               </div>
-            )}
-          </div>
-        </div>
-
-        {/* Bill summary */}
-        <div className="bg-white p-4 border border-pneutral-100 rounded-xl flex flex-col gap-3">
-          <div className="text-label-l4 font-semibold text-pneutral-900">
-            Billing Summary
-          </div>
-
-          <div className="flex flex-col gap-1 border-b border-pneutral-100 pb-3 text-p2 font-noto-sans text-pneutral-500">
-            <span>{customer.customerName || "Walk-in Customer"}</span>
-            <span>{customer.mobileNo || "No mobile number"}</span>
-            <span>
-              {totals.totalItems} items · {totals.totalQuantity} qty
-            </span>
-          </div>
-
-          {summaryRows.map((row) => (
-            <div
-              key={row.label}
-              className="flex items-center justify-between text-p3 font-noto-sans text-pneutral-700"
-            >
-              <span>{row.label}</span>
-              <span className="font-medium text-pneutral-900">{row.value}</span>
             </div>
-          ))}
-
-          <div className="mt-1 flex items-center justify-between rounded-lg bg-primary-100 px-3 py-3">
-            <span className="text-label-l4 font-semibold text-primary-900">
-              Net Amount
-            </span>
-            <span className="text-h6 font-semibold text-primary-800">
-              ₹ {formatAmount(totals.netAmount)}
-            </span>
-          </div>
-
-          <div className="max-h-56 overflow-y-auto flex flex-col gap-2 pt-1">
-            {lines.map((line) => (
-              <div
-                key={line.lineId}
-                className="flex items-start justify-between gap-2 text-p2 font-noto-sans"
-              >
-                <span className="text-pneutral-700 truncate">
-                  {line.productName}
-                  <span className="text-pneutral-400"> × {line.quantity}</span>
-                </span>
-                <span className="text-pneutral-900 shrink-0">
-                  ₹ {formatAmount(line.quantity * line.mrpPerUnit)}
-                </span>
-              </div>
-            ))}
           </div>
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-pneutral-100 bg-white px-6 py-3">
-        <div className="flex items-center justify-end gap-4">
-          <button
-            type="button"
-            onClick={onBack}
-            className="w-27 h-9 rounded-lg bg-white border border-pneutral-50 shadow-[0_4px_12px_rgba(0,0,0,0.12)] text-label-l3 font-medium text-pneutral-900"
-          >
-            Back
-          </button>
-          <button
-            type="button"
-            disabled={!canGenerate}
-            onClick={() =>
-              onGenerateInvoice({
-                paymentMode,
-                amountReceived:
-                  paymentMode === "CREDIT" ? 0 : received || totals.netAmount,
-                referenceNo,
-                remarks,
-                changeDue,
-                creditDays: creditDays ? Number(creditDays) : undefined,
-              })
-            }
-            className="h-9 px-5 rounded-lg bg-primary-800 text-label-l3 font-medium text-pneutral-50 disabled:opacity-50"
-          >
-            Generate Invoice
-          </button>
-        </div>
+      {/* Bottom Action Buttons */}
+      <div className="flex items-center justify-between w-full pt-8 mt-auto">
+        <button
+          type="button"
+          onClick={onBack}
+          className="w-[110px] h-[48px] rounded-[10px] border-[1.5px] border-[#1E1E1D] bg-[#F5F5F5] hover:bg-[#EAEAE9] text-[#1E1E1D] font-semibold text-[16px] transition-all shadow-xs cursor-pointer"
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          disabled={!canGenerate}
+          onClick={() =>
+            onGenerateInvoice({
+              paymentMode,
+              amountReceived:
+                paymentMode === "CREDIT" ? 0 : received || totals.netAmount,
+              referenceNo,
+              remarks: "",
+              changeDue,
+              creditDays: creditDays ? Number(creditDays) : undefined,
+            })
+          }
+          className="h-[48px] px-8 rounded-[10px] bg-[#7D32FC] hover:bg-[#6823df] text-white font-semibold text-[16px] shadow-md transition-all cursor-pointer disabled:opacity-50"
+        >
+          Generate Invoice
+        </button>
       </div>
     </div>
   );
