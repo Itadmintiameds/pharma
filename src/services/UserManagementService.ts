@@ -73,3 +73,15 @@ export const getById = async (userId: string | number) => {
   const response = await api.get(`/user/getById/${userId}`);
   return response.data;
 }
+
+export const checkDocumentNumber = async (documentNo: string) => {
+  const response = await api.get<boolean>(`/pharmacyDocuments/checkDocument`, {
+    params: { documentNo },
+  });
+  return response.data;
+}
+
+export const updateUserStatus = async (userId: string | number, userStatus: string) => {
+  const response = await api.patch(`/user/${userId}/status`, { userStatus });
+  return response.data;
+}

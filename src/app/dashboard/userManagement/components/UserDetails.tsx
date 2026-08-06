@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
 import AssignedLocation from "./AssignedLocation";
 import RolesPermissions from "./RolesPermissions";
 import AuditLogs from "./AuditLogs";
+import UnlockAccount from "./UnlockAccount";
+import DeactivateUser from "./DeactivateUser";
 import { UserData } from "@/types/UserData";
-import { getUserById } from "@/services/UserManagementService";
+import { getUserById, updateUserStatus } from "@/services/UserManagementService";
+import { showToast } from "@/app/components/common/Toast";
 
 interface UserDetailsProps {
   userId: number;
@@ -18,6 +21,45 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
   const [activeTab, setActiveTab] = useState("Assigned Location");
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [unlockModalOpen, setUnlockModalOpen] = useState(false);
+  const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleStatusChange = async (userStatus: "Active" | "Inactive") => {
+    if (!userId) return;
+
+    setActionsOpen(false);
+    setStatusUpdating(true);
+    try {
+      await updateUserStatus(userId, userStatus);
+      setUser((prev) => (prev ? { ...prev, userStatus } : prev));
+      showToast.success(
+        userStatus === "Active"
+          ? "User unlocked successfully."
+          : "User deactivated successfully."
+      );
+    } catch (error) {
+      console.error("Failed to update user status:", error);
+      showToast.error("Failed to update user status.");
+    } finally {
+      setStatusUpdating(false);
+      setUnlockModalOpen(false);
+      setDeactivateModalOpen(false);
+    }
+  };
 
   const renderComponent = () => {
     switch (activeTab) {
@@ -101,15 +143,45 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
               />
               <span>Edit</span>
             </button>
-            <button className="w-27 h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-between text-p2 font-normal p-3">
-              Actions
-              <Image
-                src="/BusinessSetup/DropdownIcon.svg"
-                alt=""
-                width={16}
-                height={16}
-              />
-            </button>
+            <div className="relative" ref={actionsRef}>
+              <button
+                onClick={() => setActionsOpen((prev) => !prev)}
+                disabled={statusUpdating}
+                className="w-27 h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-between text-p2 font-normal p-3 disabled:opacity-60"
+              >
+                Actions
+                <Image
+                  src="/BusinessSetup/DropdownIcon.svg"
+                  alt=""
+                  width={16}
+                  height={16}
+                  className={actionsOpen ? "rotate-180" : ""}
+                />
+              </button>
+
+              {actionsOpen && (
+                <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-pneutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <button
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setUnlockModalOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-p3 text-pneutral-900 hover:bg-pneutral-50"
+                  >
+                    Unlock
+                  </button>
+                  <button
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setDeactivateModalOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-p3 text-warning-600 hover:bg-pneutral-50"
+                  >
+                    Deactivate
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -188,7 +260,17 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
                 {/* Last Login */}
                 <div className="flex">
                   <p className="w-36 font-semibold">Last Login</p>
-                  <p className="font-normal">Data yet to come</p>
+                  <p className="font-normal">
+                    {user?.lastLogin
+                      ? new Date(user.lastLogin).toLocaleString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "Not Logged In Yet"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -223,6 +305,22 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
           </div>
         </div>
       </div>
+
+      <UnlockAccount
+        isOpen={unlockModalOpen}
+        onClose={() => setUnlockModalOpen(false)}
+        onConfirm={() => handleStatusChange("Active")}
+        userName={user?.fullName}
+        loading={statusUpdating}
+      />
+
+      <DeactivateUser
+        isOpen={deactivateModalOpen}
+        onClose={() => setDeactivateModalOpen(false)}
+        onConfirm={() => handleStatusChange("Inactive")}
+        userName={user?.fullName}
+        loading={statusUpdating}
+      />
     </>
   );
 };

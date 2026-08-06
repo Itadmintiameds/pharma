@@ -12,7 +12,7 @@ export interface UserData {
     gender?: string;
     department?: string;
     imageUrl?: string;
-    lastLogin?: boolean;
+    lastLogin?: string | Date;
     isRejected?: boolean;
     userStatus?: string;
     pharmacyCities?: string[];
