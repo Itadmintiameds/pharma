@@ -28,13 +28,7 @@ const page = () => {
       <div className="flex h-screen">
         <div className="p-14 w-136.75 bg-secondary-50 flex flex-col gap-14">
           <div className="flex gap-3">
-            <Image
-              src="/Login&RegistrationIcons/PharmaIcon.svg"
-              alt="Login"
-              width={28}
-              height={28}
-            />
-            <div className="text-[#6C5CE7] font-bold text-lg">TiaMeds</div>
+            <Image src="/TiamedsLogo.svg" alt="Login" width={126} height={43} />
           </div>
 
           <div className="flex flex-col gap-3.5">
@@ -55,20 +49,23 @@ const page = () => {
           </div>
         </div>
 
-
-      <div className="flex-1 flex items-center justify-center p-14">
-        {showOtp ? (
-          <Otp email={email} password={password} onBack={() => setShowOtp(false)} />
-        ) : 
-        (
-          <Login onSubmit={(userEmail, userPassword) => {
-            setEmail(userEmail);
-            setPassword(userPassword || "");
-            setShowOtp(true);
-          }} />
-        )
-        }
-      </div>
+        <div className="flex-1 flex items-center justify-center p-14">
+          {showOtp ? (
+            <Otp
+              email={email}
+              password={password}
+              onBack={() => setShowOtp(false)}
+            />
+          ) : (
+            <Login
+              onSubmit={(userEmail, userPassword) => {
+                setEmail(userEmail);
+                setPassword(userPassword || "");
+                setShowOtp(true);
+              }}
+            />
+          )}
+        </div>
 
         {/* <div className="flex-1 flex items-center justify-center p-14">
           <div className="w-97.75 h-[489px] border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9">

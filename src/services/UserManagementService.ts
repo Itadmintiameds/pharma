@@ -35,6 +35,11 @@ export const checkUserEmail = async (email: string) => {
   return response.data;
 };
 
+export const checkEmployeeId = async (employeeId: string) => {
+  const response = await api.get(`/user/checkEmployeeId?employeeId=${encodeURIComponent(employeeId)}`);
+  return response.data;
+};
+
 export const uploadUserImage = async (userId: string | number, image: File) => {
   const formData = new FormData();
   formData.append('image', image);
