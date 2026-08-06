@@ -80,7 +80,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
     { accessorKey: 'expiryDate', header: 'Expiry', cell: (info) => info.getValue() || '-' },
     { accessorKey: 'purchaseQuantity', header: 'Qty', cell: (info) => info.getValue() },
     { accessorKey: 'freeQty', header: 'Free Qty', cell: (info) => Number(info.getValue() || 0) },
-    { accessorKey: 'mrp', header: 'MRP', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
+    { accessorKey: 'purchasePrice', header: 'Purchase Amt', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'grossAmount', header: 'Gross Amt', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'gst', header: 'GST', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'netAmount', header: 'Net Amount', cell: (info) => <span className="font-semibold text-secondary-700">₹{Number(info.getValue() || 0).toFixed(2)}</span> },
@@ -276,7 +276,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
 
       // Add to Purchase Store
       const purchaseQty = Number(batchData?.purchaseQuantity || 0);
-      const purchasePrice = Number(batchData?.purchasePricePerSmallestUnit || batchData?.purchasePricePerBox || 0);
+      // Per purchase unit, to match purchaseQuantity — stock is bought by the
+      // pack, so the per-smallest-unit price would under-state the line.
+      const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
       const gstPercentage = Number(productData?.gst || 0);
       
       const grossAmount = purchaseQty * purchasePrice;
@@ -297,9 +299,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         expiryDate: batchData?.expiryDate || "",
         hsnCode: productData?.hsnCode || "",
         variant,
-        // Per purchase unit, to match purchaseQuantity — the invoice bills in
-        // purchase units, not in smallest units.
-        mrp: Number(batchData?.mrpPerBox || 0),
+        purchasePrice,
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,

@@ -126,7 +126,9 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         hsn: '—',
         batch: item.batchNumber || item.batchId,
         expiry: '—',
-        mrp: 0,
+        // The purchase API gives no per-unit price, so only the line total is
+        // known here; `data` carries the richer rows when the caller has them.
+        purchaseAmt: 0,
         value: Number(item.grossAmount || 0),
         dis: 0,
         gst: Number(item.gst || 0),
@@ -144,10 +146,9 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         hsn: item.hsnCode || '-',
         batch: item.batchNumber || item.batchId,
         expiry: item.expiryDate || '-',
-        // MRP is stored per purchase unit, so it multiplies straight by the
-        // purchase quantity.
-        mrp: Number(item.mrp || 0),
-        value: Number(item.mrp || 0) * Number(item.purchaseQuantity || 0),
+        // Priced per purchase unit, so it multiplies straight by the quantity.
+        purchaseAmt: Number(item.purchasePrice || 0),
+        value: Number(item.purchasePrice || 0) * Number(item.purchaseQuantity || 0),
         dis: 0,
         gst: item.gst,
         amount: item.netAmount
@@ -166,7 +167,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     { accessorKey: 'hsn', header: 'HSN' },
     { accessorKey: 'batch', header: 'Batch' },
     { accessorKey: 'expiry', header: 'Expiry' },
-    { accessorKey: 'mrp', header: 'MRP', cell: (info) => Number(info.getValue()).toFixed(2) },
+    { accessorKey: 'purchaseAmt', header: 'Purchase Amt', cell: (info) => Number(info.getValue()).toFixed(2) },
     { accessorKey: 'value', header: 'VALUE', cell: (info) => Number(info.getValue()).toFixed(2) },
     // Per-product discount — hidden for now; nothing captures it per line yet.
     // { accessorKey: 'dis', header: 'DIS%' },

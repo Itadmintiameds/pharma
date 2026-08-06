@@ -244,9 +244,9 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
       // Stock and free quantities aren't part of the batch master — they ride
       // on the purchase payload, exactly as the onboarding flow does it.
       const purchaseQty = Number(batchData?.purchaseQuantity || 0);
-      const purchasePrice = Number(
-        batchData?.purchasePricePerSmallestUnit || batchData?.purchasePricePerBox || 0
-      );
+      // Per purchase unit, to match purchaseQuantity — stock is bought by the
+      // pack, so the per-smallest-unit price would under-state the line.
+      const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
       const gstPercentage = Number(updated.gstPercentage ?? details.gstPercentage ?? 0);
 
       const grossAmount = purchaseQty * purchasePrice;
@@ -263,9 +263,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         expiryDate: batchPayload.expiryDate,
         hsnCode: updated.hsnNo || details.hsnNo || "",
         variant,
-        // Per purchase unit, to match purchaseQuantity — the invoice bills in
-        // purchase units, not in smallest units.
-        mrp: Number(batchData?.mrpPerBox || 0),
+        purchasePrice,
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
