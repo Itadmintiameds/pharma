@@ -1,4 +1,4 @@
-import React, { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
@@ -30,10 +30,19 @@ export interface PackagingDetailsProps {
    */
   onPackageChange?: (packagingId: string | null) => void;
   /**
-   * Fires with the chosen purchase-unit name so the batch form can show it
-   * read-only — a batch is always bought in its package's unit.
+   * Fires whenever the unit pairing changes. The batch form needs all three:
+   * the purchase unit to show read-only, and the smallest unit plus pack size
+   * to label and derive its per-smallest-unit prices.
    */
-  onPurchaseUnitChange?: (purchaseUnit: string) => void;
+  onUnitsChange?: (units: PackagingUnits) => void;
+}
+
+/** The unit pairing a batch is priced against. */
+export interface PackagingUnits {
+  purchaseUnit: string;
+  smallestUnit: string;
+  /** How many smallest units one purchase unit holds; "" until entered. */
+  unitContains: string;
 }
 
 /** Dropdown label for an existing package, e.g. "1X10 Box". */
@@ -43,7 +52,7 @@ export const packageLabel = (pkg: ProductPackageDetails) =>
 const ADD_NEW_PACKAGE = 'ADD_NEW';
 
 const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>((
-  { categoryId, mode = 'new', packages = [], onPackageChange, onPurchaseUnitChange },
+  { categoryId, mode = 'new', packages = [], onPackageChange, onUnitsChange },
   ref
 ) => {
   const [purchaseUnit, setPurchaseUnit] = useState('');
@@ -92,7 +101,6 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     setSmallestUnit('');
     setPurchaseSmallestUnitId('');
     setErrors((prev) => ({ ...prev, purchaseUnit: '', smallestUnit: '' }));
-    onPurchaseUnitChange?.(value);
   };
 
   const handleSmallestUnitChange = (value: string) => {
@@ -122,7 +130,6 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     setPurchaseSmallestUnitId('');
 
     onPackageChange?.(pkg ? pkg.packagingId : null);
-    onPurchaseUnitChange?.(pkg ? pkg.purchaseUnit : '');
   };
 
   const validateField = (value: string) => {
@@ -149,6 +156,22 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   const displaySmallestUnit = isLocked
     ? packageSmallestUnitName(lockedPackage, unitPairs) || smallestUnit
     : smallestUnit;
+
+  /**
+   * Reported from an effect rather than each handler: the smallest unit is
+   * derived (it can resolve late, once the unit master loads) and the pack size
+   * has its own input, so there is no single place all three settle.
+   */
+  const onUnitsChangeRef = useRef(onUnitsChange);
+  onUnitsChangeRef.current = onUnitsChange;
+
+  useEffect(() => {
+    onUnitsChangeRef.current?.({
+      purchaseUnit,
+      smallestUnit: displaySmallestUnit,
+      unitContains: eachStripContains,
+    });
+  }, [purchaseUnit, displaySmallestUnit, eachStripContains]);
 
   useImperativeHandle(ref, () => ({
     getFormData: () => ({

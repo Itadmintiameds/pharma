@@ -6,6 +6,7 @@ import toast from "react-hot-toast";
 import Button from "@/app/components/common/Button";
 import PackagingDetails, {
   PackagingDetailsRef,
+  PackagingUnits,
 } from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails, {
   BatchDetailsRef,
@@ -88,8 +89,13 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
   // Which saved package the user picked, so the batch picker can list its
   // batches. null means "Add New Package", where the batch is new by definition.
   const [selectedPackagingId, setSelectedPackagingId] = useState<string | null>(null);
-  // Purchase unit chosen on the packaging step; the batch form shows it read-only.
-  const [packagingPurchaseUnit, setPackagingPurchaseUnit] = useState("");
+  // Unit pairing chosen on the packaging step; the batch form labels and derives
+  // its price fields from it.
+  const [packagingUnits, setPackagingUnits] = useState<PackagingUnits>({
+    purchaseUnit: "",
+    smallestUnit: "",
+    unitContains: "",
+  });
 
   const packagingRef = useRef<PackagingDetailsRef>(null);
   const batchRef = useRef<BatchDetailsRef>(null);
@@ -257,9 +263,9 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         expiryDate: batchPayload.expiryDate,
         hsnCode: updated.hsnNo || details.hsnNo || "",
         variant,
-        mrp: Number(
-          batchData?.mrpPerSmallestUnit || batchData?.mrpPerBox || 0
-        ),
+        // Per purchase unit, to match purchaseQuantity — the invoice bills in
+        // purchase units, not in smallest units.
+        mrp: Number(batchData?.mrpPerBox || 0),
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
@@ -367,7 +373,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
           categoryId={details.productCategoryId}
           packages={details.packages ?? []}
           onPackageChange={setSelectedPackagingId}
-          onPurchaseUnitChange={setPackagingPurchaseUnit}
+          onUnitsChange={setPackagingUnits}
         />
       </div>
       <div className={activeTab === TABS[1] ? "block w-full" : "hidden"}>
@@ -379,13 +385,13 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             ref={batchRef}
             mode="existing"
             batches={selectedPackage?.batches ?? []}
-            purchaseUnit={packagingPurchaseUnit}
+            {...packagingUnits}
           />
         ) : (
           <BatchDetails
             key="new-package"
             ref={batchRef}
-            purchaseUnit={packagingPurchaseUnit}
+            {...packagingUnits}
           />
         )}
       </div>

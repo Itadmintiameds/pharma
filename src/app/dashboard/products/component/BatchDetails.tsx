@@ -1,4 +1,4 @@
-import React, { useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { BatchSchema, MIN_EXPIRY_MONTHS } from '@/app/schema/BatchSchema';
@@ -35,6 +35,13 @@ export interface BatchDetailsProps {
    * package's unit, so the field is read-only and mirrors this.
    */
   purchaseUnit?: string;
+  /** Smallest unit of the selected package — labels the per-unit price fields. */
+  smallestUnit?: string;
+  /**
+   * How many smallest units one purchase unit holds, from the packaging step.
+   * The per-unit prices are divided down by this.
+   */
+  unitContains?: string;
 }
 
 const ADD_NEW_BATCH = 'ADD_NEW';
@@ -60,9 +67,27 @@ const EMPTY_FORM = {
 const str = (value: unknown): string =>
   value === null || value === undefined ? '' : String(value);
 
+/**
+ * Each price is entered per purchase unit and derived per smallest unit, so the
+ * two are always in step.
+ */
+const PER_UNIT_FIELD = {
+  purchasePricePerBox: 'purchasePricePerSmallestUnit',
+  mrpPerBox: 'mrpPerSmallestUnit',
+  sellingPricePerBox: 'sellingPricePerSmallestUnit',
+} as const;
+
+type PerBoxField = keyof typeof PER_UNIT_FIELD;
+
+/** Money, so two decimals — and no trailing zeros on a value that divides evenly. */
+const divideToUnit = (perBox: string, unitCount: number): string => {
+  if (perBox.trim() === '' || !Number.isFinite(Number(perBox))) return '';
+  return String(Math.round((Number(perBox) / unitCount) * 100) / 100);
+};
+
 
 const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
-  { mode = 'new', batches = [], purchaseUnit = '' },
+  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '' },
   ref
 ) => {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
@@ -81,6 +106,27 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
    * anything new inherits the unit chosen on the packaging step.
    */
   const effectivePurchaseUnit = isLocked ? formData.purchaseUnit : purchaseUnit;
+
+  // Labels fall back to generic wording until the packaging step is filled in.
+  const purchaseUnitLabel = effectivePurchaseUnit || 'Purchase Unit';
+  const smallestUnitLabel = smallestUnit || 'Smallest Unit';
+
+  const unitCount = Number(unitContains) > 0 ? Number(unitContains) : 0;
+  // A saved batch carries its own per-unit prices; only a new one is derived.
+  const isDerived = unitCount > 0 && !isLocked;
+
+  /**
+   * Computed on every render rather than stored, so the per-unit prices follow
+   * both the price entered above and a pack size edited afterwards.
+   */
+  const resolvedFormData = useMemo(() => {
+    if (!isDerived) return formData;
+    const next = { ...formData };
+    (Object.keys(PER_UNIT_FIELD) as PerBoxField[]).forEach((field) => {
+      next[PER_UNIT_FIELD[field]] = divideToUnit(formData[field], unitCount);
+    });
+    return next;
+  }, [formData, isDerived, unitCount]);
 
   /**
    * Free goods come in the same unit the stock was bought in, so the only
@@ -118,7 +164,12 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     setFormData(prev => ({ ...prev, [field]: value }));
     // A locked batch only accepts the three purchase fields, which the schema
     // can't check in isolation — validate() covers them on submit instead.
-    if (!isLocked) validateField(field, value);
+    if (!isLocked) {
+      validateField(field, value);
+      // The paired per-unit field follows this one, so its error is stale now.
+      const derivedField = PER_UNIT_FIELD[field as PerBoxField];
+      if (derivedField && isDerived) setErrors(prev => ({ ...prev, [derivedField]: '' }));
+    }
   };
 
   /**
@@ -174,7 +225,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
 
   useImperativeHandle(ref, () => ({
     getFormData: () => ({
-      ...formData,
+      ...resolvedFormData,
       purchaseUnit: effectivePurchaseUnit,
       // Empty unless a saved batch was picked — that is what tells the caller
       // no batch needs creating.
@@ -197,16 +248,16 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       // purchaseUnit comes from the packaging step, not from this form.
       const nextErrors = collectErrors(
         BatchSchema,
-        { ...formData, purchaseUnit: effectivePurchaseUnit },
+        { ...resolvedFormData, purchaseUnit: effectivePurchaseUnit },
         {
           purchaseUnit: 'Select a Purchase Unit on the packaging step first',
           purchaseQuantity: 'Purchase Quantity is required',
-          purchasePricePerBox: 'Purchase Price (per Box) is required',
-          mrpPerBox: 'MRP (per Box) is required',
-          sellingPricePerBox: 'Selling Price (per Box) is required',
-          purchasePricePerSmallestUnit: 'Purchase Price (per Smallest Unit) is required',
-          mrpPerSmallestUnit: 'MRP (per Smallest Unit) is required',
-          sellingPricePerSmallestUnit: 'Selling Price (per Smallest Unit) is required',
+          purchasePricePerBox: `Purchase Price (per ${purchaseUnitLabel}) is required`,
+          mrpPerBox: `MRP (per ${purchaseUnitLabel}) is required`,
+          sellingPricePerBox: `Selling Price (per ${purchaseUnitLabel}) is required`,
+          purchasePricePerSmallestUnit: `Purchase Price (per ${smallestUnitLabel}) is required`,
+          mrpPerSmallestUnit: `MRP (per ${smallestUnitLabel}) is required`,
+          sellingPricePerSmallestUnit: `Selling Price (per ${smallestUnitLabel}) is required`,
         }
       );
 
@@ -219,6 +270,12 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const masterProps = isLocked
     ? { readOnly: true, disabled: true, className: 'bg-gray-50' }
     : { disabled: awaitingBatchChoice };
+
+  // Per-unit prices are computed from the per-purchase-unit ones whenever the
+  // pack size is known, so they stay read-only rather than drifting apart.
+  const derivedProps = isDerived
+    ? { readOnly: true, disabled: true, className: 'bg-gray-50' }
+    : masterProps;
 
   // A saved batch's dates can't be edited here, so the expiry rule can only
   // warn rather than block.
@@ -337,7 +394,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             />
 
             <Input
-              label="Purchase Price (per Box)"
+              label={`Purchase Price (per ${purchaseUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
@@ -347,7 +404,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               {...masterProps}
             />
             <Input
-              label="MRP (per Box)"
+              label={`MRP (per ${purchaseUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
@@ -357,7 +414,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               {...masterProps}
             />
             <Input
-              label="Selling Price (per Box)"
+              label={`Selling Price (per ${purchaseUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
@@ -368,34 +425,34 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             />
 
             <Input
-              label="Purchase Price (per Smallest Unit)"
+              label={`Purchase Price (per ${smallestUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
-              value={formData.purchasePricePerSmallestUnit}
+              value={resolvedFormData.purchasePricePerSmallestUnit}
               onChange={(e) => handleChange('purchasePricePerSmallestUnit', e.target.value)}
               error={errors.purchasePricePerSmallestUnit}
-              {...masterProps}
+              {...derivedProps}
             />
             <Input
-              label="MRP (per Smallest Unit)"
+              label={`MRP (per ${smallestUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
-              value={formData.mrpPerSmallestUnit}
+              value={resolvedFormData.mrpPerSmallestUnit}
               onChange={(e) => handleChange('mrpPerSmallestUnit', e.target.value)}
               error={errors.mrpPerSmallestUnit}
-              {...masterProps}
+              {...derivedProps}
             />
             <Input
-              label="Selling Price (per Smallest Unit)"
+              label={`Selling Price (per ${smallestUnitLabel})`}
               required={!isLocked}
               type="number"
               placeholder="₹ 0.00"
-              value={formData.sellingPricePerSmallestUnit}
+              value={resolvedFormData.sellingPricePerSmallestUnit}
               onChange={(e) => handleChange('sellingPricePerSmallestUnit', e.target.value)}
               error={errors.sellingPricePerSmallestUnit}
-              {...masterProps}
+              {...derivedProps}
             />
 
             <Input

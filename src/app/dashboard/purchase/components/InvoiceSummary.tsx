@@ -144,8 +144,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         hsn: item.hsnCode || '-',
         batch: item.batchNumber || item.batchId,
         expiry: item.expiryDate || '-',
+        // MRP is stored per purchase unit, so it multiplies straight by the
+        // purchase quantity.
         mrp: Number(item.mrp || 0),
-        value: item.grossAmount,
+        value: Number(item.mrp || 0) * Number(item.purchaseQuantity || 0),
         dis: 0,
         gst: item.gst,
         amount: item.netAmount
@@ -166,7 +168,8 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     { accessorKey: 'expiry', header: 'Expiry' },
     { accessorKey: 'mrp', header: 'MRP', cell: (info) => Number(info.getValue()).toFixed(2) },
     { accessorKey: 'value', header: 'VALUE', cell: (info) => Number(info.getValue()).toFixed(2) },
-    { accessorKey: 'dis', header: 'DIS%' },
+    // Per-product discount — hidden for now; nothing captures it per line yet.
+    // { accessorKey: 'dis', header: 'DIS%' },
     { accessorKey: 'gst', header: 'GST Amt', cell: (info) => Number(info.getValue()).toFixed(2) },
     { accessorKey: 'amount', header: 'Amount (₹)', cell: (info) => Number(info.getValue()).toFixed(2) },
   ], []);

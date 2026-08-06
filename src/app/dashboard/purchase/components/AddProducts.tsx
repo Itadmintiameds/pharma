@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
 import ProductDetails from "@/app/dashboard/products/component/ProductDetails";
-import PackagingDetails, { PackagingDetailsRef } from "@/app/dashboard/products/component/PackagingDetails";
+import PackagingDetails, { PackagingDetailsRef, PackagingUnits } from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/component/BatchDetails";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import InvoiceSummary from "./InvoiceSummary";
@@ -57,8 +57,13 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Bumped to remount the three step forms with blank state.
   const [formKey, setFormKey] = useState(0);
-  // Purchase unit chosen on the packaging step; the batch form shows it read-only.
-  const [packagingPurchaseUnit, setPackagingPurchaseUnit] = useState("");
+  // Unit pairing chosen on the packaging step; the batch form labels and derives
+  // its price fields from it.
+  const [packagingUnits, setPackagingUnits] = useState<PackagingUnits>({
+    purchaseUnit: "",
+    smallestUnit: "",
+    unitContains: "",
+  });
   
   const productDetailsRef = useRef<any>(null);
   const packagingDetailsRef = useRef<PackagingDetailsRef>(null);
@@ -180,7 +185,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
   const handleOpenAddProduct = () => {
     setActiveTab(TABS[0]);
     setFormKey((key) => key + 1);
-    setPackagingPurchaseUnit("");
+    setPackagingUnits({ purchaseUnit: "", smallestUnit: "", unitContains: "" });
     setViewState('add');
   };
 
@@ -292,7 +297,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
         expiryDate: batchData?.expiryDate || "",
         hsnCode: productData?.hsnCode || "",
         variant,
-        mrp: Number(batchData?.mrpPerSmallestUnit || batchData?.mrpPerBox || batchData?.mrp || 0),
+        // Per purchase unit, to match purchaseQuantity — the invoice bills in
+        // purchase units, not in smallest units.
+        mrp: Number(batchData?.mrpPerBox || 0),
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
@@ -645,14 +652,14 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
               key={`packaging-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`}
               categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory}
               ref={packagingDetailsRef}
-              onPurchaseUnitChange={setPackagingPurchaseUnit}
+              onUnitsChange={setPackagingUnits}
             />
           </div>
           <div className={activeTab === "Batch & Stock Details" ? "block w-full" : "hidden"}>
             <BatchDetails
               key={`batch-${formKey}`}
               ref={batchDetailsRef}
-              purchaseUnit={packagingPurchaseUnit}
+              {...packagingUnits}
             />
           </div>
           

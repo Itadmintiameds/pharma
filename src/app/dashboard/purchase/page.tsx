@@ -81,8 +81,9 @@ const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]>
       hsn: product?.hsnNo || "—",
       batch: batch?.batchNumber || line.batchNumber || line.batchId,
       expiry: batch?.expiryDate || "—",
-      mrp: Number(batch?.mrpPerUnit ?? batch?.mrp ?? 0),
-      value: Number(line.grossAmount || 0),
+      // Per purchase unit, matching the quantity the line is billed in.
+      mrp: Number(batch?.mrp ?? 0),
+      value: Number(batch?.mrp ?? 0) * Number(line.purchaseQuantity || 0),
       dis: 0,
       gst: Number(line.gst || 0),
       amount: Number(line.netAmount || 0),
