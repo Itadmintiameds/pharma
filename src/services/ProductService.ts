@@ -10,4 +10,25 @@ export class ProductService {
       throw error;
     }
   }
+
+  static async getAllBatches() {
+    try {
+      const response = await api.get('/product/batches');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching batches:', error);
+      throw error;
+    }
+  }
+
+  static async getBatchById(batchId: string) {
+    try {
+      const response = await api.get(`/product/batch/${batchId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching batch details for ${batchId}:`, error);
+      throw error;
+    }
+  }
 }
+
