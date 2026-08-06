@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
 import Button from "@/app/components/common/Button";
@@ -95,6 +95,13 @@ const SetupPharmacy = ({
         ? "Clinical Establishment Certificate"
         : "Drug License Number";
 
+  const documentPlaceholder =
+    selected === "doctor"
+      ? "MCI-12345-2020"
+      : ["hospital", "clinic", "nursingHome"].includes(selected)
+        ? "CEA/MH/2024/00123"
+        : "20B-MH-123456";
+
   const selectedBusinessType =
     pharmacyTypes.find((type) => type.id === selected)?.label ?? "Business";
 
@@ -122,6 +129,19 @@ const SetupPharmacy = ({
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formKey, setFormKey] = useState(0);
+
+  const issueDateRef = useRef<HTMLInputElement>(null);
+  const expiryDateRef = useRef<HTMLInputElement>(null);
+
+  const openDatePicker = (ref: React.RefObject<HTMLInputElement | null>) => {
+    const input = ref.current;
+    if (!input) return;
+    if (typeof (input as any).showPicker === "function") {
+      (input as any).showPicker();
+    } else {
+      input.focus();
+    }
+  };
 
   const resetForm = () => {
     setSelected("");
@@ -729,7 +749,7 @@ const SetupPharmacy = ({
 
             <Input
               label={documentLabel}
-              placeholder="46SSDSF123S556"
+              placeholder={documentPlaceholder}
               type="text"
               name="documentNo"
               id="documentNo"
@@ -752,6 +772,9 @@ const SetupPharmacy = ({
               type="date"
               name="issueDate"
               id="issueDate"
+              ref={issueDateRef}
+              onClick={() => openDatePicker(issueDateRef)}
+              style={{ cursor: "pointer" }}
               value={issueDate}
               onChange={handleFieldChange("issueDate", setIssueDate)}
               error={errors.issueDate}
@@ -761,7 +784,7 @@ const SetupPharmacy = ({
 
             <Input
               label="Issue Authority"
-              placeholder="John Doe"
+              placeholder="FDA"
               type="text"
               name="issueAuthority"
               id="issueAuthority"
@@ -776,6 +799,9 @@ const SetupPharmacy = ({
               type="date"
               name="expiryDate"
               id="expiryDate"
+              ref={expiryDateRef}
+              onClick={() => openDatePicker(expiryDateRef)}
+              style={{ cursor: "pointer" }}
               value={expiryDate}
               onChange={handleFieldChange("expiryDate", setExpiryDate)}
               error={errors.expiryDate}
@@ -786,7 +812,7 @@ const SetupPharmacy = ({
 
             <Input
               label="PAN Number (Optional)"
-              placeholder="46SSDSF123S556"
+              placeholder="ABCDE1234F"
               type="text"
               name="panNumber"
               id="panNumber"
@@ -797,7 +823,7 @@ const SetupPharmacy = ({
 
             <Input
               label="GST Number (Optional)"
-              placeholder="46SSDSF123S556"
+              placeholder="29ABCDE1234F1Z5"
               type="text"
               name="gstNumber"
               id="gstNumber"

@@ -1,10 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
+import { Eye, EyeOff } from 'lucide-react';
 import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
-import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail } from '@/services/UserManagementService';
+import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail, checkEmployeeId } from '@/services/UserManagementService';
+import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
+import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
 
 interface AddUserWizardProps {
@@ -18,6 +22,8 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     fullName: '',
     mobileNumber: '',
     emailId: '',
+    password: '',
+    confirmPassword: '',
     dob: '',
     gender: '',
     department: '',
@@ -36,6 +42,15 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [createdUserId, setCreatedUserId] = useState<number | null>(null);
+
+  const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
+  const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [showOtp, setShowOtp] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -71,7 +86,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       const payload = {
         user: {
           userEmail: formData.emailId || null,
-          password: "Password@123",
+          password: formData.password,
           fullName: formData.fullName || null,
           userPhone: formData.mobileNumber || null,
           employeeId: formData.employeeId || null,
@@ -107,6 +122,161 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     }
   };
 
+  const validatePassword = (password: string) => {
+    const passwordRegex =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=])[A-Za-z\d@$!%*?&#^()_\-+=]{8,20}$/;
+
+    if (!password) {
+      return "Password is required";
+    }
+
+    if (!passwordRegex.test(password)) {
+      return "Password must be 8-20 characters and include an uppercase letter, lowercase letter, number, and special character.";
+    }
+
+    return "";
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    setFormData({ ...formData, password: value });
+    setErrors(prev => ({ ...prev, password: validatePassword(value) }));
+
+    if (formData.confirmPassword) {
+      if (value !== formData.confirmPassword) {
+        setErrors(prev => ({ ...prev, password: validatePassword(value), confirmPassword: "Passwords did not match" }));
+      } else {
+        setErrors(prev => ({ ...prev, password: validatePassword(value), confirmPassword: "" }));
+      }
+    }
+  };
+
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+
+    setFormData({ ...formData, confirmPassword: value });
+
+    if (value !== formData.password) {
+      setErrors(prev => ({ ...prev, confirmPassword: "Passwords did not match" }));
+    } else {
+      setErrors(prev => ({ ...prev, confirmPassword: "" }));
+    }
+  };
+
+  const handleSendOtp = async () => {
+    const email = formData.emailId.trim();
+
+    if (!email) {
+      setErrors({ ...errors, emailId: 'Email ID is required' });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(email)) {
+      setErrors({ ...errors, emailId: 'Please enter a valid email address' });
+      return;
+    }
+
+    setErrors({ ...errors, emailId: '' });
+    setIsSendingOtp(true);
+
+    try {
+      const exists = await checkUserEmail(email);
+      if (exists) {
+        setErrors(prev => ({ ...prev, emailId: 'Email already exists' }));
+        return;
+      }
+
+      await sendEmailOtp({ email });
+
+      showToast.success("OTP Sent");
+      setShowOtp(true);
+    } catch (error) {
+      if (error instanceof Error) {
+        showToast.error(error.message);
+      }
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyOtp = async (updatedOtp: string[]) => {
+    try {
+      await verifyEmailOtp({
+        email: formData.emailId,
+        otp: updatedOtp.join(""),
+      });
+
+      setIsEmailVerified(true);
+      setShowOtp(false);
+      setOtp(["", "", "", "", "", ""]);
+      setErrors(prev => ({ ...prev, emailId: '' }));
+
+      showToast.success("Email verified successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        showToast.error(error.message);
+
+        setOtp(["", "", "", "", "", ""]);
+        otpInputRefs.current[0]?.focus();
+      }
+    }
+  };
+
+  const handleOtpChange = async (value: string, index: number) => {
+    if (value && !/^\d+$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value.substring(value.length - 1);
+    setOtp(newOtp);
+
+    if (value && index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+
+    const updatedOtp = [...newOtp];
+
+    if (updatedOtp.every((digit) => digit !== "")) {
+      await verifyOtp(updatedOtp);
+    }
+  };
+
+  const handleOtpKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    index: number,
+  ) => {
+    if (e.key === "Backspace" && !otp[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+
+    const pastedOtp = e.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, 6);
+
+    if (!pastedOtp) return;
+
+    const newOtp = [...otp];
+
+    pastedOtp.split("").forEach((digit, index) => {
+      newOtp[index] = digit;
+    });
+
+    setOtp(newOtp);
+
+    otpInputRefs.current[Math.min(pastedOtp.length - 1, 5)]?.focus();
+
+    if (newOtp.every((digit) => digit !== "")) {
+      verifyOtp(newOtp);
+    }
+  };
+
   const handleNextStep1 = async () => {
     const newErrors: Record<string, string> = {};
     
@@ -137,20 +307,46 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       }
     }
     
-    // Check if email is provided and valid
+    // Check if employee ID already exists
+    if (formData.employeeId.trim()) {
+      if (!/[a-zA-Z0-9]/.test(formData.employeeId)) {
+        newErrors.employeeId = 'Employee ID cannot contain only special characters';
+      } else {
+        try {
+          const exists = await checkEmployeeId(formData.employeeId);
+          if (exists) {
+            newErrors.employeeId = 'Employee ID already exists';
+          }
+        } catch (err) {
+          console.error("Failed to check employee ID during submission", err);
+        }
+      }
+    }
+
+    // Check if email is provided, valid and verified
     if (!formData.emailId.trim()) {
       newErrors.emailId = 'Email ID is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
       newErrors.emailId = 'Invalid email format';
+    } else if (!isEmailVerified) {
+      newErrors.emailId = 'Please verify your Email ID';
+    }
+
+    // Password validation
+    if (!formData.password.trim()) {
+      newErrors.password = 'Password is required.';
     } else {
-      try {
-        const exists = await checkUserEmail(formData.emailId);
-        if (exists) {
-          newErrors.emailId = 'Email already exists';
-        }
-      } catch (err) {
-        console.error("Failed to check email during submission", err);
+      const passwordValidation = validatePassword(formData.password);
+      if (passwordValidation) {
+        newErrors.password = passwordValidation;
       }
+    }
+
+    // Confirm password validation
+    if (!formData.confirmPassword.trim()) {
+      newErrors.confirmPassword = 'Confirm Password is required.';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords did not match.';
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -219,12 +415,37 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       <h3 className="text-lg font-semibold text-gray-900 shrink-">Personal Information</h3>
       
       <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-        <Input 
-          label="Employee ID" 
-          placeholder="Emp-00001" 
+        <Input
+          label="Employee ID"
+          placeholder="Emp-00001"
           maxLength={15}
           value={formData.employeeId}
-          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value.replace(/[^a-zA-Z0-9-]/g, '') })}
+          onChange={(e) => {
+            let val = e.target.value.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
+            const firstHyphenIndex = val.indexOf('-');
+            if (firstHyphenIndex !== -1) {
+              val = val.slice(0, firstHyphenIndex + 1) + val.slice(firstHyphenIndex + 1).replace(/-/g, '');
+            }
+            setFormData({ ...formData, employeeId: val });
+            if (errors.employeeId) setErrors({ ...errors, employeeId: '' });
+          }}
+          onBlur={async (e) => {
+            const val = e.target.value.trim();
+            if (!val) return;
+            if (!/[a-zA-Z0-9]/.test(val)) {
+              setErrors({ ...errors, employeeId: 'Employee ID cannot contain only special characters' });
+              return;
+            }
+            try {
+              const exists = await checkEmployeeId(val);
+              if (exists) {
+                setErrors({ ...errors, employeeId: 'Employee ID already exists' });
+              }
+            } catch (err) {
+              console.error("Failed to check employee ID", err);
+            }
+          }}
+          error={errors.employeeId}
         />
         
         <Input 
@@ -277,45 +498,131 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           {errors.mobileNumber && <p className="mt-1 text-p2 text-warning-500">{errors.mobileNumber}</p>}
         </div>
 
-        <Input 
-          label="Email ID" 
-          type="email"
-          required
-          placeholder="johndoe@gmail.com" 
-          value={formData.emailId}
-          onChange={(e) => {
-            setFormData({ ...formData, emailId: e.target.value });
-            if (errors.emailId) setErrors({ ...errors, emailId: '' });
-          }}
-          onBlur={async (e) => {
-            const val = e.target.value;
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (val && !emailRegex.test(val)) {
-              setErrors({ ...errors, emailId: 'Invalid email format' });
-            } else if (!val) {
-              setErrors({ ...errors, emailId: 'Email ID is required' });
-            } else {
-              try {
-                const exists = await checkUserEmail(val);
-                if (exists) {
-                  setErrors({ ...errors, emailId: 'Email already exists' });
-                }
-              } catch (err) {
-                console.error("Failed to check email", err);
-              }
+        <div className="space-y-2">
+          <Input
+            label="Email ID"
+            type="email"
+            required
+            placeholder="johndoe@gmail.com"
+            value={formData.emailId}
+            onChange={(e) => {
+              setFormData({ ...formData, emailId: e.target.value });
+              if (errors.emailId) setErrors({ ...errors, emailId: '' });
+              if (isEmailVerified) setIsEmailVerified(false);
+              if (showOtp) setShowOtp(false);
+            }}
+            error={errors.emailId}
+            leftIcon={
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+              </svg>
             }
-          }}
-          error={errors.emailId}
+            rightIcon={
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={isEmailVerified || isSendingOtp}
+                className={`w-24 h-7 rounded-lg font-medium text-label-l2 flex items-center justify-center ${
+                  isEmailVerified
+                    ? "border border-success-900 bg-success-50 text-success-900 cursor-not-allowed"
+                    : isSendingOtp
+                      ? "bg-pneutral-500 text-pneutral-50 cursor-wait"
+                      : "bg-pneutral-900 text-pneutral-50 hover:bg-pneutral-800"
+                }`}
+              >
+                {isEmailVerified
+                  ? "Verified"
+                  : isSendingOtp
+                    ? "Sending..."
+                    : "Send OTP"}
+              </button>
+            }
+          />
+          {isEmailVerified && (
+            <div className="w-full h-8 border-2 border-success-900 rounded-lg bg-success-50 flex items-center gap-2 px-3 text-p4 font-medium text-success-900">
+              <Image
+                src="/Login&RegistrationIcons/VerifyIcon.svg"
+                alt="Email"
+                width={17}
+                height={17}
+              />
+              Email verified successfully
+            </div>
+          )}
+
+          {showOtp && (
+            <div className="flex flex-col gap-2.5 h-[78px] w-[348px]">
+              <label className="text-p3 font-normal text-[#4B5563] font-body leading-none">
+                Enter OTP
+              </label>
+              <div className="flex justify-between gap-[12px] w-full">
+                {otp.map((digit, index) => (
+                  <input
+                    key={index}
+                    type="text"
+                    maxLength={1}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(e.target.value, index)}
+                    onKeyDown={(e) => handleOtpKeyDown(e, index)}
+                    onPaste={handleOtpPaste}
+                    ref={(el) => {
+                      otpInputRefs.current[index] = el;
+                    }}
+                    className="w-[42px] h-[48px] min-h-[48px] max-h-[52px] border border-pneutral-200 rounded-[8px] text-center font-bold text-lg focus:outline-none focus:border-secondary-500 focus:ring-1 focus:ring-secondary-500 font-body text-[#1A1F3A]"
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <Input
+          label="Password"
+          placeholder="Enter password"
+          type={showPassword ? "text" : "password"}
+          value={formData.password}
+          onChange={handlePasswordChange}
+          error={errors.password}
           leftIcon={
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="flex items-center cursor-pointer"
+            >
+              {showPassword ? (
+                <EyeOff size={20} className="text-pneutral-500" aria-label="Hide Password" />
+              ) : (
+                <Eye size={20} className="text-pneutral-500" aria-label="Show Password" />
+              )}
+            </button>
           }
         />
 
-        <Input 
-          label="Date of Birth" 
+        <Input
+          label="Confirm Password"
+          placeholder="Re-enter password"
+          type={showConfirmPassword ? "text" : "password"}
+          value={formData.confirmPassword}
+          onChange={handleConfirmPasswordChange}
+          error={errors.confirmPassword}
+          leftIcon={
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword((prev) => !prev)}
+              className="flex items-center cursor-pointer"
+            >
+              {showConfirmPassword ? (
+                <EyeOff size={20} className="text-pneutral-500" aria-label="Hide Password" />
+              ) : (
+                <Eye size={20} className="text-pneutral-500" aria-label="Show Password" />
+              )}
+            </button>
+          }
+        />
+
+        <Input
+          label="Date of Birth"
           type="date"
           required
           min="1900-01-01"

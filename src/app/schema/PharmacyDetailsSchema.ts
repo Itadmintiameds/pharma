@@ -41,10 +41,9 @@ export const pharmacyDetailsSchema = z.object({
         .trim()
         .min(1, "Issue Date is required")
         .refine((val) => {
-            const date = new Date(val);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Ignore time part
-            return date <= today;
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            return val <= todayStr;
         }, { message: "Issue date cannot be in the future" })
         .refine((val) => {
             const year = val.split('-')[0];
