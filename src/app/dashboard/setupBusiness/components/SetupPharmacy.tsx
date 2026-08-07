@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
+import Dropdown from "@/app/components/common/Dropdown";
 import Button from "@/app/components/common/Button";
 import UploadInput from "@/app/components/common/UploadInput";
 import ComplianceSuccessModal from "@/app/components/common/ComplianceSuccessModal";
@@ -132,6 +133,13 @@ const SetupPharmacy = ({
 
   const issueDateRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
+
+  // Local (not UTC) date — toISOString() shifts to the previous day for IST
+  // mornings, which made today unselectable as an issue date.
+  const today = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
 
   const openDatePicker = (ref: React.RefObject<HTMLInputElement | null>) => {
     const input = ref.current;
@@ -719,33 +727,34 @@ const SetupPharmacy = ({
               required
             />
 
-            <div className="w-full">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
-                Mobile Number <span className="text-warning-500">*</span>
-              </label>
-              <div className={`flex h-12 w-full items-center rounded-[8px] border ${errors.pharmacyPhone ? 'border-warning-500' : 'border-pneutral-300'} bg-white transition-all`}>
-                <select className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none">
+            <Input
+              label="Mobile Number"
+              placeholder="Enter company phone"
+              type="text"
+              name="pharmacyPhone"
+              id="pharmacyPhone"
+              inputMode="numeric"
+              leftAddon={
+                <select
+                  aria-label="Country code"
+                  className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none cursor-pointer"
+                >
                   <option>+91</option>
                 </select>
-                <input 
-                  type="text" 
-                  placeholder="Enter company phone" 
-                  className="h-full w-full bg-transparent px-4 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500" 
-                  value={pharmacyPhone}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || /^[0-9]+$/.test(val)) {
-                      if (val.length <= 10) {
-                        setPharmacyPhone(val);
-                        validateField("pharmacyPhone", val);
-                      }
-                    }
-                  }}
-                  required
-                />
-              </div>
-              {errors.pharmacyPhone && <p className="text-sm text-red-500 mt-1">{errors.pharmacyPhone}</p>}
-            </div>
+              }
+              value={pharmacyPhone}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || /^[0-9]+$/.test(val)) {
+                  if (val.length <= 10) {
+                    setPharmacyPhone(val);
+                    validateField("pharmacyPhone", val);
+                  }
+                }
+              }}
+              error={errors.pharmacyPhone}
+              required
+            />
 
             <Input
               label={documentLabel}
@@ -778,7 +787,7 @@ const SetupPharmacy = ({
               value={issueDate}
               onChange={handleFieldChange("issueDate", setIssueDate)}
               error={errors.issueDate}
-              max={new Date().toISOString().split("T")[0]}
+              max={today}
               required
             />
 
@@ -805,7 +814,7 @@ const SetupPharmacy = ({
               value={expiryDate}
               onChange={handleFieldChange("expiryDate", setExpiryDate)}
               error={errors.expiryDate}
-              min={new Date().toISOString().split("T")[0]}
+              min={today}
               max="9999-12-31"
               required
             />
@@ -892,61 +901,44 @@ const SetupPharmacy = ({
               required
             /> */}
 
-            <div className="flex flex-col gap-1">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
-                Taluka
-                <span className="ml-2 text-warning-500">*</span>
-              </label>
+            <Dropdown
+              label="Taluka"
+              placeholder="Select Taluka"
+              options={talukas.map((taluka) => ({
+                label: taluka,
+                value: taluka,
+              }))}
+              value={address.taluka}
+              onChange={(value: string) =>
+                setAddress((prev) => ({
+                  ...prev,
+                  taluka: value,
+                }))
+              }
+              disabled={talukas.length === 0}
+              searchable
+              required
+            />
 
-              <select
-                value={address.taluka}
-                onChange={(e) =>
-                  setAddress((prev) => ({
-                    ...prev,
-                    taluka: e.target.value,
-                  }))
-                }
-                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
-              >
-                {talukas.length === 0 ? (
-                  <option value="">Select Taluka</option>
-                ) : (
-                  talukas.map((taluka) => (
-                    <option key={taluka} value={taluka}>
-                      {taluka}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+            <Dropdown
+              label="City/Town/Village"
+              placeholder="Select City"
+              options={cities.map((city) => ({
+                label: city,
+                value: city,
+              }))}
+              value={address.city}
+              onChange={(value: string) =>
+                setAddress((prev) => ({
+                  ...prev,
+                  city: value,
+                }))
+              }
+              disabled={cities.length === 0}
+              searchable
+              required
+            />
 
-            <div className="flex flex-col gap-1">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
-                City/Town/Village
-                <span className="ml-2 text-warning-500">*</span>
-              </label>
-
-              <select
-                value={address.city}
-                onChange={(e) =>
-                  setAddress((prev) => ({
-                    ...prev,
-                    city: e.target.value,
-                  }))
-                }
-                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
-              >
-                {cities.length === 0 ? (
-                  <option value="">Select City</option>
-                ) : (
-                  cities.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
 
             <Input
               label="Building No and name"
