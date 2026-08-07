@@ -13,12 +13,15 @@ export type PaymentMode = "CASH" | "CARD" | "UPI" | "CREDIT";
 export type BillStatus = "Paid" | "Pending" | "Cancelled";
 
 export interface CustomerInfo {
-  customerType: CustomerType;
+  /** Empty until the counter staff picks a customer type. */
+  customerType: CustomerType | "";
   customerName: string;
   mobileNo: string;
   age: string;
   gender: string;
   doctorName: string;
+  /** Who sent the customer in — doctor, staff, referral code. */
+  referredBy: string;
   address: string;
 }
 

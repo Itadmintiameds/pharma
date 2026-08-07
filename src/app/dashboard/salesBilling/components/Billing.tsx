@@ -7,26 +7,24 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ColumnDef } from "@tanstack/react-table";
-import { 
-  Trash2, 
-  ShoppingCart, 
-  Upload, 
-  Search, 
-  QrCode, 
-  X, 
-  Pencil, 
-  User, 
-  Stethoscope, 
-  Bed, 
-  Clock, 
-  Building2, 
-  Briefcase, 
-  Shield 
+import {
+  ShoppingCart,
+  Upload,
+  X,
+  User,
+  Stethoscope,
+  Bed,
+  Clock,
+  Building2,
+  Briefcase,
+  Shield
 } from "lucide-react";
 import toast from "react-hot-toast";
-import DataTable from "@/app/components/common/table/DataTable";
 import Input from "@/app/components/common/Input";
+import BillingItemsTable, {
+  BillingRow,
+  emptyBillingRow,
+} from "./BillingItemsTable";
 import { ProductService } from "@/services/ProductService";
 import {
   BillLine,
@@ -34,13 +32,7 @@ import {
   CustomerInfo,
   CustomerType,
 } from "@/types/BillingData";
-import {
-  calculateBillTotals,
-  formatAmount,
-  lineGross,
-  lineNet,
-  lineRate,
-} from "@/utils/billingTotals";
+import { calculateBillTotals, formatAmount } from "@/utils/billingTotals";
 
 interface BillingProps {
   onCancel: () => void;
@@ -60,7 +52,16 @@ const WalkIcon = () => (
   </svg>
 );
 
-const CUSTOMER_TYPES: { label: string; value: CustomerType; icon: React.ReactNode }[] = [
+/**
+ * Seven types sit on the first row and Insurance wraps onto the second.
+ * Only Walk-in is wired up so far — the rest capture different fields and stay
+ * disabled until those flows are built.
+ */
+const CUSTOMER_TYPES: {
+  label: string;
+  value: CustomerType;
+  icon: React.ReactNode;
+}[] = [
   { label: "Walk-in", value: "WALK_IN", icon: <WalkIcon /> },
   { label: "Registered", value: "REGISTERED", icon: <User size={16} /> },
   { label: "OP Patient", value: "OP_PATIENT", icon: <Stethoscope size={16} /> },
@@ -71,24 +72,59 @@ const CUSTOMER_TYPES: { label: string; value: CustomerType; icon: React.ReactNod
   { label: "Insurance", value: "INSURANCE", icon: <Shield size={16} /> },
 ];
 
+const ENABLED_CUSTOMER_TYPES: CustomerType[] = ["WALK_IN"];
+
 const EMPTY_CUSTOMER: CustomerInfo = {
-  customerType: "WALK_IN",
+  customerType: "",
   customerName: "",
   mobileNo: "",
   age: "",
   gender: "",
   doctorName: "",
+  referredBy: "",
   address: "",
 };
 
-interface PendingLine {
-  product: BillableProduct;
-  quantity: string;
-  freeQuantity: string;
-  discountPercentage: string;
-  isEditing?: boolean;
-  editLineId?: string;
-}
+/** Rebuilds the cart lines the payment and invoice screens expect. */
+const rowsToLines = (rows: BillingRow[]): BillLine[] =>
+  rows
+    .filter((row) => row.batchId && Number(row.quantity) > 0)
+    .map((row) => ({
+      lineId: row.rowId,
+      productId: row.productId,
+      productName: row.productName,
+      brandName: row.brandName,
+      batchId: row.batchId,
+      batchNumber: row.batchNumber,
+      unit: row.unit || "Unit",
+      expiryDate: row.expiryDate,
+      quantity: Number(row.quantity) || 0,
+      freeQuantity: 0,
+      mrpPerUnit: row.mrpPerUnit,
+      sellingPricePerUnit: row.sellingPricePerUnit || row.mrpPerUnit,
+      discountPercentage: Number(row.discountPercentage) || 0,
+      gstPercentage: row.gstPercentage,
+      availableQuantity: row.availableQuantity,
+    }));
+
+/** Reopens a saved bill in the grid. */
+const linesToRows = (lines: BillLine[]): BillingRow[] =>
+  lines.map((line) => ({
+    ...emptyBillingRow(),
+    productId: line.productId,
+    productName: line.productName,
+    brandName: line.brandName,
+    batchId: line.batchId,
+    batchNumber: line.batchNumber,
+    unit: String(line.unit || "Unit"),
+    expiryDate: line.expiryDate,
+    availableQuantity: line.availableQuantity,
+    quantity: String(line.quantity),
+    discountPercentage: String(line.discountPercentage || ""),
+    mrpPerUnit: line.mrpPerUnit,
+    sellingPricePerUnit: line.sellingPricePerUnit || line.mrpPerUnit,
+    gstPercentage: line.gstPercentage,
+  }));
 
 const Billing: React.FC<BillingProps> = ({
   onCancel,
@@ -100,22 +136,21 @@ const Billing: React.FC<BillingProps> = ({
   const [customer, setCustomer] = useState<CustomerInfo>(
     initialCustomer ?? EMPTY_CUSTOMER
   );
-  const [lines, setLines] = useState<BillLine[]>(
-    initialLines && initialLines.length > 0 ? initialLines : []
+  const [rows, setRows] = useState<BillingRow[]>(
+    initialLines && initialLines.length > 0
+      ? linesToRows(initialLines)
+      : [emptyBillingRow()]
   );
   const [discountType, setDiscountType] = useState<"AMOUNT" | "PERCENTAGE">("AMOUNT");
   const [billDiscountInput, setBillDiscountInput] = useState(
     initialBillDiscount ? String(initialBillDiscount) : "0"
   );
-  const [search, setSearch] = useState("");
-  const [pending, setPending] = useState<PendingLine | null>(null);
   const [prescriptionName, setPrescriptionName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Batches fetched from server
   const [batchCatalog, setBatchCatalog] = useState<BillableProduct[]>([]);
   const [loadingBatches, setLoadingBatches] = useState<boolean>(false);
-  const [loadingSelect, setLoadingSelect] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBatches = async () => {
@@ -129,9 +164,11 @@ const Billing: React.FC<BillingProps> = ({
           brandName: b.brandName || "",
           batchId: b.batchId || "",
           batchNumber: b.batchNumber || "N/A",
-          unit: b.purchaseSmallestUnitName || b.purchaseUnit || "Unit",
+          // Stock is counted in smallest units, so never fall back to the
+          // purchase unit here — it would label the quantity wrongly.
+          unit: b.purchaseSmallestUnitName || "",
           expiryDate: b.expiryDate || "N/A",
-          availableQuantity: Number(b.totalStock) || 0,
+          availableQuantity: Number(b.stockQty ?? b.totalStock) || 0,
           mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || 0,
           sellingPricePerUnit: Number(b.sellingPricePerUnit) || Number(b.sellingPrice) || Number(b.mrpPerUnit) || 0,
           gstPercentage: Number(b.gstPercentage) || 0,
@@ -153,213 +190,56 @@ const Billing: React.FC<BillingProps> = ({
     value: CustomerInfo[K]
   ) => setCustomer((prev) => ({ ...prev, [key]: value }));
 
+  /**
+   * Each customer type collects a different set of details, so switching type
+   * clears whatever the previous one captured. Clicking the selected type again
+   * collapses the card back to the picker.
+   */
+  const selectCustomerType = (type: CustomerType) =>
+    setCustomer((prev) =>
+      prev.customerType === type
+        ? EMPTY_CUSTOMER
+        : { ...EMPTY_CUSTOMER, customerType: type }
+    );
+
+  const lines = useMemo(() => rowsToLines(rows), [rows]);
+
   const totals = useMemo(
     () => calculateBillTotals(lines, Number(billDiscountInput) || 0, discountType),
     [lines, billDiscountInput, discountType]
   );
 
-  const results = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (query.length < 1) return [];
-    return batchCatalog.filter(
-      (product) =>
-        product.productName.toLowerCase().includes(query) ||
-        product.brandName?.toLowerCase().includes(query) ||
-        product.batchNumber.toLowerCase().includes(query)
-    );
-  }, [search, batchCatalog]);
-
-  const handleSelectBatch = async (batch: BillableProduct) => {
+  /**
+   * Refreshes stock and pricing for the batch the grid just selected. This is
+   * the same batch-details call the old search flow used.
+   */
+  const fetchBatchDetails = async (batchId: string): Promise<BillableProduct | null> => {
     try {
-      setLoadingSelect(batch.batchId);
-      const res = await ProductService.getBatchById(batch.batchId);
+      const res = await ProductService.getBatchById(batchId);
       const b = res?.data;
-      let productToUse = batch;
-      if (b) {
-        productToUse = {
-          productId: b.productId || batch.productId,
-          productName: b.productName || batch.productName,
-          brandName: b.brandName || batch.brandName,
-          batchId: b.batchId || batch.batchId,
-          batchNumber: b.batchNumber || batch.batchNumber,
-          unit: b.purchaseSmallestUnitName || b.purchaseUnit || batch.unit || "Unit",
-          expiryDate: b.expiryDate || batch.expiryDate,
-          availableQuantity: Number(b.totalStock) ?? batch.availableQuantity,
-          mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || batch.mrpPerUnit,
-          sellingPricePerUnit: Number(b.sellingPricePerUnit) || Number(b.sellingPrice) || batch.sellingPricePerUnit || batch.mrpPerUnit,
-          gstPercentage: Number(b.gstPercentage) ?? batch.gstPercentage,
-          rackNo: b.rackLocation || batch.rackNo,
-        };
-      }
-      setSearch("");
-      setPending({
-        product: productToUse,
-        quantity: "1",
-        freeQuantity: "0",
-        discountPercentage: "0",
-      });
+      if (!b) return null;
+      return {
+        productId: b.productId || "",
+        productName: b.productName || "",
+        brandName: b.brandName || "",
+        batchId: b.batchId || batchId,
+        batchNumber: b.batchNumber || "",
+        unit: b.purchaseSmallestUnitName || "",
+        expiryDate: b.expiryDate || "",
+        availableQuantity: Number(b.stockQty ?? b.totalStock) || 0,
+        mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || 0,
+        sellingPricePerUnit:
+          Number(b.sellingPricePerUnit) || Number(b.sellingPrice) || Number(b.mrpPerUnit) || 0,
+        gstPercentage: Number(b.gstPercentage) || 0,
+        rackNo: b.rackLocation || "",
+      };
     } catch (err) {
       console.error("Failed to fetch batch details:", err);
       toast.error("Failed to load batch details.");
-    } finally {
-      setLoadingSelect(null);
+      return null;
     }
   };
 
-  const addPendingLine = () => {
-    if (!pending) return;
-    const quantity = Number(pending.quantity) || 0;
-    if (quantity <= 0) {
-      toast.error("Quantity must be greater than 0");
-      return;
-    }
-
-    if (pending.isEditing && pending.editLineId) {
-      updateLine(pending.editLineId, {
-        quantity,
-        freeQuantity: Number(pending.freeQuantity) || 0,
-        discountPercentage: Number(pending.discountPercentage) || 0,
-        sellingPricePerUnit: pending.product.sellingPricePerUnit || pending.product.mrpPerUnit,
-      });
-      toast.success("Item updated");
-    } else {
-      setLines((prev) => [
-        ...prev,
-        {
-          lineId: `${pending.product.productId}-${pending.product.batchId}-${prev.length}`,
-          productId: pending.product.productId,
-          productName: pending.product.productName,
-          brandName: pending.product.brandName,
-          batchId: pending.product.batchId,
-          batchNumber: pending.product.batchNumber,
-          unit: pending.product.unit || "Unit",
-          expiryDate: pending.product.expiryDate,
-          quantity,
-          freeQuantity: Number(pending.freeQuantity) || 0,
-          mrpPerUnit: pending.product.mrpPerUnit,
-          sellingPricePerUnit: pending.product.sellingPricePerUnit || pending.product.mrpPerUnit,
-          discountPercentage: Number(pending.discountPercentage) || 0,
-          gstPercentage: pending.product.gstPercentage,
-          availableQuantity: pending.product.availableQuantity,
-        },
-      ]);
-      toast.success("Item added to bill");
-    }
-
-    setPending(null);
-    setSearch("");
-  };
-
-  const updateLine = (lineId: string, patch: Partial<BillLine>) =>
-    setLines((prev) =>
-      prev.map((line) => (line.lineId === lineId ? { ...line, ...patch } : line))
-    );
-
-  const removeLine = (lineId: string) => {
-    setLines((prev) => prev.filter((line) => line.lineId !== lineId));
-    toast.success("Item removed");
-  };
-
-  const cartColumns: ColumnDef<BillLine>[] = [
-    { 
-      header: "#", 
-      cell: ({ row }) => <span className="font-medium text-pneutral-900">{row.index + 1}</span> 
-    },
-    {
-      accessorKey: "productName",
-      header: "Product Name",
-      cell: ({ row }) => (
-        <span className="font-bold text-pneutral-900">{row.original.productName}</span>
-      ),
-    },
-    { 
-      accessorKey: "batchNumber", 
-      header: "Batch",
-      cell: ({ row }) => <span>{row.original.batchNumber}</span>
-    },
-    {
-      accessorKey: "unit",
-      header: "Unit",
-      cell: ({ row }) => <span>{String(row.original.unit || "Unit")}</span>
-    },
-    {
-      accessorKey: "quantity",
-      header: "QTY",
-      cell: ({ row }) => <span className="font-semibold text-pneutral-900">{row.original.quantity}</span>,
-    },
-    {
-      accessorKey: "sellingPricePerUnit",
-      header: "Rate (₹)",
-      cell: ({ row }) => <span>{formatAmount(lineRate(row.original))}</span>,
-    },
-    {
-      header: "Gross (₹)",
-      cell: ({ row }) => <span>{formatAmount(lineGross(row.original))}</span>,
-    },
-    {
-      accessorKey: "discountPercentage",
-      header: "Dis(%)",
-      cell: ({ row }) => <span>{Number(row.original.discountPercentage || 0)}%</span>,
-    },
-    {
-      accessorKey: "gstPercentage",
-      header: "GST%",
-      cell: ({ row }) => <span>{Number(row.original.gstPercentage || 0)}%</span>,
-    },
-    {
-      header: "Amount (₹)",
-      cell: ({ row }) => (
-        <span className="font-semibold text-pneutral-900">
-          {formatAmount(lineNet(row.original))}
-        </span>
-      ),
-    },
-    {
-      header: "Action",
-      cell: ({ row }) => (
-        <div className="flex items-center justify-center gap-4">
-          <button
-            type="button"
-            onClick={() => {
-              setPending({
-                product: {
-                  productId: row.original.productId,
-                  productName: row.original.productName,
-                  brandName: row.original.brandName,
-                  batchId: row.original.batchId,
-                  batchNumber: row.original.batchNumber,
-                  unit: row.original.unit,
-                  expiryDate: row.original.expiryDate,
-                  availableQuantity: row.original.availableQuantity,
-                  mrpPerUnit: row.original.mrpPerUnit,
-                  sellingPricePerUnit: row.original.sellingPricePerUnit,
-                  gstPercentage: row.original.gstPercentage,
-                },
-                quantity: String(row.original.quantity),
-                freeQuantity: String(row.original.freeQuantity),
-                discountPercentage: String(row.original.discountPercentage),
-                isEditing: true,
-                editLineId: row.original.lineId,
-              });
-            }}
-            title="Edit Item"
-            className="text-[#7D32FC] hover:opacity-80 transition-opacity cursor-pointer"
-          >
-            <Pencil size={18} />
-          </button>
-          <button
-            type="button"
-            aria-label={`Remove ${row.original.productName}`}
-            title="Remove from bill"
-            onClick={() => removeLine(row.original.lineId)}
-            className="text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-          >
-            <Trash2 size={18} />
-          </button>
-        </div>
-      ),
-    },
-  ];
 
   return (
     <div className="flex flex-col gap-5 text-pneutral-900 pb-12">
@@ -368,214 +248,154 @@ const Billing: React.FC<BillingProps> = ({
         Billing POS
       </div>
 
-      {/* Top Section - Customer Info & Prescription */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start w-full">
-        {/* Customer Information Card */}
-        <div className="flex-1 w-full rounded-[12px] border border-pneutral-200 bg-white p-3 shadow-sm flex flex-col gap-2">
-          <div className="text-[18px] font-semibold text-[#3C3D3A]">
-            Customer Information
-          </div>
+      {/* Customer Information Card — collapsed to the type picker until a type
+          is chosen, then it grows to hold that type's fields. */}
+      <div className="w-full min-h-[172px] rounded-[12px] border border-pneutral-200 bg-white p-3 shadow-sm flex flex-col gap-4">
+        <div className="text-label-l5 font-semibold text-pneutral-800">
+          Customer Information
+        </div>
 
-          <div className="rounded-[8px] border border-[#D5D5D4] bg-white p-3 flex flex-col gap-4">
-            <div className="text-[16px] font-normal text-[#3C3D3A]">
-              Select the type of Customer
-            </div>
+        {/* Customer types — 7 on the first row, the 8th wraps below */}
+        <div className="grid grid-cols-4 md:grid-cols-7 gap-4">
+          {CUSTOMER_TYPES.map((type) => {
+            const isSelected = customer.customerType === type.value;
+            const isEnabled = ENABLED_CUSTOMER_TYPES.includes(type.value);
+            return (
+              <button
+                key={type.value}
+                type="button"
+                disabled={!isEnabled}
+                title={isEnabled ? undefined : "Coming soon"}
+                onClick={() => selectCustomerType(type.value)}
+                className={`h-[34px] px-3 py-1.5 rounded-[8px] border text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 transition-all select-none ${
+                  !isEnabled
+                    ? "bg-sneutral-100 border-pneutral-300 text-pneutral-500 cursor-not-allowed"
+                    : isSelected
+                    ? "bg-[#F8F5FF] border-[#7D32FC] text-[#7D32FC] font-semibold shadow-2xs cursor-pointer"
+                    : "bg-white border-[#D5D5D4] text-[#3C3D3A] hover:bg-gray-50 cursor-pointer"
+                }`}
+              >
+                <span
+                  className={
+                    !isEnabled
+                      ? "text-pneutral-500"
+                      : isSelected
+                      ? "text-[#7D32FC]"
+                      : "text-[#3C3D3A]"
+                  }
+                >
+                  {type.icon}
+                </span>
+                <span>{type.label}</span>
+              </button>
+            );
+          })}
+        </div>
 
-            {/* 8 Customer Type Buttons */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {CUSTOMER_TYPES.map((type) => {
-                const isSelected = customer.customerType === type.value;
-                return (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() => setField("customerType", type.value)}
-                    className={`h-[34px] px-3 py-1.5 rounded-[8px] border text-xs sm:text-sm font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#F8F5FF] border-[#7D32FC] text-[#7D32FC] font-semibold shadow-2xs"
-                        : "bg-white border-[#D5D5D4] text-[#3C3D3A] hover:bg-gray-50"
-                    }`}
-                  >
-                    <span className={isSelected ? "text-[#7D32FC]" : "text-[#3C3D3A]"}>
-                      {type.icon}
-                    </span>
-                    <span>{type.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Name and Phone Number fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
+        {/* Walk-in fields — 2x2, each row 72px (24px label + 48px field) */}
+        {customer.customerType === "WALK_IN" && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
                 label="Name"
+                required
                 placeholder="e.g. Ramesh Kumar"
                 value={customer.customerName}
                 onChange={(e) => setField("customerName", e.target.value)}
               />
               <Input
-                label="Phone Number"
+                label="Mobile Number"
                 type="tel"
+                required
                 maxLength={10}
                 placeholder="10 digit mobile number"
                 value={customer.mobileNo}
-                onChange={(e) => setField("mobileNo", e.target.value.replace(/\D/g, ""))}
+                onChange={(e) =>
+                  setField("mobileNo", e.target.value.replace(/\D/g, ""))
+                }
+              />
+              <Input
+                label="Referred By"
+                placeholder="e.g. Dr. Anitha Rao"
+                value={customer.referredBy}
+                onChange={(e) => setField("referredBy", e.target.value)}
+              />
+              <Input
+                label="Address"
+                placeholder="e.g. 12, MG Road, Bengaluru"
+                value={customer.address}
+                onChange={(e) => setField("address", e.target.value)}
               />
             </div>
 
-            {/* Save notice */}
-            <div className="text-[13px] sm:text-sm font-medium text-[#378200]">
-              Customer details will be saved for this bill only.
-            </div>
-          </div>
-        </div>
-
-        {/* Prescription Card */}
-        <div className="w-full lg:w-[300px] rounded-[12px] border border-[#EAEAE9] bg-white p-3 shadow-sm flex flex-col justify-between gap-4 shrink-0">
-          <div className="text-[16px] font-medium text-black">
-            Prescription (Optional)
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="w-[129px] h-[36px] px-3 rounded-[8px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 font-medium text-[14px] flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer shrink-0"
-            >
-              <Upload size={16} />
-              Upload
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPrescriptionName("Skipped");
-                toast.success("Prescription skipped for this bill.");
-              }}
-              className="w-[129px] h-[36px] px-3 rounded-[8px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 font-medium text-[14px] flex items-center justify-center transition-all shadow-2xs cursor-pointer shrink-0"
-            >
-              Skip
-            </button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,application/pdf"
-            className="hidden"
-            onChange={(e) => {
-              const name = e.target.files?.[0]?.name;
-              if (name) {
-                setPrescriptionName(name);
-                toast.success("Prescription file attached");
-              }
-            }}
-          />
-
-          {prescriptionName && (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-pneutral-50 px-2.5 py-1.5 border border-pneutral-200">
-              <span className="text-xs font-medium text-pneutral-700 truncate">
-                {prescriptionName === "Skipped" ? "⚠️ Prescription Skipped" : `📄 ${prescriptionName}`}
+            {/* Prescription strip */}
+            <div className="h-[36px] rounded-[12px] flex items-center gap-4">
+              <span className="text-label-l4 font-medium text-black">
+                Prescription (Optional)
               </span>
+
               <button
                 type="button"
-                aria-label="Remove prescription"
-                onClick={() => setPrescriptionName("")}
-                className="text-pneutral-500 hover:text-red-500"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-[170px] min-w-[108px] h-[36px] min-h-[36px] max-h-[44px] px-3 rounded-[4px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 font-medium text-label-l3 flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0"
               >
-                <X size={14} />
+                <Upload size={16} />
+                Upload
               </button>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Middle Section - Product Search Bar */}
-      <div className="relative w-full">
-        <div className="h-[56px] w-full rounded-xl border-[2px] border-[#E1E1E1] bg-white px-4 shadow-sm flex items-center gap-3 transition-colors focus-within:border-[#7D32FC]">
-          <Search size={20} className="text-pneutral-400 shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search product by name, generic, code..."
-            className="flex-1 bg-transparent text-pneutral-900 placeholder-pneutral-400 text-sm md:text-base outline-none w-full"
-          />
-          <button
-            type="button"
-            onClick={() => toast("Barcode scanner reading...", { icon: "ℹ️" })}
-            title="Scan Barcode / QR Code"
-            className="text-pneutral-500 hover:text-[#7D32FC] transition-colors p-1 cursor-pointer"
-          >
-            <QrCode size={22} />
-          </button>
-        </div>
-
-        {/* Search dropdown results */}
-        {results.length > 0 && (
-          <div className="absolute z-40 mt-2 w-full overflow-hidden rounded-[12px] border border-[#C0C1BE] bg-white shadow-2xl">
-            <div className="max-h-[420px] overflow-y-auto">
-              <table className="w-full border-collapse text-[15px]">
-                <thead className="sticky top-0 bg-[#EDEDEC] text-pneutral-800 border-b border-[#D5D5D4]">
-                  <tr className="h-11 font-semibold">
-                    <th className="px-5 text-left">Product Name</th>
-                    <th className="px-4 text-center">Batch</th>
-                    <th className="px-4 text-center">Available</th>
-                    <th className="px-4 text-center">Expiry</th>
-                    <th className="px-4 text-center">MRP (₹)</th>
-                    <th className="px-4 text-center">Selling Price (₹)</th>
-                    <th className="px-4 text-center"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#EAEAE9]">
-                  {results.map((product) => (
-                    <tr
-                      key={`${product.productId}-${product.batchId}`}
-                      className="py-3.5 border-b border-[#EAEAE9] hover:bg-pneutral-50 transition-colors"
-                    >
-                      <td className="px-5 py-3 text-left">
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-[#000000] text-[15px]">{product.productName}</span>
-                          <span className="text-[13px] text-[#5A5B57]">{product.brandName}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 text-center font-normal text-[#000000]">{product.batchNumber}</td>
-                      <td className="px-4 text-center font-normal text-[#000000]">
-                        {product.availableQuantity} {String(product.unit || "Unit")}
-                      </td>
-                      <td className="px-4 text-center font-normal text-[#000000]">{product.expiryDate}</td>
-                      <td className="px-4 text-center font-normal text-[#000000]">{formatAmount(product.mrpPerUnit)}</td>
-                      <td className="px-4 text-center font-normal text-[#000000]">{formatAmount(product.sellingPricePerUnit ?? product.mrpPerUnit)}</td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          disabled={loadingSelect === product.batchId}
-                          onClick={() => handleSelectBatch(product)}
-                          className="h-[34px] px-6 rounded-[8px] border border-[#7D32FC] bg-white hover:bg-[#F8F5FF] text-[#7D32FC] font-semibold text-sm transition-all shadow-2xs cursor-pointer disabled:opacity-50"
-                        >
-                          {loadingSelect === product.batchId ? "Loading..." : "Select"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {prescriptionName && (
+                <span className="flex items-center gap-2 text-p3 font-medium text-pneutral-700 max-w-[280px]">
+                  <span className="truncate">📄 {prescriptionName}</span>
+                  <button
+                    type="button"
+                    aria-label="Remove prescription"
+                    onClick={() => setPrescriptionName("")}
+                    className="text-pneutral-500 hover:text-red-500 shrink-0 cursor-pointer"
+                  >
+                    <X size={14} />
+                  </button>
+                </span>
+              )}
             </div>
-          </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const name = e.target.files?.[0]?.name;
+                if (name) {
+                  setPrescriptionName(name);
+                  toast.success("Prescription file attached");
+                }
+              }}
+            />
+          </>
         )}
       </div>
 
-      {/* Table Section */}
-      <DataTable
-        columns={cartColumns}
-        data={lines}
-        emptyState={
-          <div className="py-20 flex flex-col items-center justify-center gap-3 w-full">
-            <ShoppingCart size={46} className="text-pneutral-700 stroke-[1.5]" />
-            <div className="text-base font-medium text-pneutral-700 mt-1">
-              Search medicine to start billing
-            </div>
-          </div>
-        }
+      {/* Everything below the card only makes sense once a customer type is
+          picked — until then the screen is just the title and the card. */}
+      {customer.customerType === "" ? null : (
+      <>
+      {/* Product search bar and its result dropdown are parked — rows are now
+          built directly in the grid below. Kept for reference in case the
+          search-first flow comes back.
+      <div className="relative w-full">
+        ... search input + barcode button, then a results table whose "Select"
+        button called handleSelectBatch(). The results memo and that handler
+        were removed along with it — restore from git history if needed.
+      </div>
+      */}
+
+      {/* Cart grid — product/batch dropdowns and inline qty/discount */}
+      <BillingItemsTable
+        catalog={batchCatalog}
+        rows={rows}
+        onChange={setRows}
+        onBatchSelected={fetchBatchDetails}
+        isLoading={loadingBatches}
       />
 
       {/* Bottom Section - Discount, Totals & Actions */}
@@ -635,7 +455,7 @@ const Billing: React.FC<BillingProps> = ({
             type="button"
             onClick={() => {
               if (lines.length === 0) return;
-              setLines([]);
+              setRows([emptyBillingRow()]);
               toast.success("Cart cleared");
             }}
             className="h-[48px] px-6 rounded-[8px] border-[2px] border-pneutral-900 bg-white hover:bg-pneutral-50 text-pneutral-900 font-semibold text-base flex items-center justify-center gap-2.5 shadow-sm transition-all w-fit cursor-pointer"
@@ -708,172 +528,8 @@ const Billing: React.FC<BillingProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Confirmation / Edit Modal */}
-      {pending && (() => {
-        const qtyNum = Number(pending.quantity) || 0;
-        const discNum = Number(pending.discountPercentage) || 0;
-        const mrp = pending.product.mrpPerUnit || 0;
-        const rate = pending.product.sellingPricePerUnit ?? mrp;
-        const gross = qtyNum * rate;
-        const discountVal = (gross * discNum) / 100;
-        const taxable = gross - discountVal;
-        const gstVal = taxable * ((pending.product.gstPercentage || 0) / 100);
-        const amount = taxable + gstVal;
-        const unitLabel = String(pending.product.unit || "Unit");
-
-        return (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px] px-4 overflow-y-auto">
-            <div className="relative w-full max-w-[880px] rounded-[12px] bg-white p-[16px] flex flex-col gap-[16px] shadow-2xl border border-[#D5D5D4] my-auto">
-              {/* Top Header */}
-              <div className="flex items-center justify-between h-[56px] pb-4 border-b border-[#EAEAE9] w-full">
-                <span className="text-[18px] font-semibold text-[#1E1E1D]">
-                  {pending.isEditing ? "Edit " : "Add "}{pending.product.productName} (Batch: {pending.product.batchNumber})
-                </span>
-                <button
-                  type="button"
-                  aria-label="Close"
-                  onClick={() => setPending(null)}
-                  className="w-[28px] h-[28px] flex items-center justify-center rounded-lg text-[#1E1E1D] hover:bg-pneutral-100 hover:text-red-500 transition-colors cursor-pointer"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Middle Content - Two Cards */}
-              <div className="flex flex-col md:flex-row gap-4 w-full items-stretch">
-                {/* Left Card: Form */}
-                <div className="w-full md:w-[525px] rounded-[16px] border border-[#EAEAE9] bg-white p-[16px] flex flex-col justify-between h-[266px]">
-                  <div className="flex flex-col gap-3">
-                    <span className="text-[15px] font-medium text-[#000000]">Sell As</span>
-                    <div className="flex items-center gap-2.5 cursor-pointer">
-                      <div className="w-5 h-5 rounded-full border-[2px] border-[#7D32FC] flex items-center justify-center">
-                        <div className="w-2.5 h-2.5 rounded-full bg-[#7D32FC]" />
-                      </div>
-                      <span className="text-[15px] font-normal text-[#000000]">
-                        {unitLabel}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Quantity and Discount Stepper & Field */}
-                  <div className="flex items-start gap-6 pt-2">
-                    {/* Quantity Stepper */}
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[15px] font-medium text-[#000000]">Quantity</label>
-                      <div className="h-[50px] w-[170px] rounded-[10px] border border-[#C0C1BE] bg-white flex items-center overflow-hidden shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={() => setPending({ ...pending, quantity: String(Math.max(1, qtyNum - 1)) })}
-                          className="w-[44px] h-[48px] flex items-center justify-center text-[#7D32FC] font-bold text-lg hover:bg-purple-50 transition-colors cursor-pointer select-none shrink-0"
-                        >
-                          −
-                        </button>
-                        <input
-                          type="number"
-                          min={1}
-                          max={pending.product.availableQuantity}
-                          value={pending.quantity}
-                          onChange={(e) => setPending({ ...pending, quantity: e.target.value })}
-                          className="w-[80px] h-[48px] border-x border-[#C0C1BE] bg-transparent text-center font-semibold text-[16px] text-[#000000] outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setPending({ ...pending, quantity: String(Math.min(pending.product.availableQuantity, qtyNum + 1)) })}
-                          className="w-[44px] h-[48px] flex items-center justify-center text-[#7D32FC] font-bold text-lg hover:bg-purple-50 transition-colors cursor-pointer select-none shrink-0"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Discount Field */}
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[15px] font-medium text-[#000000]">Discount (%)</label>
-                      <div className="h-[50px] w-[170px] rounded-[10px] border border-[#C0C1BE] bg-white px-4 flex items-center justify-between shadow-2xs focus-within:border-[#7D32FC] transition-colors">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={pending.discountPercentage}
-                          onChange={(e) => setPending({ ...pending, discountPercentage: e.target.value })}
-                          placeholder="0"
-                          className="w-full text-center font-semibold text-[16px] text-[#000000] bg-transparent outline-none"
-                        />
-                        <span className="text-[#7D32FC] font-bold text-base select-none ml-2">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Card: Product Information */}
-                <div className="w-full md:w-[307px] rounded-[16px] border border-[#EAEAE9] bg-white p-[16px] flex flex-col justify-between h-[266px] text-[14px] text-pneutral-700">
-                  <div className="flex items-center justify-between">
-                    <span>Brand</span>
-                    <span className="font-semibold text-[#000000]">{pending.product.brandName || "N/A"}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Expiry</span>
-                    <span className="font-semibold text-[#000000]">{pending.product.expiryDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Available Stock</span>
-                    <span className="font-semibold text-[#000000]">{pending.product.availableQuantity} {unitLabel}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>MRP (₹)</span>
-                    <span className="font-semibold text-[#000000]">₹ {formatAmount(mrp)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Selling Price</span>
-                    <span className="font-semibold text-[#000000]">₹ {formatAmount(rate)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>GST (%)</span>
-                    <span className="font-semibold text-[#000000]">{pending.product.gstPercentage}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Below Card: Summary Banner */}
-              <div className="w-full h-[92px] rounded-[12px] border border-[#D5D5D4] bg-[#F8F5FF] p-[16px] grid grid-cols-3 items-center justify-between text-center">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[14px] font-medium text-[#3C3D3A]">Total Qty</span>
-                  <span className="text-[16px] font-semibold text-[#000000]">{qtyNum} {unitLabel}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[14px] font-medium text-[#3C3D3A]">Rate (₹)</span>
-                  <span className="text-[16px] font-semibold text-[#000000]">{formatAmount(rate)}</span>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <span className="text-[14px] font-medium text-[#3C3D3A]">Amount (₹)</span>
-                  <span className="text-[16px] font-semibold text-[#000000]">{formatAmount(amount)}</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex items-center justify-center gap-6 pt-1 w-full">
-                <button
-                  type="button"
-                  onClick={() => setPending(null)}
-                  className="h-[40px] px-10 rounded-[8px] border border-[#FF5B5B] bg-white text-[#FF5B5B] font-medium text-[15px] hover:bg-red-50 transition-all cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={addPendingLine}
-                  className="h-[40px] px-10 rounded-[8px] bg-[#7D32FC] hover:bg-[#6823df] text-white font-medium text-[15px] shadow-md transition-all cursor-pointer"
-                >
-                  {pending.isEditing ? "Update Item" : "Add to Bill"}
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      </>
+      )}
     </div>
   );
 };

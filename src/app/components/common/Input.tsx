@@ -1,9 +1,13 @@
 import React, { forwardRef } from "react";
 import clsx from "clsx";
 
+/** Field height/padding preset. `lg` is the standard form field. */
+export type InputSize = "sm" | "md" | "lg";
+
 interface InputProps
   extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
+  sizeVariant?: InputSize;
   required?: boolean;
   error?: string;
   success?: string;
@@ -31,6 +35,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   (
     {
       label,
+      sizeVariant = "lg",
       required,
       error,
       success,
@@ -63,6 +68,19 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       return "border-pneutral-300 bg-white focus-within:border-secondary-300 focus-within:ring-1 focus-within:ring-secondary-300";
     };
 
+    // Height and corner radius per size; the text size follows on the input.
+    const fieldSizeStyles: Record<InputSize, string> = {
+      sm: "h-9 rounded-[4px]",
+      md: "h-11 rounded-md",
+      lg: "h-12 rounded-md",
+    };
+
+    const textSizeStyles: Record<InputSize, string> = {
+      sm: "px-2 text-p3",
+      md: "px-3 text-p4",
+      lg: "px-3 text-p4",
+    };
+
     return (
       <div className={clsx("w-full", containerClassName)}>
         {label && (
@@ -82,7 +100,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
 
         <div
           className={clsx(
-            "flex h-12 w-full items-center rounded-md border transition-all duration-200",
+            "flex w-full items-center border transition-all duration-200",
+            fieldSizeStyles[sizeVariant],
             getStateStyles(),
             className
           )}
@@ -110,7 +129,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               onKeyDown?.(e);
             }}
             className={clsx(
-              "h-full w-full bg-transparent px-3 text-p4 outline-none placeholder:text-pneutral-500",
+              "h-full w-full bg-transparent outline-none placeholder:text-pneutral-500",
+              textSizeStyles[sizeVariant],
               disabled
                 ? "text-pneutral-500 cursor-not-allowed"
                 : readOnly

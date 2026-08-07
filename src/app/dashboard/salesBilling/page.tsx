@@ -189,6 +189,7 @@ const Page = () => {
                   age: "",
                   gender: "",
                   doctorName: "",
+                  referredBy: "",
                   address: "",
                 },
                 lines: [
@@ -248,6 +249,7 @@ const Page = () => {
                   age: "",
                   gender: "",
                   doctorName: "",
+                  referredBy: "",
                   address: "",
                 },
                 lines: [
