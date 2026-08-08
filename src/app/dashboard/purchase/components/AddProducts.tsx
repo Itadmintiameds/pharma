@@ -189,6 +189,24 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
     setViewState('add');
   };
 
+  // Changing category (or medical-device sub-category) starts a different
+  // product, so send the wizard back to step 1 with blank forms.
+  const resetWizardToStart = () => {
+    setActiveTab(TABS[0]);
+    setFormKey((key) => key + 1);
+    setPackagingUnits({ purchaseUnit: "", smallestUnit: "", unitContains: "" });
+  };
+
+  const handleSelectCategory = (id: number) => {
+    setSelectedCategory(id);
+    resetWizardToStart();
+  };
+
+  const handleSelectSubCategory = (id: number) => {
+    setSelectedSubCategory(id);
+    resetWizardToStart();
+  };
+
   const handleCancel = () => {
     setViewState('search'); // Go back to search view instead of list page
   };
@@ -402,7 +420,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
       {/* Top Header */}
       <div className="flex flex-col gap-1 w-full mb-1">
         <h2 className="font-semibold text-[24px] text-pneutral-900 leading-[32px]">
-          {viewState === 'search' ? "Search Products" : viewState === 'add' ? "Add Items to Invoice" : ""}
+          {/* {viewState === 'search' ? "Search Products" : viewState === 'add' ? "Add Items to Invoice" : ""} */}
+          {viewState === 'search' || viewState === 'add' ? "Add Items to Invoice" : ""}
         </h2>
       </div>
 
@@ -569,7 +588,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
                 return (
                   <div
                     key={cat.id}
-                    onClick={() => setSelectedCategory(cat.id)}
+                    onClick={() => handleSelectCategory(cat.id)}
                     className={`shrink-0 flex items-center gap-[4px] p-[8px] h-[74px] rounded-[20px] border cursor-pointer transition-all ${cat.width} ${
                       isSelected
                         ? "border-secondary-700 bg-secondary-50 shadow-[0px_4px_6px_-2px_#00000008,0px_12px_16px_-4px_#00000014]"
@@ -596,7 +615,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
               </div>
               <div className="w-full flex gap-[16px] h-[60px]">
                 <div
-                  onClick={() => setSelectedSubCategory(5)}
+                  onClick={() => handleSelectSubCategory(5)}
                   className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
                     selectedSubCategory === 5
                       ? "border-secondary-700 bg-secondary-50 shadow-sm"
@@ -608,7 +627,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
                   </span>
                 </div>
                 <div
-                  onClick={() => setSelectedSubCategory(6)}
+                  onClick={() => handleSelectSubCategory(6)}
                   className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
                     selectedSubCategory === 6
                       ? "border-secondary-700 bg-secondary-50 shadow-sm"

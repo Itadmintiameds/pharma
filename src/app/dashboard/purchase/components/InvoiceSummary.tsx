@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import ConfirmationPopup from "@/app/components/common/ConfirmationPopup";
@@ -8,6 +8,10 @@ import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { PurchaseData } from "@/types/PurchaseData";
+import {
+  getCurrentPharmacy,
+  type CurrentPharmacy,
+} from "@/services/PharmacyService";
 
 interface InvoiceSummaryProps {
   onCancel?: () => void;
@@ -21,9 +25,15 @@ interface InvoiceSummaryProps {
    * renders for view / download from the purchase list.
    */
   purchase?: PurchaseData;
+  /**
+   * The "Bill To" pharmacy. When provided (e.g. pre-fetched for a PDF
+   * download so it's present before capture), the component skips its own
+   * fetch; otherwise it loads it on mount.
+   */
+  pharmacy?: CurrentPharmacy | null;
 }
 
-const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data, purchase }) => {
+const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data, purchase, pharmacy: pharmacyProp }) => {
   const [currentMode, setCurrentMode] = useState<'create' | 'view' | 'download'>(mode);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [discount, setDiscount] = useState<number>(0);
@@ -56,6 +66,50 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     creditDays: purchase?.creditDays ?? store.creditDays,
     status: purchase?.supplierPaymentStatus ?? store.supplierPaymentStatus,
   };
+
+  // "Bill To" is the pharmacy we're operating under. Use the pre-fetched prop
+  // when given (so a PDF download has it before capture); otherwise fetch it.
+  const [pharmacyFetched, setPharmacyFetched] = useState<CurrentPharmacy | null>(null);
+  const pharmacy = pharmacyProp ?? pharmacyFetched;
+
+  useEffect(() => {
+    if (pharmacyProp) return;
+    let active = true;
+    getCurrentPharmacy()
+      .then((data) => {
+        if (active) setPharmacyFetched(data);
+      })
+      .catch((err) => {
+        console.error("Unable to fetch current pharmacy", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [pharmacyProp]);
+
+  // Single-line address built from whichever parts are present.
+  const billToAddress = pharmacy
+    ? [
+        pharmacy.pharmacyBuildingNo,
+        pharmacy.pharmacyStreet,
+        pharmacy.pharmacyCity || pharmacy.pharmacyBranch,
+        pharmacy.pharmacyState,
+      ]
+        .filter((part) => part && String(part).trim())
+        .join(", ") +
+      (pharmacy.pharmacyPincode ? ` - ${pharmacy.pharmacyPincode}` : "")
+    : "";
+
+  const billToDocument = pharmacy?.documents?.[0];
+  const billToDocumentNo = billToDocument?.documentNo ?? "";
+  // Label the licence line by the actual document type on the pharmacy.
+  const DOC_TYPE_LABELS: Record<string, string> = {
+    DRUG_LICENSE: "Drug License No",
+    CLINICAL_ESTABLISHMENT_CERTIFICATE: "Clinical Establishment Certificate No",
+    MEDICAL_REGISTRATION_CERTIFICATE: "Medical Registration Certificate No",
+  };
+  const billToDocumentLabel =
+    DOC_TYPE_LABELS[billToDocument?.documentType ?? ""] ?? "Document No";
 
   // A negative discount would inflate the payable, and one above the gross
   // would make it negative — neither is a valid invoice.
@@ -211,11 +265,11 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         {/* Inner Box */}
         <div className="w-full h-full p-4 bg-secondary-50 border border-pneutral-200 rounded-lg flex flex-col gap-3 text-[14px]">
           <div className="font-bold text-pneutral-900">Bill To</div>
-          <div className="font-bold text-pneutral-900 mt-1">Sai Medical & General Store</div>
-          <div className="text-pneutral-700 mt-1">Shop No. 7, Shivaji Nagar, Thane West - 400601</div>
+          <div className="font-bold text-pneutral-900 mt-1">{pharmacy?.pharmacyName || "—"}</div>
+          <div className="text-pneutral-700 mt-1">{billToAddress || "—"}</div>
           <div className="flex gap-8 text-pneutral-700 mt-2">
-            <div>GSTIN: 27BCDSA5678G2H3</div>
-            <div>Drug License No: MH-THN-789012</div>
+            <div>GSTIN: {pharmacy?.gstNumber || "—"}</div>
+            <div>{billToDocumentLabel}: {billToDocumentNo || "—"}</div>
           </div>
         </div>
       </div>

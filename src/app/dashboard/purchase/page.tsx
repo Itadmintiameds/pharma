@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import GoodsReceipt from "./components/GoodsReceipt";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import SearchInput from "@/app/components/common/SearchInput";
@@ -14,6 +15,11 @@ import { getSupplierById } from "@/services/SupplierService";
 import { getProductDetails } from "@/services/InventoryService";
 import type { ProductDetails } from "@/types/ProductData";
 import InvoiceSummary from "./components/InvoiceSummary";
+import {
+  getCurrentPharmacy,
+  type CurrentPharmacy,
+} from "@/services/PharmacyService";
+import { usePurchaseStore } from "@/store/usePurchaseStore";
 import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
 import toast from "react-hot-toast";
@@ -104,7 +110,8 @@ const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]>
  */
 export const buildColumns = (
   onView: (purchase: PurchaseData) => void,
-  onDownload: (purchase: PurchaseData) => void
+  onDownload: (purchase: PurchaseData) => void,
+  busy = false
 ): ColumnDef<PurchaseData>[] => [
   {
     header: "#",
@@ -183,7 +190,8 @@ export const buildColumns = (
           aria-label="View tax invoice"
           title="View tax invoice"
           onClick={() => onView(row.original)}
-          className="cursor-pointer"
+          disabled={busy}
+          className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
         >
           <Image
             src="/Purchase/ViewIcon.svg"
@@ -199,7 +207,8 @@ export const buildColumns = (
           aria-label="Download tax invoice"
           title="Download tax invoice"
           onClick={() => onDownload(row.original)}
-          className="cursor-pointer"
+          disabled={busy}
+          className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
         >
           <Image
             src="/Purchase/DownloadIcon.svg"
@@ -218,23 +227,44 @@ export const buildColumns = (
 interface OpenInvoice {
   purchase: PurchaseData;
   lines: InvoiceLine[];
+  /** "Bill To" pharmacy, pre-fetched so a PDF download has it before capture. */
+  pharmacy: CurrentPharmacy | null;
   /** True when opened for download — triggers the browser print dialog. */
   print: boolean;
 }
 
-const Page = () => {
-  const [showGoodsReceipt, setShowGoodsReceipt] = useState(false);
+const PurchaseContent = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // The Add flow is tracked in the URL (?view=add) rather than local state, so
+  // clicking "Purchase" in the navbar (which navigates to the bare route)
+  // returns to the list instead of leaving a stale form on screen.
+  const view = searchParams.get("view");
+  const showGoodsReceipt = view === "add";
   const [search, setSearch] = useState("");
   const [purchases, setPurchases] = useState<PurchaseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<OpenInvoice | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  // Guards against a second view/download starting while one is still running
+  // (a ref so rapid clicks can't slip through before a re-render).
+  const isBusyRef = useRef(false);
 
   const openInvoice = async (purchase: PurchaseData, print: boolean) => {
+    if (isBusyRef.current) return;
+    isBusyRef.current = true;
     setIsPreparing(true);
     try {
-      const lines = await buildInvoiceLines(purchase);
+      // Fetch the "Bill To" pharmacy alongside the lines so a PDF download
+      // has it in hand before the off-screen copy is captured.
+      const [lines, pharmacy] = await Promise.all([
+        buildInvoiceLines(purchase),
+        getCurrentPharmacy().catch((err) => {
+          console.error("Unable to fetch current pharmacy for the invoice", err);
+          return null;
+        }),
+      ]);
 
       // /purchase/allPurchase does not always nest the line items. Surface that
       // rather than silently rendering an invoice with an empty table.
@@ -246,13 +276,21 @@ const Page = () => {
         toast.error("Line items for this invoice could not be loaded.");
       }
 
-      setInvoice({ purchase, lines, print });
-      // For a download the indicator stays up until the PDF has been written.
-      if (!print) setIsPreparing(false);
+      setInvoice({ purchase, lines, pharmacy, print });
+      // For a download the indicator (and busy guard) stay up until the PDF has
+      // been written — released in handleCaptureReady.
+      if (!print) {
+        setIsPreparing(false);
+        isBusyRef.current = false;
+        // Mark the open invoice in the URL so navigating away via the navbar
+        // (which points at the bare route) closes it.
+        router.push("/dashboard/purchase?view=invoice");
+      }
     } catch (err) {
       console.error("Failed to build the tax invoice", err);
       toast.error("Could not open the tax invoice.");
       setIsPreparing(false);
+      isBusyRef.current = false;
     }
   };
 
@@ -278,6 +316,7 @@ const Page = () => {
         toast.error("Could not generate the PDF.");
       } finally {
         isCapturingRef.current = false;
+        isBusyRef.current = false;
         setIsPreparing(false);
         setInvoice(null);
       }
@@ -285,46 +324,56 @@ const Page = () => {
     [invoice]
   );
 
-  useEffect(() => {
-    const fetchPurchases = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await getAllPurchases();
+  const fetchPurchases = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getAllPurchases();
 
-        const uniqueSupplierIds = Array.from(
-          new Set(data.map((purchase) => purchase.supplierId).filter(Boolean))
-        );
+      const uniqueSupplierIds = Array.from(
+        new Set(data.map((purchase) => purchase.supplierId).filter(Boolean))
+      );
 
-        const supplierEntries = await Promise.all(
-          uniqueSupplierIds.map(async (supplierId) => {
-            try {
-              const supplier = await getSupplierById(supplierId);
-              return [supplierId, supplier.supplierName] as const;
-            } catch (err) {
-              console.error(`Failed to fetch supplier ${supplierId}:`, err);
-              return [supplierId, undefined] as const;
-            }
-          })
-        );
-        const supplierNameById = new Map(supplierEntries);
+      const supplierEntries = await Promise.all(
+        uniqueSupplierIds.map(async (supplierId) => {
+          try {
+            const supplier = await getSupplierById(supplierId);
+            return [supplierId, supplier.supplierName] as const;
+          } catch (err) {
+            console.error(`Failed to fetch supplier ${supplierId}:`, err);
+            return [supplierId, undefined] as const;
+          }
+        })
+      );
+      const supplierNameById = new Map(supplierEntries);
 
-        const enrichedData = data.map((purchase) => ({
-          ...purchase,
-          supplierName:
-            purchase.supplierName ?? supplierNameById.get(purchase.supplierId),
-        }));
+      const enrichedData = data.map((purchase) => ({
+        ...purchase,
+        supplierName:
+          purchase.supplierName ?? supplierNameById.get(purchase.supplierId),
+      }));
 
-        setPurchases(enrichedData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch purchases.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPurchases();
+      setPurchases(enrichedData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch purchases.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  // Fetch on the list view — on first load and each time we return from the
+  // Add flow — so a just-added purchase shows up.
+  useEffect(() => {
+    if (!showGoodsReceipt) fetchPurchases();
+  }, [showGoodsReceipt, fetchPurchases]);
+
+  // Close the (non-print) invoice view when the URL no longer marks it open,
+  // e.g. after clicking "Purchase" in the navbar. The print copy is left alone.
+  useEffect(() => {
+    if (view !== "invoice") {
+      setInvoice((current) => (current && !current.print ? null : current));
+    }
+  }, [view]);
 
   // Viewing takes over the page. Downloading leaves the list on screen and
   // renders an off-screen copy that only the printer sees.
@@ -334,8 +383,9 @@ const Page = () => {
         mode="view"
         purchase={invoice.purchase}
         data={invoice.lines}
-        onCancel={() => setInvoice(null)}
-        onSuccessGoToPurchase={() => setInvoice(null)}
+        pharmacy={invoice.pharmacy}
+        onCancel={() => router.push("/dashboard/purchase")}
+        onSuccessGoToPurchase={() => router.push("/dashboard/purchase")}
       />
     );
   }
@@ -348,6 +398,7 @@ const Page = () => {
             mode="download"
             purchase={invoice.purchase}
             data={invoice.lines}
+            pharmacy={invoice.pharmacy}
           />
         </OffscreenPortal>
       )}
@@ -376,7 +427,12 @@ const Page = () => {
               <div>
                 <button
                   className="w-52 h-12 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
-                  onClick={() => setShowGoodsReceipt(true)}
+                  onClick={() => {
+                    // Start every Add flow from a clean slate — leaving via the
+                    // navbar skips the Cancel button that used to reset this.
+                    usePurchaseStore.getState().resetPurchase();
+                    router.push("/dashboard/purchase?view=add");
+                  }}
                 >
                   Add New Purchase
                 </button>
@@ -403,7 +459,8 @@ const Page = () => {
                 <DataTable
                   columns={buildColumns(
                     (purchase) => openInvoice(purchase, false),
-                    (purchase) => openInvoice(purchase, true)
+                    (purchase) => openInvoice(purchase, true),
+                    isPreparing
                   )}
                   data={purchases}
                 />
@@ -418,10 +475,22 @@ const Page = () => {
           /> */}
         </>
       ) : (
-        <GoodsReceipt onClose={() => setShowGoodsReceipt(false)} />
+        <GoodsReceipt onClose={() => router.push("/dashboard/purchase")} />
       )}
     </>
   );
 };
+
+const Page = () => (
+  <Suspense
+    fallback={
+      <div className="text-p3 font-normal text-pneutral-500 py-8 text-center">
+        Loading purchases...
+      </div>
+    }
+  >
+    <PurchaseContent />
+  </Suspense>
+);
 
 export default Page;
