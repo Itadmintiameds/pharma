@@ -12,14 +12,25 @@ import {
   Upload,
   X,
   User,
-  Stethoscope,
-  Bed,
-  Clock,
   Building2,
   Briefcase,
   Shield
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { showToast } from "@/app/components/common/Toast";
+import {
+  ADDRESS_MAX,
+  CODE_MAX,
+  sanitizeAddress,
+  sanitizeCode,
+  sanitizeName,
+  sanitizeNumber,
+  sanitizePercentage,
+  sanitizePhone,
+  validateAddress,
+  validateCode,
+  validateName,
+  validatePhone,
+} from "@/app/schema/BillingSchema";
 import Input from "@/app/components/common/Input";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import BillingItemsTable, {
@@ -28,6 +39,7 @@ import BillingItemsTable, {
 } from "./BillingItemsTable";
 import { ProductService } from "@/services/ProductService";
 import { getCustomersByPhone } from "@/services/CustomerService";
+import { PRESCRIPTION_MAX_BYTES } from "@/services/BillingService";
 import { getAllDoctors, createDoctor } from "@/services/DoctorService";
 import {
   BillLine,
@@ -52,6 +64,8 @@ interface BillingProps {
     /** As typed on this screen — the unit is carried alongside it. */
     billDiscountValue: number;
     discountType: DiscountType;
+    /** Uploaded against the bill once it has an id. */
+    prescriptionFile?: File | null;
   }) => void;
   initialCustomer?: CustomerInfo;
   initialLines?: BillLine[];
@@ -59,33 +73,71 @@ interface BillingProps {
   initialDiscountType?: DiscountType;
 }
 
-const WalkIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-    <path d="M13.5 5.5c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zM9.8 8.9L7 23h2.1l1.8-8 2.1 2v6h2v-7.5l-2.1-2 .6-3C14.8 12 16.8 13 19 13v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7z"/>
-  </svg>
+/**
+ * The four live types have artwork. Drawn as a mask rather than an <img> so the
+ * glyph takes the chip's own colour — the source SVGs are purple, which made
+ * unselected chips look selected.
+ */
+const TypeIcon = ({ src, size = 16 }: { src: string; size?: number }) => (
+  <span
+    aria-hidden
+    className="inline-block shrink-0 bg-current"
+    style={{
+      width: size,
+      height: size,
+      maskImage: `url(${src})`,
+      WebkitMaskImage: `url(${src})`,
+      maskSize: "contain",
+      WebkitMaskSize: "contain",
+      maskRepeat: "no-repeat",
+      WebkitMaskRepeat: "no-repeat",
+      maskPosition: "center",
+      WebkitMaskPosition: "center",
+    }}
+  />
 );
 
 /**
- * Seven types sit on the first row and Insurance wraps onto the second.
- * Only Walk-in is wired up so far — the rest capture different fields and stay
- * disabled until those flows are built.
+ * The eight values of the backend CustomerType enum — seven sit on the first
+ * row and Insurance wraps onto the second.
  */
 const CUSTOMER_TYPES: {
   label: string;
   value: CustomerType;
   icon: React.ReactNode;
 }[] = [
-  { label: "Walk-in", value: "WALK_IN", icon: <WalkIcon /> },
+  {
+    label: "Walk-in",
+    value: "WALK_IN",
+    // Its artwork reads larger than the rest at the same box size.
+    icon: <TypeIcon src="/Billing/Walk-in.svg" size={14} />,
+  },
   { label: "Registered", value: "REGISTERED", icon: <User size={16} /> },
-  { label: "OP Patient", value: "OP_PATIENT", icon: <Stethoscope size={16} /> },
-  { label: "IP Patient", value: "IP_PATIENT", icon: <Bed size={16} /> },
-  { label: "Daycare", value: "DAYCARE", icon: <Clock size={16} /> },
+  { label: "OP Patient", value: "OP_PATIENT", icon: <TypeIcon src="/Billing/OP.svg" /> },
+  { label: "IP Patient", value: "IP_PATIENT", icon: <TypeIcon src="/Billing/IP.svg" /> },
+  { label: "Daycare", value: "DAYCARE", icon: <TypeIcon src="/Billing/Daycare.svg" /> },
   { label: "Corporate", value: "CORPORATE", icon: <Building2 size={16} /> },
   { label: "Business", value: "BUSINESS", icon: <Briefcase size={16} /> },
   { label: "Insurance", value: "INSURANCE", icon: <Shield size={16} /> },
 ];
 
-const ENABLED_CUSTOMER_TYPES: CustomerType[] = ["WALK_IN"];
+/** The rest stay disabled until their flows are built. */
+const ENABLED_CUSTOMER_TYPES: CustomerType[] = [
+  "WALK_IN",
+  "OP_PATIENT",
+  "IP_PATIENT",
+  "DAYCARE",
+];
+
+/** Types that bill a patient rather than a walk-in customer. */
+const PATIENT_TYPES: CustomerType[] = ["OP_PATIENT", "IP_PATIENT", "DAYCARE"];
+
+/** The visit number's label — daycare is admitted, so it files under IP. */
+const VISIT_NUMBER_LABELS: Partial<Record<CustomerType, string>> = {
+  OP_PATIENT: "OP Number",
+  IP_PATIENT: "IP Number",
+  DAYCARE: "IP Number",
+};
 
 const EMPTY_CUSTOMER: CustomerInfo = {
   customerType: "",
@@ -97,8 +149,32 @@ const EMPTY_CUSTOMER: CustomerInfo = {
   gender: "",
   doctorName: "",
   referredBy: "",
+  patientNumber: "",
+  visitNumber: "",
   address: "",
 };
+
+/**
+ * The fields the batches endpoint returns that the cart needs. Everything is
+ * optional — the mapping below supplies a fallback for each.
+ */
+interface BatchApiRow {
+  productId?: string;
+  productName?: string;
+  brandName?: string;
+  batchId?: string;
+  batchNumber?: string;
+  purchaseSmallestUnitName?: string;
+  expiryDate?: string;
+  stockQty?: number | string;
+  totalStock?: number | string;
+  mrpPerUnit?: number | string;
+  mrp?: number | string;
+  sellingPricePerUnit?: number | string;
+  sellingPrice?: number | string;
+  gstPercentage?: number | string;
+  rackLocation?: string;
+}
 
 /** Rebuilds the cart lines the payment and invoice screens expect. */
 const rowsToLines = (rows: BillingRow[]): BillLine[] =>
@@ -164,6 +240,7 @@ const Billing: React.FC<BillingProps> = ({
     initialBillDiscount ? String(initialBillDiscount) : "0"
   );
   const [prescriptionName, setPrescriptionName] = useState("");
+  const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Batches fetched from server
@@ -181,7 +258,34 @@ const Billing: React.FC<BillingProps> = ({
   const [isAddingNewDoctor, setIsAddingNewDoctor] = useState(false);
   const [newDoctorName, setNewDoctorName] = useState("");
 
+  // Patient ids already on file for this number. No endpoint serves these yet,
+  // so the field falls through to free text.
+  const [knownPatientNumbers, setKnownPatientNumbers] = useState<string[]>([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  /** Validation messages shown under the customer fields. */
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const setFieldError = (key: string, message: string) =>
+    setFieldErrors((prev) => ({ ...prev, [key]: message }));
+
+  const isPatientType = PATIENT_TYPES.includes(
+    customer.customerType as CustomerType
+  );
+  /** "Customer" for a walk-in, "Patient" for OP/IP/Daycare. */
+  const personLabel = isPatientType ? "Patient" : "Customer";
+  /**
+   * A saved patient's number comes with their record, so it is picked. A new
+   * name has no record yet, so its number is typed and created with the bill —
+   * another person's numbers must never be offered for it.
+   */
+  const showPatientNumberOptions =
+    !isAddingNewCustomer &&
+    !!customer.customerId &&
+    knownPatientNumbers.length > 0;
+  const visitNumberLabel =
+    VISIT_NUMBER_LABELS[customer.customerType as CustomerType] ?? "Visit Number";
 
   useEffect(() => {
     const fetchBatches = async () => {
@@ -189,7 +293,7 @@ const Billing: React.FC<BillingProps> = ({
       try {
         const res = await ProductService.getAllBatches();
         const data = res?.data || [];
-        const mapped: BillableProduct[] = data.map((b: any) => ({
+        const mapped: BillableProduct[] = (data as BatchApiRow[]).map((b) => ({
           productId: b.productId || "",
           productName: b.productName || "Unknown Product",
           brandName: b.brandName || "",
@@ -208,7 +312,7 @@ const Billing: React.FC<BillingProps> = ({
         setBatchCatalog(mapped);
       } catch (err) {
         console.error("Failed to fetch batches:", err);
-        toast.error("Failed to load medicines from server.");
+        showToast.error("Failed to load medicines from server.");
       } finally {
         setLoadingBatches(false);
       }
@@ -244,6 +348,10 @@ const Billing: React.FC<BillingProps> = ({
     { label: "+ Add New Customer", value: "ADD_NEW" },
   ];
 
+  /** The patient id the customer lookup returned for a record. */
+  const patientNoOf = (record?: CustomerRecord) =>
+    record?.patientNo ?? record?.patientNumber ?? "";
+
   const doctorOptions: DropdownOption[] = [
     ...doctors.map((d) => ({ label: d.doctorName, value: d.doctorId })),
     { label: "+ Add New Doctor", value: "ADD_NEW" },
@@ -255,18 +363,21 @@ const Billing: React.FC<BillingProps> = ({
    * billing API creates from the name and phone on submit.
    */
   const handlePhoneChange = async (raw: string) => {
-    const mobileNo = raw.replace(/\D/g, "").slice(0, 10);
+    const mobileNo = sanitizePhone(raw);
+    setFieldError("mobileNo", validatePhone(mobileNo));
     setCustomer((prev) => ({
       ...prev,
       mobileNo,
       // Any edit invalidates the customer picked for the previous number.
       customerId: null,
       customerName: "",
+      patientNumber: "",
     }));
     setIsAddingNewCustomer(false);
 
     if (mobileNo.length < 10) {
       setKnownCustomers([]);
+      setKnownPatientNumbers([]);
       return;
     }
 
@@ -274,17 +385,23 @@ const Billing: React.FC<BillingProps> = ({
     try {
       const matches = await getCustomersByPhone(mobileNo);
       setKnownCustomers(matches);
+      // The same lookup carries each record's patient number.
+      setKnownPatientNumbers(
+        Array.from(new Set(matches.map(patientNoOf).filter(Boolean)))
+      );
       // A single match needs no picking.
       if (matches.length === 1) {
         setCustomer((prev) => ({
           ...prev,
           customerId: matches[0].customerId,
           customerName: matches[0].customerName,
+          patientNumber: patientNoOf(matches[0]),
         }));
       }
     } catch (err) {
       console.error("Failed to look up customers:", err);
       setKnownCustomers([]);
+      setKnownPatientNumbers([]);
     } finally {
       setIsLookingUpCustomers(false);
     }
@@ -293,7 +410,12 @@ const Billing: React.FC<BillingProps> = ({
   const handleCustomerSelect = (value: string | number) => {
     if (value === "ADD_NEW") {
       setIsAddingNewCustomer(true);
-      setCustomer((prev) => ({ ...prev, customerId: null, customerName: "" }));
+      setCustomer((prev) => ({
+        ...prev,
+        customerId: null,
+        customerName: "",
+        patientNumber: "",
+      }));
       return;
     }
     const picked = knownCustomers.find((c) => c.customerId === Number(value));
@@ -301,6 +423,8 @@ const Billing: React.FC<BillingProps> = ({
       ...prev,
       customerId: picked?.customerId ?? null,
       customerName: picked?.customerName ?? "",
+      // The picked person's own patient number, not another family member's.
+      patientNumber: patientNoOf(picked),
     }));
   };
 
@@ -323,12 +447,23 @@ const Billing: React.FC<BillingProps> = ({
    * carry its id, and hands the cart to the payment screen.
    */
   const handleProceed = async () => {
-    if (!customer.mobileNo || customer.mobileNo.length !== 10) {
-      toast.error("Enter a 10 digit mobile number");
-      return;
-    }
-    if (!customer.customerName.trim()) {
-      toast.error("Enter the customer name");
+    // Every message lands under its own field; the toast is kept for failures
+    // that belong to no single field.
+    const nextErrors = {
+      mobileNo: validatePhone(customer.mobileNo),
+      customerName: validateName(customer.customerName, `${personLabel} name`),
+      patientNumber: isPatientType
+        ? validateCode(customer.patientNumber ?? "", "Patient number", CODE_MAX)
+        : "",
+      visitNumber: isPatientType
+        ? validateCode(customer.visitNumber ?? "", visitNumberLabel, CODE_MAX)
+        : "",
+      address: validateAddress(customer.address),
+    };
+
+    setFieldErrors(nextErrors);
+    if (Object.values(nextErrors).some(Boolean)) {
+      showToast.error("Please correct the highlighted fields.");
       return;
     }
 
@@ -336,15 +471,27 @@ const Billing: React.FC<BillingProps> = ({
     try {
       const doctorId = await resolveDoctor();
 
+      // A patient number picked from the dropdown is already on the customer
+      // record, so the id alone identifies it. Only a newly typed one needs
+      // sending — either to attach it to the customer or to create them.
+      const patientNumber = customer.patientNumber?.trim() ?? "";
+      const isOnRecord =
+        !!customer.customerId && knownPatientNumbers.includes(patientNumber);
+
       onProceedToPayment({
-        customer: { ...customer, doctorId },
+        customer: {
+          ...customer,
+          doctorId,
+          patientNumber: isOnRecord ? "" : patientNumber,
+        },
         lines,
         billDiscountValue: Number(billDiscountInput) || 0,
         discountType,
+        prescriptionFile,
       });
     } catch (err) {
       console.error("Failed to save the referring doctor:", err);
-      toast.error(
+      showToast.error(
         err instanceof Error ? err.message : "Failed to save the referring doctor."
       );
     } finally {
@@ -384,6 +531,7 @@ const Billing: React.FC<BillingProps> = ({
     setIsAddingNewCustomer(false);
     setIsAddingNewDoctor(false);
     setNewDoctorName("");
+    setKnownPatientNumbers([]);
   };
 
   // Both are plain arithmetic over a handful of rows — cheap enough to derive
@@ -429,7 +577,7 @@ const Billing: React.FC<BillingProps> = ({
       };
     } catch (err) {
       console.error("Failed to fetch batch details:", err);
-      toast.error("Failed to load batch details.");
+      showToast.error("Failed to load batch details.");
       return null;
     }
   };
@@ -486,9 +634,20 @@ const Billing: React.FC<BillingProps> = ({
           })}
         </div>
 
-        {/* Walk-in fields — 2x2, each row 72px (24px label + 48px field) */}
-        {customer.customerType === "WALK_IN" && (
+        {/* Customer fields — 2x2, each row 72px (24px label + 48px field).
+            Walk-in, OP, IP and Daycare all capture the same block today; a
+            type that needs extra fields adds them alongside this grid. */}
+        {customer.customerType !== "" && (
           <>
+            {/* Patient types open with their own section rule */}
+            {isPatientType && (
+              <div className="h-8 pb-2 border-b border-pneutral-200 flex items-end">
+                <span className="font-body font-medium text-label-l4 text-pneutral-900">
+                  Patient Details
+                </span>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Phone first — the names below are looked up from it. */}
               <Input
@@ -499,11 +658,12 @@ const Billing: React.FC<BillingProps> = ({
                 placeholder="10 digit mobile number"
                 value={customer.mobileNo}
                 onChange={(e) => handlePhoneChange(e.target.value)}
+                error={fieldErrors.mobileNo}
                 hint={
                   isLookingUpCustomers
-                    ? "Looking up customers…"
+                    ? `Looking up ${personLabel.toLowerCase()}s…`
                     : customer.mobileNo.length === 10 && knownCustomers.length === 0
-                    ? "New number — a customer will be created with this bill."
+                    ? `New number — a ${personLabel.toLowerCase()} will be created with this bill.`
                     : undefined
                 }
               />
@@ -511,32 +671,39 @@ const Billing: React.FC<BillingProps> = ({
               {/* Known number: pick the person. Otherwise type a new name. */}
               {knownCustomers.length > 0 && !isAddingNewCustomer ? (
                 <Dropdown
-                  label="Name"
+                  label={`${personLabel} Name`}
                   required
-                  placeholder="Select customer"
+                  placeholder={`Select ${personLabel.toLowerCase()}`}
                   options={customerOptions}
                   value={customer.customerId ?? ""}
                   onChange={handleCustomerSelect}
                   isLoading={isLookingUpCustomers}
+                  error={fieldErrors.customerName}
                   searchable
                 />
               ) : (
                 <Input
-                  label="Name"
+                  label={`${personLabel} Name`}
                   required
                   placeholder="e.g. Ramesh Kumar"
                   value={customer.customerName}
                   onChange={(e) => {
-                    setField("customerName", e.target.value);
+                    const name = sanitizeName(e.target.value);
+                    setField("customerName", name);
                     // Typing a name means a new customer, not the picked one.
                     setField("customerId", null);
+                    setFieldError(
+                      "customerName",
+                      validateName(name, `${personLabel} name`)
+                    );
                   }}
+                  error={fieldErrors.customerName}
                   rightIcon={
                     knownCustomers.length > 0 ? (
                       <button
                         type="button"
-                        aria-label="Pick an existing customer instead"
-                        title="Pick an existing customer instead"
+                        aria-label={`Pick an existing ${personLabel.toLowerCase()} instead`}
+                        title={`Pick an existing ${personLabel.toLowerCase()} instead`}
                         onClick={() => {
                           setIsAddingNewCustomer(false);
                           setField("customerName", "");
@@ -547,6 +714,67 @@ const Billing: React.FC<BillingProps> = ({
                       </button>
                     ) : undefined
                   }
+                />
+              )}
+
+              {/* Patient id — picked for a saved patient, typed for a new one */}
+              {isPatientType &&
+                (showPatientNumberOptions ? (
+                  <Dropdown
+                    label="Patient Number"
+                    required
+                    placeholder="Select patient number"
+                    options={knownPatientNumbers.map((no) => ({
+                      label: no,
+                      value: no,
+                    }))}
+                    value={customer.patientNumber ?? ""}
+                    onChange={(value: string) => {
+                      setField("patientNumber", value);
+                      setFieldError("patientNumber", "");
+                    }}
+                    error={fieldErrors.patientNumber}
+                    searchable
+                  />
+                ) : (
+                  <Input
+                    label="Patient Number"
+                    required
+                    placeholder="Enter patient number"
+                    value={customer.patientNumber ?? ""}
+                    onChange={(e) => {
+                      const code = sanitizeCode(e.target.value);
+                      setField("patientNumber", code);
+                      setFieldError(
+                        "patientNumber",
+                        validateCode(code, "Patient number")
+                      );
+                    }}
+                    error={fieldErrors.patientNumber}
+                    hint={
+                      isAddingNewCustomer || !customer.customerId
+                        ? "Created with this bill."
+                        : undefined
+                    }
+                  />
+                ))}
+
+              {/* Visit number — OP for outpatients, IP for inpatients/daycare */}
+              {isPatientType && (
+                <Input
+                  label={visitNumberLabel}
+                  required
+                  placeholder={`Enter ${visitNumberLabel}`}
+                  value={customer.visitNumber ?? ""}
+                  onChange={(e) => {
+                    const code = sanitizeCode(e.target.value);
+                    setField("visitNumber", code);
+                    setFieldError(
+                      "visitNumber",
+                      validateCode(code, visitNumberLabel)
+                    );
+                  }}
+                  error={fieldErrors.visitNumber}
                 />
               )}
 
@@ -565,7 +793,7 @@ const Billing: React.FC<BillingProps> = ({
                   label="Referred By"
                   placeholder="e.g. Dr. Anitha Rao"
                   value={newDoctorName}
-                  onChange={(e) => setNewDoctorName(e.target.value)}
+                  onChange={(e) => setNewDoctorName(sanitizeName(e.target.value))}
                   hint="Saved as a new doctor when the bill is generated."
                   rightIcon={
                     <button
@@ -584,12 +812,42 @@ const Billing: React.FC<BillingProps> = ({
                 />
               )}
 
-              <Input
-                label="Address"
-                placeholder="e.g. 12, MG Road, Bengaluru"
-                value={customer.address}
-                onChange={(e) => setField("address", e.target.value)}
-              />
+              {isPatientType ? (
+                /* Patient address is a 100px box under its own label */
+                <div className="flex flex-col gap-0">
+                  <label
+                    htmlFor="patientAddress"
+                    className="font-heading font-medium text-label-l4 text-pneutral-800 mb-1"
+                  >
+                    Address
+                  </label>
+                  <textarea
+                    id="patientAddress"
+                    placeholder="e.g. 12, MG Road, Bengaluru"
+                    value={customer.address}
+                    onChange={(e) => {
+                      const address = sanitizeAddress(e.target.value);
+                      setField("address", address);
+                      setFieldError("address", validateAddress(address));
+                    }}
+                    maxLength={ADDRESS_MAX}
+                    className="h-[100px] min-h-[100px] w-full resize-none rounded-[4px] border border-pneutral-300 bg-white p-3 text-p4 text-pneutral-900 outline-none transition-all duration-200 placeholder:text-pneutral-500 focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
+                  />
+                </div>
+              ) : (
+                <Input
+                  label="Address"
+                  placeholder="e.g. 12, MG Road, Bengaluru"
+                  value={customer.address}
+                  maxLength={ADDRESS_MAX}
+                  onChange={(e) => {
+                    const address = sanitizeAddress(e.target.value);
+                    setField("address", address);
+                    setFieldError("address", validateAddress(address));
+                  }}
+                  error={fieldErrors.address}
+                />
+              )}
             </div>
 
             {/* Prescription strip */}
@@ -613,7 +871,10 @@ const Billing: React.FC<BillingProps> = ({
                   <button
                     type="button"
                     aria-label="Remove prescription"
-                    onClick={() => setPrescriptionName("")}
+                    onClick={() => {
+                      setPrescriptionName("");
+                      setPrescriptionFile(null);
+                    }}
                     className="text-pneutral-500 hover:text-red-500 shrink-0 cursor-pointer"
                   >
                     <X size={14} />
@@ -628,11 +889,18 @@ const Billing: React.FC<BillingProps> = ({
               accept="image/*,application/pdf"
               className="hidden"
               onChange={(e) => {
-                const name = e.target.files?.[0]?.name;
-                if (name) {
-                  setPrescriptionName(name);
-                  toast.success("Prescription file attached");
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                if (file.size > PRESCRIPTION_MAX_BYTES) {
+                  showToast.error("Prescription must be 5 MB or smaller.");
+                  e.target.value = "";
+                  return;
                 }
+
+                setPrescriptionFile(file);
+                setPrescriptionName(file.name);
+                showToast.success("Prescription file attached");
               }}
             />
           </>
@@ -684,7 +952,10 @@ const Billing: React.FC<BillingProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDiscountType("PERCENTAGE")}
+                  onClick={() => {
+                    setDiscountType("PERCENTAGE");
+                    setBillDiscountInput((prev) => sanitizePercentage(prev));
+                  }}
                   className={`h-[28px] flex-1 rounded-[8px] text-sm flex items-center justify-center transition-all cursor-pointer ${
                     discountType === "PERCENTAGE"
                       ? "bg-white font-semibold text-[#000000] shadow-[0px_2px_6px_0px_#00000040]"
@@ -698,11 +969,18 @@ const Billing: React.FC<BillingProps> = ({
 
             <div className="relative flex items-center w-full my-1">
               <input
-                type="number"
-                step="0.01"
-                placeholder="Placeholder"
+                // text + inputMode: no spinner and no scroll-wheel stepping.
+                type="text"
+                inputMode="decimal"
+                placeholder="0.00"
                 value={billDiscountInput}
-                onChange={(e) => setBillDiscountInput(e.target.value)}
+                onChange={(e) =>
+                  setBillDiscountInput(
+                    discountType === "PERCENTAGE"
+                      ? sanitizePercentage(e.target.value)
+                      : sanitizeNumber(e.target.value)
+                  )
+                }
                 className="h-[48px] w-full rounded-[8px] border border-[#C0C1BE] bg-white pl-4 pr-10 text-sm text-pneutral-900 outline-none focus:border-[#7D32FC] transition-all shadow-2xs"
               />
               <span className="absolute right-3.5 font-medium text-[#3C3D3A] text-base select-none">
@@ -723,7 +1001,7 @@ const Billing: React.FC<BillingProps> = ({
             onClick={() => {
               if (lines.length === 0) return;
               setRows([emptyBillingRow()]);
-              toast.success("Cart cleared");
+              showToast.success("Cart cleared");
             }}
             className="h-[48px] px-6 rounded-[8px] border-[2px] border-pneutral-900 bg-white hover:bg-pneutral-50 text-pneutral-900 font-semibold text-base flex items-center justify-center gap-2.5 shadow-sm transition-all w-fit cursor-pointer"
           >

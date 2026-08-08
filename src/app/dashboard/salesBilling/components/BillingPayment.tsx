@@ -15,6 +15,16 @@ import {
   PaymentMode,
 } from "@/types/BillingData";
 import { formatAmount } from "@/utils/billingTotals";
+import {
+  TRANSACTION_ID_MAX,
+  firstError,
+  receivedAmountSchema,
+  sanitizeNumber,
+  sanitizeTransactionId,
+  toPaise,
+  transactionIdSchema,
+} from "@/app/schema/BillingSchema";
+import { showToast } from "@/app/components/common/Toast";
 
 interface BillingPaymentProps {
   customer: CustomerInfo;
@@ -23,7 +33,17 @@ interface BillingPaymentProps {
   /** Back to the cart with everything intact. */
   onBack: () => void;
   onGenerateInvoice: (payment: PaymentDetails) => void;
+  /**
+   * "settle" collects what is still owed on a saved bill instead of billing a
+   * new cart — the amount due is `pendingAmount` rather than the whole net.
+   */
+  mode?: "create" | "settle";
+  pendingAmount?: number;
+  billNo?: string;
 }
+
+/** Credit is only extended to admitted patients. */
+const CREDIT_CUSTOMER_TYPES = ["IP_PATIENT", "DAYCARE"];
 
 const PAYMENT_MODES: {
   label: string;
@@ -42,32 +62,77 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   totals,
   onBack,
   onGenerateInvoice,
+  mode = "create",
+  pendingAmount,
+  billNo,
 }) => {
+  const isSettling = mode === "settle";
+  /** Settling clears the outstanding balance; billing clears the whole net. */
+  const amountDue = isSettling ? pendingAmount ?? 0 : totals.netAmount;
+
+  // Walk-ins and outpatients pay in full; only admitted patients get credit —
+  // when billing and again when settling, so a balance can be cleared in parts.
+  const canPayOnCredit = CREDIT_CUSTOMER_TYPES.includes(customer.customerType);
+
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("CASH");
-  const [amountReceived, setAmountReceived] = useState(String(totals.netAmount));
+  // Left blank on purpose — the cashier types what was handed over.
+  const [amountReceived, setAmountReceived] = useState("");
   const [referenceNo, setReferenceNo] = useState("");
-  const [creditDays, setCreditDays] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const received = Number(amountReceived) || 0;
 
-  // Credit bills are handed over unpaid, so nothing is due back and the balance is the whole bill.
+  // Compared in paise throughout: 91.6100 against 91.61 is not a shortfall.
   const changeDue = useMemo(
-    () => (paymentMode === "CREDIT" ? 0 : Math.max(0, received - totals.netAmount)),
-    [paymentMode, received, totals.netAmount]
+    () => Math.max(0, toPaise(received) - toPaise(amountDue)) / 100,
+    [received, amountDue]
   );
 
-  const shortfall =
-    paymentMode === "CREDIT" ? 0 : Math.max(0, totals.netAmount - received);
+  /** What is still owed after this payment. */
+  const shortfall = Math.max(0, toPaise(amountDue) - toPaise(received)) / 100;
 
-  const canGenerate =
-    paymentMode === "CREDIT" ? Boolean(creditDays) : shortfall === 0;
+  /**
+   * Messages sit under their own field. Cash needs no reference; every other
+   * mode does. Credit may be part paid, everything else must clear the bill.
+   */
+  const validate = () => {
+    const next = {
+      amount: firstError(
+        receivedAmountSchema(amountDue, paymentMode !== "CREDIT"),
+        amountReceived
+      ),
+      referenceNo: firstError(
+        transactionIdSchema(paymentMode !== "CASH"),
+        referenceNo
+      ),
+    };
+
+    setErrors(next);
+    return !Object.values(next).some(Boolean);
+  };
+
+  const handleGenerate = () => {
+    if (!validate()) {
+      showToast.error("Please correct the highlighted fields.");
+      return;
+    }
+
+    onGenerateInvoice({
+      paymentMode,
+      amountReceived: received,
+      referenceNo,
+      remarks: "",
+      changeDue,
+      pendingAmount: shortfall,
+    });
+  };
 
   return (
     <div className="flex flex-col justify-between gap-6 text-pneutral-900 min-h-[700px] pb-12 w-full">
       <div className="flex flex-col gap-5">
         {/* Top Title */}
         <div className="text-[24px] font-semibold tracking-normal text-[#1E1E1D]">
-          Billing POS
+          {isSettling ? `Settle Payment${billNo ? ` — ${billNo}` : ""}` : "Billing POS"}
         </div>
 
         {/* Main Columns - items-stretch guarantees equal height for both cards */}
@@ -81,7 +146,9 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
 
             {/* Payment Mode Selection Boxes */}
             <div className="flex items-center gap-[16px] flex-wrap sm:flex-nowrap">
-              {PAYMENT_MODES.map((mode) => {
+              {PAYMENT_MODES.filter(
+                (mode) => mode.value !== "CREDIT" || canPayOnCredit
+              ).map((mode) => {
                 const isSelected = paymentMode === mode.value;
                 return (
                   <button
@@ -89,11 +156,7 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
                     type="button"
                     onClick={() => {
                       setPaymentMode(mode.value);
-                      if (mode.value === "CREDIT") {
-                        setAmountReceived("0");
-                      } else if (!amountReceived || Number(amountReceived) === 0) {
-                        setAmountReceived(String(totals.netAmount));
-                      }
+                      setErrors({});
                     }}
                     className={`w-[98px] h-[102px] rounded-[12px] p-[12px] flex flex-col items-center justify-center gap-[8px] border transition-all cursor-pointer ${
                       isSelected
@@ -123,41 +186,75 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
             {/* Input Fields */}
             <div className="flex flex-col gap-[16px] pt-2">
               <div className="flex flex-col gap-1.5">
-                <label className="text-[15px] font-medium text-[#1E1E1D]">
-                  {paymentMode === "CREDIT" ? "Credit Days" : "Received Amount"}
-                </label>
-                <div className="h-[48px] w-full rounded-[8px] border border-[#D5D5D4] bg-white px-4 flex items-center shadow-2xs focus-within:border-[#7D32FC] transition-colors">
+                <div className="flex items-center justify-between">
+                  <label className="text-[15px] font-medium text-[#1E1E1D]">
+                    Received Amount
+                  </label>
+                  <span className="text-[13px] font-medium text-[#5A5B57]">
+                    {isSettling ? "Pending" : "Amount due"}: ₹{" "}
+                    {formatAmount(amountDue)}
+                  </span>
+                </div>
+                <div
+                  className={`h-[48px] w-full rounded-[8px] border bg-white px-4 flex items-center shadow-2xs transition-colors ${
+                    errors.amount
+                      ? "border-warning-500"
+                      : "border-[#D5D5D4] focus-within:border-[#7D32FC]"
+                  }`}
+                >
                   <input
-                    type="number"
-                    value={paymentMode === "CREDIT" ? creditDays : amountReceived}
+                    type="text"
+                    inputMode="decimal"
+                    value={amountReceived}
                     onChange={(e) => {
-                      if (paymentMode === "CREDIT") setCreditDays(e.target.value);
-                      else setAmountReceived(e.target.value);
+                      setAmountReceived(sanitizeNumber(e.target.value));
+                      setErrors((prev) => ({ ...prev, amount: "" }));
                     }}
-                    placeholder={
-                      paymentMode === "CREDIT"
-                        ? "e.g., 30"
-                        : String(totals.netAmount)
-                    }
+                    placeholder="0.00"
                     className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none placeholder:text-pneutral-400"
                   />
                 </div>
+                {errors.amount ? (
+                  <span className="text-p2 text-warning-500">{errors.amount}</span>
+                ) : (
+                  received > 0 &&
+                  shortfall > 0 && (
+                    <span className="text-p2 text-[#5A5B57]">
+                      ₹ {formatAmount(shortfall)} will remain pending
+                    </span>
+                  )
+                )}
               </div>
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-[15px] font-medium text-[#1E1E1D]">
                   UPI Reference/Transaction ID
                 </label>
-                <div className="h-[48px] w-full rounded-[8px] border border-[#D5D5D4] bg-white px-4 flex items-center shadow-2xs focus-within:border-[#7D32FC] transition-colors">
+                <div
+                  className={`h-[48px] w-full rounded-[8px] border bg-white px-4 flex items-center shadow-2xs transition-colors ${
+                    errors.referenceNo
+                      ? "border-warning-500"
+                      : "border-[#D5D5D4] focus-within:border-[#7D32FC]"
+                  }`}
+                >
                   <input
                     type="text"
                     value={referenceNo}
-                    onChange={(e) => setReferenceNo(e.target.value)}
+                    maxLength={TRANSACTION_ID_MAX}
+                    onChange={(e) => {
+                      setReferenceNo(sanitizeTransactionId(e.target.value));
+                      setErrors((prev) => ({ ...prev, referenceNo: "" }));
+                    }}
                     placeholder="UTR123456789012"
                     disabled={paymentMode === "CASH"}
                     className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none disabled:text-pneutral-400 disabled:cursor-not-allowed placeholder:text-pneutral-400"
                   />
                 </div>
+                {errors.referenceNo && (
+                  <span className="text-p2 text-warning-500">
+                    {errors.referenceNo}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -210,14 +307,52 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1 mb-4">
-                <span className="text-[20px] font-bold text-[#7D32FC]">
+              <div
+                className={`flex items-center justify-between pt-1 ${
+                  isSettling ? "" : "mb-4"
+                }`}
+              >
+                <span
+                  className={`font-bold ${
+                    isSettling
+                      ? "text-[16px] text-[#5A5B57]"
+                      : "text-[20px] text-[#7D32FC]"
+                  }`}
+                >
                   Net Amount
                 </span>
-                <span className="text-[22px] font-bold text-[#7D32FC]">
+                <span
+                  className={`font-bold ${
+                    isSettling
+                      ? "text-[16px] text-[#1E1E1D]"
+                      : "text-[22px] text-[#7D32FC]"
+                  }`}
+                >
                   ₹ {formatAmount(totals.netAmount)}
                 </span>
               </div>
+
+              {/* Settling shows what has already been collected and what the
+                  customer still owes — the balance this screen clears. */}
+              {isSettling && (
+                <>
+                  <div className="flex items-center justify-between text-[15px] text-[#5A5B57] pb-4 border-b border-[#EAEAE9]">
+                    <span>Already Paid</span>
+                    <span className="min-w-[85px] text-right font-semibold text-[#1E1E1D]">
+                      ₹ {formatAmount(Math.max(0, totals.netAmount - amountDue))}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 mb-4">
+                    <span className="text-[20px] font-bold text-[#7D32FC]">
+                      Pending Amount
+                    </span>
+                    <span className="text-[22px] font-bold text-[#7D32FC]">
+                      ₹ {formatAmount(amountDue)}
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -234,21 +369,10 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
         </button>
         <button
           type="button"
-          disabled={!canGenerate}
-          onClick={() =>
-            onGenerateInvoice({
-              paymentMode,
-              amountReceived:
-                paymentMode === "CREDIT" ? 0 : received || totals.netAmount,
-              referenceNo,
-              remarks: "",
-              changeDue,
-              creditDays: creditDays ? Number(creditDays) : undefined,
-            })
-          }
+          onClick={handleGenerate}
           className="h-[48px] px-8 rounded-[10px] bg-[#7D32FC] hover:bg-[#6823df] text-white font-semibold text-[16px] shadow-md transition-all cursor-pointer disabled:opacity-50"
         >
-          Generate Invoice
+          {isSettling ? "Record Payment" : "Generate Invoice"}
         </button>
       </div>
     </div>

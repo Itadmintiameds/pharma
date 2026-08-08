@@ -6,7 +6,16 @@
  * reshaping the UI.
  */
 
-export type CustomerType = "WALK_IN" | "REGISTERED" | "OP_PATIENT" | "IP_PATIENT" | "DAYCARE" | "CORPORATE" | "BUSINESS" | "INSURANCE" | "DOCTOR";
+/** Mirrors the backend CustomerType enum exactly. */
+export type CustomerType =
+  | "WALK_IN"
+  | "REGISTERED"
+  | "OP_PATIENT"
+  | "IP_PATIENT"
+  | "DAYCARE"
+  | "CORPORATE"
+  | "BUSINESS"
+  | "INSURANCE";
 
 export type PaymentMode = "CASH" | "CARD" | "UPI" | "CREDIT";
 
@@ -25,6 +34,10 @@ export interface CustomerInfo {
   /** Referring doctor — the name shown, the id sent. */
   referredBy: string;
   doctorId?: number | null;
+  /** The hospital's patient id, for the patient types. */
+  patientNumber?: string;
+  /** The visit number — OP for outpatients, IP for inpatients and daycare. */
+  visitNumber?: string;
   address: string;
 }
 
@@ -33,6 +46,9 @@ export interface CustomerRecord {
   customerId: number;
   customerName: string;
   customerPhoneNo: string;
+  /** The patient id, when the customer is registered as a patient. */
+  patientNo?: string | null;
+  patientNumber?: string | null;
   pharmacyId?: string;
   createdAt?: string;
   createdBy?: string;
@@ -64,11 +80,25 @@ export interface BillingDetailPayload {
   netAmount: number;
 }
 
+/**
+ * How much of the bill is settled. Lives on the bill, not the payment, and
+ * mirrors the backend PaymentType enum.
+ */
+export type PaymentType = "PAID" | "PARTIAL" | "UNPAID";
+
 export interface BillingPaymentPayload {
   paymentMode: PaymentMode;
-  transactionId: string;
+  transactionId: string | null;
   receivedAmount: number;
-  paymentType: "PAID" | "PENDING";
+  /** What is still owed after this payment. */
+  pendingAmount: number;
+}
+
+/** Body of POST /billing/{billingId}/payment — settling an open bill. */
+export interface SettlePaymentPayload {
+  paymentMode: PaymentMode;
+  transactionId: string | null;
+  receivedAmount: number;
 }
 
 export interface CreateBillingPayload {
@@ -77,9 +107,15 @@ export interface CreateBillingPayload {
   customerId?: number;
   customerName?: string;
   customerPhoneNo?: string;
+  /** Only sent when it isn't already on the customer record. */
+  patientNumber?: string;
+  /** The visit number for the patient types — OP or IP. */
+  opIpNumber?: string;
   customerType: CustomerType;
   doctorId?: number;
   customerAddress?: string;
+  /** PAID unless the customer still owes something. */
+  paymentType: PaymentType;
   totalGrossAmount: number;
   totalDiscountPercentage: number;
   totalDiscountAmount: number;
@@ -149,7 +185,8 @@ export interface PaymentDetails {
   remarks: string;
   /** Cash handed back. Zero for every non-cash mode. */
   changeDue: number;
-  creditDays?: number;
+  /** Still owed after this payment — non-zero only for credit. */
+  pendingAmount: number;
 }
 
 /** One line of a bill as the billing API returns it. */
@@ -173,8 +210,8 @@ export interface BillingPaymentRecord {
   paymentId: number;
   billingId: number;
   paymentMode: PaymentMode;
-  paymentType: "PAID" | "PENDING";
   receivedAmount: number;
+  pendingAmount: number;
   transactionId: string | null;
 }
 
@@ -190,6 +227,7 @@ export interface BillingRecord {
   customerType: CustomerType | null;
   doctorId: number | null;
   doctorName: string | null;
+  paymentType: PaymentType | null;
   prescriptionUrl: string | null;
   sellingType: string | null;
   pharmacyId?: string;

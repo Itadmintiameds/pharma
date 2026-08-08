@@ -3,8 +3,8 @@
 import React, { useRef, useState } from "react";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import toast from "react-hot-toast";
-import { Printer } from "lucide-react";
+import { showToast } from "@/app/components/common/Toast";
+import BillingSuccessModal from "./BillingSuccessModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
 import {
   BillLine,
@@ -29,6 +29,11 @@ interface PaymentSummaryProps {
   onBack?: () => void;
   onDone?: () => void;
   onNewBill?: () => void;
+  /**
+   * Saves the bill (and any prescription) and returns what the success popup
+   * should show. Returning null leaves the screen as it is.
+   */
+  onSave?: () => Promise<{ billNo: string } | null>;
 }
 
 const PaymentSummary: React.FC<PaymentSummaryProps> = ({
@@ -41,10 +46,38 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   mode = "create",
   onBack,
   onDone,
+  onSave,
 }) => {
   const [currentMode] = useState<"create" | "view" | "download">(mode);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedBillNo, setSavedBillNo] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
+
+  /** Saves through the page, then opens the success popup. */
+  const handleSave = async () => {
+    if (currentMode === "download") {
+      handleDownloadPdf();
+      return;
+    }
+
+    if (!onSave) {
+      if (onDone) onDone();
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const saved = await onSave();
+      if (saved) setSavedBillNo(saved.billNo);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /** No send-bill endpoint yet, so the button only says so. */
+  const handleSendToWhatsapp = () => {
+    showToast.info("Feature coming soon.");
+  };
 
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
@@ -54,10 +87,10 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
         printRef.current,
         `invoice-${invoiceNo.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`
       );
-      toast.success("Invoice downloaded successfully!");
+      showToast.success("Invoice downloaded successfully!");
     } catch (err) {
       console.error("Failed to generate the invoice PDF", err);
-      toast.error("Could not generate the PDF.");
+      showToast.error("Could not generate the PDF.");
     } finally {
       setIsSubmitting(false);
     }
@@ -277,28 +310,12 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           {currentMode === "view" ? "Cancel" : "Back"}
         </button>
 
+        {/* Print moved into the success popup */}
         <div className="flex items-center gap-3 shrink-0">
-          <button
-            type="button"
-            onClick={handleDownloadPdf}
-            disabled={isSubmitting}
-            className="h-[56px] px-6 rounded-[8px] bg-[#1E1E1D] hover:bg-[#3C3D3A] text-white font-semibold text-[16px] flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50 shrink-0"
-          >
-            <Printer size={20} />
-            Print
-          </button>
-
           {currentMode !== "view" ? (
             <button
               type="button"
-              onClick={() => {
-                if (currentMode === "download") {
-                  handleDownloadPdf();
-                } else {
-                  toast.success("Bill saved successfully!");
-                  if (onDone) onDone();
-                }
-              }}
+              onClick={handleSave}
               disabled={isSubmitting}
               className="w-[272px] h-[56px] rounded-[8px] bg-primary-800 hover:opacity-90 text-white font-semibold text-[16px] flex items-center justify-center transition-all shadow-md cursor-pointer disabled:opacity-50 shrink-0"
             >
@@ -306,7 +323,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                 ? "Processing..."
                 : currentMode === "download"
                 ? "Download PDF"
-                : "Save & Back to Dashboard"}
+                : "Save Bill"}
             </button>
           ) : (
             <button
@@ -320,6 +337,23 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           )}
         </div>
       </div>
+
+      <BillingSuccessModal
+        isOpen={!!savedBillNo}
+        onClose={() => {
+          setSavedBillNo(null);
+          if (onDone) onDone();
+        }}
+        billNo={savedBillNo ?? invoiceNo}
+        totalItems={lines.length}
+        netAmount={totals.netAmount}
+        onSendToWhatsapp={handleSendToWhatsapp}
+        onPrint={handleDownloadPdf}
+        onBackToDashboard={() => {
+          setSavedBillNo(null);
+          if (onDone) onDone();
+        }}
+      />
     </div>
   );
 };
