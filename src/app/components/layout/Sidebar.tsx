@@ -69,9 +69,12 @@ const Sidebar = () => {
   const handleLogout = async () => {
     try {
       await logout();
-      clearPharmacy();
     } catch (err) {
       console.error("Logout failed:", err);
+    } finally {
+      // Clear regardless of whether the API call succeeded — a failed logout
+      // request shouldn't leave the previous session's pharmacy selection behind.
+      clearPharmacy();
     }
     router.replace("/login");
   };
