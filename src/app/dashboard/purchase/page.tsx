@@ -29,7 +29,8 @@ interface InvoiceLine {
   hsn: string;
   batch: string;
   expiry: string;
-  mrp: number;
+  /** What the supplier charges per purchase unit. */
+  purchaseAmt: number;
   value: number;
   dis: number;
   gst: number;
@@ -38,7 +39,7 @@ interface InvoiceLine {
 
 /**
  * The purchase API returns only ids and amounts per line, so brand / variant /
- * HSN / expiry / MRP are pulled from each product's details. One call per
+ * HSN / expiry / price are pulled from each product's details. One call per
  * distinct product, and any failure just leaves those cells blank.
  */
 const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]> => {
@@ -82,8 +83,8 @@ const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]>
       batch: batch?.batchNumber || line.batchNumber || line.batchId,
       expiry: batch?.expiryDate || "—",
       // Per purchase unit, matching the quantity the line is billed in.
-      mrp: Number(batch?.mrp ?? 0),
-      value: Number(batch?.mrp ?? 0) * Number(line.purchaseQuantity || 0),
+      purchaseAmt: Number(batch?.purchasePrice ?? 0),
+      value: Number(batch?.purchasePrice ?? 0) * Number(line.purchaseQuantity || 0),
       dis: 0,
       gst: Number(line.gst || 0),
       amount: Number(line.netAmount || 0),

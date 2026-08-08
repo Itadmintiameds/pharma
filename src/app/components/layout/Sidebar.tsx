@@ -122,7 +122,7 @@ const Sidebar = () => {
           name: "Sales / Billing",
           icon: Receipt,
           path: "/dashboard/salesBilling",
-          isLocked: !isBusinessRegistered,
+          isLocked: !hasApprovedPharmacy,
         },
       ],
     },

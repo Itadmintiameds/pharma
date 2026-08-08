@@ -65,10 +65,11 @@ export const pharmacyDetailsSchema = z.object({
         .trim()
         .min(1, "Expiry Date is required")
         .refine((val) => {
-            const date = new Date(val);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); // Ignore time part
-            return date >= today;
+            // Compare as "YYYY-MM-DD" strings: new Date(val) parses as UTC midnight
+            // and shifted the day for non-UTC timezones
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            return val >= todayStr;
         }, { message: "Expiry date cannot be in the past" })
         .refine((val) => {
             const year = val.split('-')[0];

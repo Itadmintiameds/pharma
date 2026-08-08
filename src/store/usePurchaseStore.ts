@@ -10,7 +10,11 @@ export interface PurchaseDetail {
   expiryDate?: string;
   hsnCode?: string;
   variant?: string;
-  mrp?: number;
+  /**
+   * What the supplier charges for one purchase unit. The invoice is what we pay
+   * them, so the line is priced on this rather than on MRP.
+   */
+  purchasePrice?: number;
   freeQty: string | number;
   /** Unit name, e.g. "BOX" — the backend column is a varchar. */
   freeQtyUnit: string;

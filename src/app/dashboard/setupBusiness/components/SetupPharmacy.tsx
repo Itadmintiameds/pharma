@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
+import Dropdown from "@/app/components/common/Dropdown";
 import Button from "@/app/components/common/Button";
 import UploadInput from "@/app/components/common/UploadInput";
 import ComplianceSuccessModal from "@/app/components/common/ComplianceSuccessModal";
@@ -17,6 +18,10 @@ import {
 import { checkDocumentNumber } from "@/services/UserManagementService";
 import { showToast } from "@/app/components/common/Toast";
 import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
+import { WarehouseDetails } from "@/types/SetupWarehouseData";
+import { buildWarehousePayload } from "@/services/SetupWarehouseService";
+import SetupWarehouse from "./SetupWarehouse";
 
 interface SetupPharmacyProps {
   businessName: string;
@@ -24,6 +29,12 @@ interface SetupPharmacyProps {
   panNumber: string;
   gstNumber: string;
   locationType: "single" | "multiple";
+  manageCentrally?: boolean | null;
+  setManageCentrally?: (val: boolean) => void;
+  warehouse?: WarehouseDetails;
+  setWarehouse?: React.Dispatch<React.SetStateAction<WarehouseDetails>>;
+  showProductManagement?: boolean;
+  setShowProductManagement?: (val: boolean) => void;
   hasOrganization?: boolean;
   existingOrg?: any;
   prefillData?: any;
@@ -42,6 +53,12 @@ const SetupPharmacy = ({
   panNumber,
   gstNumber,
   locationType,
+  manageCentrally = null,
+  setManageCentrally,
+  warehouse,
+  setWarehouse,
+  showProductManagement = false,
+  setShowProductManagement,
   hasOrganization = false,
   existingOrg = null,
   prefillData = null,
@@ -124,6 +141,7 @@ const SetupPharmacy = ({
     null,
   );
   const [open, setOpen] = useState(false);
+  const [showWarehouseForm, setShowWarehouseForm] = useState(false);
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -134,6 +152,13 @@ const SetupPharmacy = ({
 
   const issueDateRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
+
+  // Local (not UTC) date — toISOString() shifts to the previous day for IST
+  // mornings, which made today unselectable as an issue date.
+  const today = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
 
   const openDatePicker = (ref: React.RefObject<HTMLInputElement | null>) => {
     const input = ref.current;
@@ -162,7 +187,51 @@ const SetupPharmacy = ({
     setExistingManualFile(null);
     resetAddress("");
     setErrors({});
+    setShowProductManagement?.(false);
+    setShowWarehouseForm(false);
     setFormKey(prev => prev + 1);
+  };
+
+  // New multiple-location org: the primary form is followed by the Product
+  // Management screen (create org happens on final submit there).
+  const isNewMultiple = !hasOrganization && locationType === "multiple";
+
+  const handleNext = () => {
+    if (!validateForm()) return;
+
+    const businessResult = setupBusinessSchema.safeParse({
+      businessName,
+      ownershipType,
+      panNumber,
+      gstNumber,
+    });
+
+    if (!businessResult.success) {
+      showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
+      return;
+    }
+
+    setShowProductManagement?.(true);
+  };
+
+  // On the Product Maintenance step: "Yes" reveals the warehouse form (Continue),
+  // "No" submits directly.
+  const handleProductManagementNext = () => {
+    if (manageCentrally === null) {
+      showToast.error("Please select how you manage your products.");
+      return;
+    }
+    if (manageCentrally === true && !showWarehouseForm) {
+      setShowWarehouseForm(true);
+      return;
+    }
+    handleSubmit();
+  };
+
+  // Switching to "No" hides any revealed warehouse form
+  const handleManageCentrally = (val: boolean) => {
+    setManageCentrally?.(val);
+    if (!val) setShowWarehouseForm(false);
   };
 
   const getFormData = () => ({
@@ -476,6 +545,15 @@ const SetupPharmacy = ({
         ];
       }
 
+      // Central-inventory choice + warehouse list — only once a "Multiple" org
+      // has made the central-management choice
+      if (manageCentrally !== null) {
+        payload.centralizedInventory = manageCentrally === true;
+        if (manageCentrally === true && warehouse?.warehouseName?.trim()) {
+          payload.pharmacyRegistrationWareHouses = [{ ...warehouse }];
+        }
+      }
+
       const draftResponse = await savePharmacyDraft(payload, accessToken);
       console.log("Draft saved:", draftResponse);
 
@@ -544,6 +622,23 @@ const SetupPharmacy = ({
         showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
         return;
       }
+
+      // Multiple-location orgs must declare how products are managed, and a
+      // central warehouse requires an address before we can create the org.
+      if (locationType === "multiple") {
+        if (manageCentrally === null) {
+          showToast.error("Please select how you manage your products.");
+          return;
+        }
+        if (manageCentrally && !warehouse?.warehouseName?.trim()) {
+          showToast.error("Please enter the warehouse name.");
+          return;
+        }
+        if (manageCentrally && !warehouse?.warehouseAddress?.trim()) {
+          showToast.error("Please enter the central warehouse address.");
+          return;
+        }
+      }
     }
 
     setLoading(true);
@@ -551,13 +646,23 @@ const SetupPharmacy = ({
       let orgResponse = existingOrg;
       if (!hasOrganization) {
         // Step 1: Hit Pharma Backend (create organization)
-        orgResponse = await createOrganization({
+        const orgPayload: OrganizationCreateRequest = {
           organizationName: businessName,
           organizationType: locationType === "single" ? "Single" : "Multiple",
           ownershipType: ownershipType,
           panNumber: panNumber,
           gstNumber: gstNumber,
-        });
+        };
+
+        // For "Multiple" orgs, attach centralizedInventory (+ warehouse when central)
+        if (locationType === "multiple" && warehouse) {
+          Object.assign(
+            orgPayload,
+            buildWarehousePayload(manageCentrally, warehouse),
+          );
+        }
+
+        orgResponse = await createOrganization(orgPayload);
         console.log("Step 1 Success (Organization):", orgResponse);
       } else {
         console.log("Using existing organization details:", orgResponse);
@@ -577,6 +682,11 @@ const SetupPharmacy = ({
       // backend updates it in place instead of inserting a duplicate
       const existingDocId = isDraftEdit
         ? prefillData?.pharmacyRegistrationDocuments?.[0]?.registrationDocumentId
+        : undefined;
+
+      // Same for the central warehouse row on draft submit
+      const existingWarehouseId = isDraftEdit
+        ? prefillData?.pharmacyRegistrationWareHouses?.[0]?.pharmacyRegistrationWarehouseId
         : undefined;
 
       const registrationPayload = {
@@ -602,6 +712,20 @@ const SetupPharmacy = ({
         organizationType: locationType === "single" ? "Single" : "Multiple",
         organizationPanNumber: orgResponse.panNumber,
         organizationGstNumber: orgResponse.gstNumber,
+        // Central-inventory flag + warehouse list (only populated when a
+        // "Multiple" org manages products centrally)
+        centralizedInventory: manageCentrally === true,
+        pharmacyRegistrationWareHouses:
+          manageCentrally === true && warehouse
+            ? [
+                {
+                  ...(existingWarehouseId
+                    ? { pharmacyRegistrationWarehouseId: existingWarehouseId }
+                    : {}),
+                  ...warehouse,
+                },
+              ]
+            : [],
         pharmacyRegistrationDocuments: [
           {
             ...(existingDocId ? { registrationDocumentId: existingDocId } : {}),
@@ -681,12 +805,26 @@ const SetupPharmacy = ({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="text-h4 font-semibold text-pneutral-900">
-            Setup Your Business
+            {showWarehouseForm
+              ? "Central Warehouse Details"
+              : showProductManagement
+                ? "Product Maintenance"
+                : "Setup Your Business"}
           </div>
           
         </div>
 
         <div key={formKey} className="flex flex-col gap-5">
+          {showProductManagement ? (
+            <SetupWarehouse
+              manageCentrally={manageCentrally}
+              setManageCentrally={handleManageCentrally}
+              warehouse={warehouse!}
+              setWarehouse={setWarehouse!}
+              showWarehouseForm={showWarehouseForm}
+            />
+          ) : (
+          <>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>
@@ -768,33 +906,34 @@ const SetupPharmacy = ({
               required
             />
 
-            <div className="w-full">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
-                Mobile Number <span className="text-warning-500">*</span>
-              </label>
-              <div className={`flex h-12 w-full items-center rounded-[8px] border ${errors.pharmacyPhone ? 'border-warning-500' : 'border-pneutral-300'} bg-white transition-all`}>
-                <select className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none">
+            <Input
+              label="Mobile Number"
+              placeholder="Enter company phone"
+              type="text"
+              name="pharmacyPhone"
+              id="pharmacyPhone"
+              inputMode="numeric"
+              leftAddon={
+                <select
+                  aria-label="Country code"
+                  className="h-full bg-transparent border-r border-pneutral-300 px-3 text-p4 text-pneutral-900 outline-none cursor-pointer"
+                >
                   <option>+91</option>
                 </select>
-                <input 
-                  type="text" 
-                  placeholder="Enter company phone" 
-                  className="h-full w-full bg-transparent px-4 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500" 
-                  value={pharmacyPhone}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val === '' || /^[0-9]+$/.test(val)) {
-                      if (val.length <= 10) {
-                        setPharmacyPhone(val);
-                        validateField("pharmacyPhone", val);
-                      }
-                    }
-                  }}
-                  required
-                />
-              </div>
-              {errors.pharmacyPhone && <p className="text-sm text-red-500 mt-1">{errors.pharmacyPhone}</p>}
-            </div>
+              }
+              value={pharmacyPhone}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === "" || /^[0-9]+$/.test(val)) {
+                  if (val.length <= 10) {
+                    setPharmacyPhone(val);
+                    validateField("pharmacyPhone", val);
+                  }
+                }
+              }}
+              error={errors.pharmacyPhone}
+              required
+            />
 
             <Input
               label={documentLabel}
@@ -828,7 +967,7 @@ const SetupPharmacy = ({
               value={issueDate}
               onChange={handleFieldChange("issueDate", setIssueDate)}
               error={errors.issueDate}
-              max={new Date().toISOString().split("T")[0]}
+              max={today}
               required
             />
 
@@ -855,7 +994,7 @@ const SetupPharmacy = ({
               value={expiryDate}
               onChange={handleFieldChange("expiryDate", setExpiryDate)}
               error={errors.expiryDate}
-              min={new Date().toISOString().split("T")[0]}
+              min={today}
               max="9999-12-31"
               required
             />
@@ -942,61 +1081,44 @@ const SetupPharmacy = ({
               required
             /> */}
 
-            <div className="flex flex-col gap-1">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
-                Taluka
-                <span className="ml-2 text-warning-500">*</span>
-              </label>
+            <Dropdown
+              label="Taluka"
+              placeholder="Select Taluka"
+              options={talukas.map((taluka) => ({
+                label: taluka,
+                value: taluka,
+              }))}
+              value={address.taluka}
+              onChange={(value: string) =>
+                setAddress((prev) => ({
+                  ...prev,
+                  taluka: value,
+                }))
+              }
+              disabled={talukas.length === 0}
+              searchable
+              required
+            />
 
-              <select
-                value={address.taluka}
-                onChange={(e) =>
-                  setAddress((prev) => ({
-                    ...prev,
-                    taluka: e.target.value,
-                  }))
-                }
-                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
-              >
-                {talukas.length === 0 ? (
-                  <option value="">Select Taluka</option>
-                ) : (
-                  talukas.map((taluka) => (
-                    <option key={taluka} value={taluka}>
-                      {taluka}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
+            <Dropdown
+              label="City/Town/Village"
+              placeholder="Select City"
+              options={cities.map((city) => ({
+                label: city,
+                value: city,
+              }))}
+              value={address.city}
+              onChange={(value: string) =>
+                setAddress((prev) => ({
+                  ...prev,
+                  city: value,
+                }))
+              }
+              disabled={cities.length === 0}
+              searchable
+              required
+            />
 
-            <div className="flex flex-col gap-1">
-              <label className="mb-1 block text-label-l4 font-medium text-pneutral-900">
-                City/Town/Village
-                <span className="ml-2 text-warning-500">*</span>
-              </label>
-
-              <select
-                value={address.city}
-                onChange={(e) =>
-                  setAddress((prev) => ({
-                    ...prev,
-                    city: e.target.value,
-                  }))
-                }
-                className="h-11 w-full rounded-[7px] border border-pneutral-200 bg-white px-3 text-pneutral-900 focus:outline-none"
-              >
-                {cities.length === 0 ? (
-                  <option value="">Select City</option>
-                ) : (
-                  cities.map((city) => (
-                    <option key={city} value={city}>
-                      {city}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
 
             <Input
               label="Building No and name"
@@ -1040,7 +1162,9 @@ const SetupPharmacy = ({
             />
           </div>
         </div>
-      </div>
+          </>
+          )}
+        </div>
 
       <div className="mt-5 flex justify-between">
         <div>
@@ -1060,10 +1184,24 @@ const SetupPharmacy = ({
           <Button
             variant="primary"
             className="w-[210px]"
-            onClick={handleSubmit}
+            onClick={
+              isNewMultiple && !showProductManagement
+                ? handleNext
+                : showProductManagement
+                  ? handleProductManagementNext
+                  : handleSubmit
+            }
             loading={loading}
           >
-            {isDraftEdit ? "Submit Draft" : "Submit Compliance"}
+            {isNewMultiple && !showProductManagement
+              ? "Next"
+              : showProductManagement &&
+                manageCentrally === true &&
+                !showWarehouseForm
+                ? "Continue"
+                : isDraftEdit
+                  ? "Submit Draft"
+                  : "Submit Compliance"}
           </Button>
         </div>
       </div>

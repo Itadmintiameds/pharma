@@ -10,11 +10,13 @@ import {
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
   data: TData[];
+  emptyState?: React.ReactNode;
 }
 
 export default function DataTable<TData>({
   columns,
   data,
+  emptyState,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     columns,
@@ -23,15 +25,15 @@ export default function DataTable<TData>({
   });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-pneutral-200 bg-white">
+    <div className="overflow-hidden rounded-xl border border-pneutral-200 bg-white shadow-sm">
       <table className="w-full border-collapse">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
-            <tr key={headerGroup.id} className="bg-secondary-600 h-18 ">
+            <tr key={headerGroup.id} className="bg-secondary-600 h-14">
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className="text-p3 font-bold text-pneutral-50 font-noto-sans border border-pneutral-200"
+                  className="px-4 py-3 text-p3 font-bold text-pneutral-50 font-noto-sans border-r border-secondary-500 text-left last:border-r-0"
                 >
                   {flexRender(
                     header.column.columnDef.header,
@@ -47,14 +49,22 @@ export default function DataTable<TData>({
           {/* Without this an empty dataset renders a bare header, which reads as
               a broken table rather than "nothing to show". */}
           {table.getRowModel().rows.length === 0 && (
-            <tr className="border border-pneutral-200 h-17">
-              <td
-                colSpan={columns.length}
-                className="px-4 border border-pneutral-200 text-center text-label-l4 text-pneutral-500"
-              >
-                No records found.
-              </td>
-            </tr>
+            emptyState ? (
+              <tr>
+                <td colSpan={columns.length} className="border-t border-pneutral-200 bg-white p-0">
+                  {emptyState}
+                </td>
+              </tr>
+            ) : (
+              <tr className="border border-pneutral-200 h-17">
+                <td
+                  colSpan={columns.length}
+                  className="px-4 border border-pneutral-200 text-center text-label-l4 text-pneutral-500"
+                >
+                  No records found.
+                </td>
+              </tr>
+            )
           )}
 
           {table.getRowModel().rows.map((row) => (

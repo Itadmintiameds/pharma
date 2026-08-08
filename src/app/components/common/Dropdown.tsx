@@ -11,6 +11,8 @@ interface DropdownProps {
   label?: string;
   required?: boolean;
   error?: string;
+  success?: string;
+  hint?: string;
   options: DropdownOption[];
   value?: string | number | (string | number)[];
   onChange: (value: any) => void;
@@ -18,7 +20,9 @@ interface DropdownProps {
   searchable?: boolean;
   multiple?: boolean;
   className?: string;
+  labelClassName?: string;
   disabled?: boolean;
+  readOnly?: boolean;
   isLoading?: boolean;
   allowOther?: boolean;
   menuPlacement?: 'top' | 'bottom';
@@ -28,6 +32,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   label,
   required,
   error,
+  success,
+  hint,
   options,
   value,
   onChange,
@@ -35,7 +41,9 @@ const Dropdown: React.FC<DropdownProps> = ({
   searchable = false,
   multiple = false,
   className,
+  labelClassName,
   disabled = false,
+  readOnly = false,
   isLoading = false,
   allowOther = false,
   menuPlacement = 'bottom',
@@ -130,10 +138,43 @@ const Dropdown: React.FC<DropdownProps> = ({
 
   const displayValue = getDisplayValue();
 
+  // Non-interactive when disabled or readonly
+  const isLocked = disabled || readOnly;
+
+  // State styles on the control: disabled > readonly > error > success > enabled/active
+  const getStateStyles = () => {
+    if (disabled)
+      return "border-pneutral-300 bg-sneutral-100 cursor-not-allowed";
+    if (readOnly)
+      return "border-pneutral-300 bg-pneutral-50 cursor-default";
+    if (error)
+      return clsx(
+        "border-warning-500 bg-white cursor-pointer",
+        isOpen && "ring-1 ring-warning-500"
+      );
+    if (success)
+      return clsx(
+        "border-success-700 bg-white cursor-pointer",
+        isOpen && "ring-1 ring-success-700"
+      );
+    return clsx(
+      "bg-white cursor-pointer",
+      isOpen
+        ? "border-secondary-300 ring-1 ring-secondary-300"
+        : "border-pneutral-300"
+    );
+  };
+
   return (
     <div className={clsx("w-full relative", className)} ref={dropdownRef}>
       {label && (
-        <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+        <label
+          className={clsx(
+            "mb-1 block text-label-l4 font-medium justify-center transition-colors duration-200",
+            disabled ? "text-pneutral-500" : "text-pneutral-900",
+            labelClassName
+          )}
+        >
           {label}
           {required && (
             <span className="ml-2 text-warning-500 font-semibold text-label-l2">
@@ -145,12 +186,11 @@ const Dropdown: React.FC<DropdownProps> = ({
 
       <div
         className={clsx(
-          "flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all",
-          error ? "border-warning-500" : "border-pneutral-300",
-          disabled ? "opacity-60 cursor-not-allowed bg-gray-50" : "cursor-pointer"
+          "flex h-12 w-full items-center justify-between rounded-md border px-3 transition-all duration-200",
+          getStateStyles()
         )}
         onClick={() => {
-          if (!disabled && !isLoading && !searchable) {
+          if (!isLocked && !isLoading && !searchable) {
             setIsOpen(!isOpen);
           }
         }}
@@ -160,8 +200,12 @@ const Dropdown: React.FC<DropdownProps> = ({
             ref={inputRef}
             type="text"
             className={clsx(
-              "w-full outline-none bg-transparent text-p4 flex-1",
-              disabled && "cursor-not-allowed"
+              "w-full outline-none bg-transparent text-p4 flex-1 placeholder:text-pneutral-500",
+              disabled
+                ? "text-pneutral-500 cursor-not-allowed"
+                : readOnly
+                ? "text-pneutral-800 cursor-default"
+                : "text-pneutral-900"
             )}
             placeholder={isOpen ? "Search..." : (displayValue || placeholder)}
             value={isOpen ? searchQuery : (displayValue || "")}
@@ -170,21 +214,28 @@ const Dropdown: React.FC<DropdownProps> = ({
               if (!isOpen) setIsOpen(true);
             }}
             onFocus={() => {
-              if (!disabled && !isLoading) {
+              if (!isLocked && !isLoading) {
                 setIsOpen(true);
                 setSearchQuery("");
               }
             }}
             onClick={() => {
-              if (!isOpen && !disabled && !isLoading) setIsOpen(true);
+              if (!isOpen && !isLocked && !isLoading) setIsOpen(true);
             }}
+            readOnly={readOnly}
             disabled={disabled || isLoading}
           />
         ) : (
           <span
             className={clsx(
               "text-p4 truncate w-full flex-1",
-              displayValue && !isLoading ? "text-pneutral-900" : "text-pneutral-500"
+              !displayValue || isLoading
+                ? "text-pneutral-500"
+                : disabled
+                ? "text-pneutral-500"
+                : readOnly
+                ? "text-pneutral-800"
+                : "text-pneutral-900"
             )}
           >
             {isLoading ? "Loading..." : (displayValue || placeholder)}
@@ -196,7 +247,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           width={14}
           height={8}
           onClick={(e) => {
-            if (!disabled && !isLoading) {
+            if (!isLocked && !isLoading) {
               e.stopPropagation();
               if (searchable && !isOpen) {
                 inputRef.current?.focus();
@@ -206,7 +257,9 @@ const Dropdown: React.FC<DropdownProps> = ({
             }
           }}
           className={clsx(
-            "transition-transform duration-200 shrink-0 ml-2 cursor-pointer",
+            "transition-transform duration-200 shrink-0 ml-2",
+            isLocked ? "opacity-60 cursor-not-allowed" : "cursor-pointer",
+            readOnly && "cursor-default",
             isOpen && "rotate-180"
           )}
         />
@@ -216,17 +269,36 @@ const Dropdown: React.FC<DropdownProps> = ({
         <input
           type="text"
           className={clsx(
-            "mt-2 flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all text-p4 text-pneutral-900 outline-none focus:border-pneutral-500",
-            error ? "border-warning-500" : "border-pneutral-300"
+            "mt-2 flex h-12 w-full items-center justify-between rounded-md border bg-white px-3 transition-all duration-200 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500",
+            error
+              ? "border-warning-500 focus:ring-1 focus:ring-warning-500"
+              : success
+              ? "border-success-700 focus:ring-1 focus:ring-success-700"
+              : "border-pneutral-300 focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
           )}
           placeholder="Please specify..."
           value={(value as string) || ''}
           onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          readOnly={readOnly}
           autoFocus
         />
       )}
 
-      {error && <p className="mt-1 text-p2 text-warning-500">{error}</p>}
+      {(error || success || hint) && (
+        <p
+          className={clsx(
+            "mt-1 text-p2",
+            error
+              ? "text-warning-500"
+              : success
+              ? "text-success-700"
+              : "text-pneutral-500"
+          )}
+        >
+          {error || success || hint}
+        </p>
+      )}
 
       {isOpen && (
         <div className={clsx(

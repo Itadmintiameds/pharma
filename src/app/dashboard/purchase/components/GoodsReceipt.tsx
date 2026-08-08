@@ -41,6 +41,24 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
   const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
 
+  const SUPPLIER_NAME_MAX = 25;
+  const INVOICE_NO_MAX = 15;
+
+  // Invoice numbers are alphanumeric with optional separators — a value made up
+  // only of separators (e.g. "///") is not a valid invoice number.
+  const hasAlphanumeric = (val: string) => /[A-Za-z0-9]/.test(val);
+
+  const invoiceNoError =
+    invoiceNo && !hasAlphanumeric(invoiceNo)
+      ? "Invoice No. must contain letters or numbers"
+      : "";
+
+  // Local (not UTC) date so "today" is always selectable regardless of timezone
+  const today = (() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  })();
+
   useEffect(() => {
     const fetchSuppliers = async () => {
       try {
@@ -73,8 +91,16 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
       toast.error("Please enter Invoice No.");
       return;
     }
+    if (!hasAlphanumeric(invoiceNo)) {
+      toast.error("Invoice No. must contain letters or numbers");
+      return;
+    }
     if (!invoiceDate) {
       toast.error("Please select Invoice Date");
+      return;
+    }
+    if (invoiceDate > today) {
+      toast.error("Invoice Date cannot be in the future");
       return;
     }
     if (!paymentType) {
@@ -186,7 +212,10 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
                 name="newSupplierName"
                 id="newSupplierName"
                 value={newSupplierName}
-                onChange={(e) => setNewSupplierName(e.target.value)}
+                onChange={(e) =>
+                  setNewSupplierName(e.target.value.slice(0, SUPPLIER_NAME_MAX))
+                }
+                maxLength={SUPPLIER_NAME_MAX}
                 required
                 rightIcon={
                   <button
@@ -212,7 +241,16 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
               name="invoiceNo"
               id="invoiceNo"
               value={invoiceNo}
-              onChange={(e) => setInvoiceNo(e.target.value)}
+              onChange={(e) =>
+                setInvoiceNo(
+                  e.target.value
+                    // keep alphanumerics and the usual invoice separators only
+                    .replace(/[^A-Za-z0-9/\- ]/g, "")
+                    .slice(0, INVOICE_NO_MAX)
+                )
+              }
+              maxLength={INVOICE_NO_MAX}
+              error={invoiceNoError}
               required
             />
 
@@ -223,6 +261,7 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
               id="invoiceDate"
               value={invoiceDate}
               onChange={(e) => setInvoiceDate(e.target.value)}
+              max={today}
               required
             />
 
