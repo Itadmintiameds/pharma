@@ -1,9 +1,15 @@
+import { WarehouseDetails } from "./SetupWarehouseData";
+
 export interface OrganizationCreateRequest {
   organizationName: string;
   organizationType: string;
   ownershipType: string;
   panNumber: string;
   gstNumber: string;
+  // Only sent for "Multiple" organizations: whether inventory is managed from
+  // a central warehouse, plus the warehouse list when it is.
+  centralizedInventory?: boolean;
+  warehouses?: WarehouseDetails[];
 }
 
 export interface OrganizationCreateResponse {
@@ -49,7 +55,9 @@ export interface PharmacyRegistrationRequest {
   organizationType: string;
   organizationPanNumber: string;
   organizationGstNumber: string;
+  centralizedInventory: boolean;
   pharmacyRegistrationDocuments: PharmacyDocumentRequest[];
+  pharmacyRegistrationWareHouses: PharmacyWarehouseRequest[];
 }
 
 export interface PharmacyDocumentResponse {
@@ -86,5 +94,24 @@ export interface PharmacyRegistrationResponse {
   organizationType: string;
   organizationPanNumber: string;
   organizationGstNumber: string;
+  centralizedInventory: boolean;
   pharmacyRegistrationDocuments: PharmacyDocumentResponse[];
+  pharmacyRegistrationWareHouses: PharmacyWarehouseResponse[];
+}
+
+export interface PharmacyWarehouseRequest {
+  warehouseName: string;
+  warehouseCode: string;
+  warehouseAddress: string;
+  contactPersonName: string;
+  mobileNumber: string;
+}
+
+export interface PharmacyWarehouseResponse {
+  pharmacyRegistrationWarehouseId: number;
+  warehouseName: string;
+  warehouseCode: string;
+  warehouseAddress: string;
+  contactPersonName: string;
+  mobileNumber: string;
 }

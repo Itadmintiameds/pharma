@@ -3,7 +3,9 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import SetupBusinessView from './components/SetupBusiness';
 import SetupPharmacy from './components/SetupPharmacy';
+import { EMPTY_WAREHOUSE, WarehouseDetails } from '@/types/SetupWarehouseData';
 import { getUserOrganization, getPharmacyRegistrations, getPharmacyRegistrationDetails } from '@/services/SetupBusinessService';
+import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService';
 import Button from '@/app/components/common/Button';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -13,6 +15,9 @@ function SetupBusinessContent() {
   const [panNumber, setPanNumber] = useState("");
   const [gstNumber, setGstNumber] = useState("");
   const [locationType, setLocationType] = useState<"single" | "multiple">("single");
+  const [manageCentrally, setManageCentrally] = useState<boolean | null>(null);
+  const [warehouse, setWarehouse] = useState<WarehouseDetails>(EMPTY_WAREHOUSE);
+  const [showProductManagement, setShowProductManagement] = useState(false);
   const [hasOrganization, setHasOrganization] = useState(false);
   const [existingOrg, setExistingOrg] = useState<any>(null);
   const [isSingleLocationRegistered, setIsSingleLocationRegistered] = useState(false);
@@ -33,8 +38,9 @@ function SetupBusinessContent() {
         const { accessToken } = await userRes.json();
 
         // Edit mode: fetch existing registration details and autofill the form
+        let details: any = null;
         if (reqId) {
-          const details = await getPharmacyRegistrationDetails(reqId, accessToken);
+          details = await getPharmacyRegistrationDetails(reqId, accessToken);
           if (details && details.data) {
             setPrefillData(details.data);
           }
@@ -49,19 +55,35 @@ function SetupBusinessContent() {
           setPanNumber(org.panNumber || "");
           setGstNumber(org.gstNumber || "");
           setLocationType(org.organizationType?.toLowerCase() === "multiple" ? "multiple" : "single");
-          
+
+          // Existing org may already own a central warehouse — fetch it instead
+          // of showing the "add warehouse" step, so new registrations carry it
+          // forward automatically.
+          const orgWarehouses = await getWarehousesByOrganizationId(org.organizationId);
+          if (orgWarehouses.length > 0) {
+            const wh = orgWarehouses[0];
+            setManageCentrally(true);
+            setWarehouse({
+              warehouseName: wh.warehouseName || "",
+              warehouseCode: wh.warehouseCode || "",
+              warehouseAddress: wh.warehouseAddress || "",
+              contactPersonName: wh.contactPersonName || "",
+              mobileNumber: wh.mobileNumber || "",
+            });
+          }
+
           // Fetch registrations from admin backend
           const regRes = await getPharmacyRegistrations(accessToken);
           if (regRes && regRes.data) {
             const existingRegs = regRes.data.filter(
               (r: any) => Number(r.organizationId) === Number(org.organizationId)
             );
-            
+
             if (existingRegs.length > 0) {
               const isSingle = existingRegs.some(
                 (r: any) => r.organizationType === "Single"
               );
-              
+
               if (isSingle) {
                 setIsSingleLocationRegistered(true);
                 setLocationType("single");
@@ -69,6 +91,35 @@ function SetupBusinessContent() {
                 setLocationType("multiple");
               }
             }
+          }
+        } else if (details?.data) {
+          // First-time registration (no organization yet): the org + central
+          // warehouse details only live on the draft, so restore them here.
+          // If an organization already exists we skip this and use its details.
+          const d = details.data;
+          setBusinessName(d.organizationName || "");
+          setOwnershipType(d.ownershipType || "");
+          setPanNumber(d.organizationPanNumber || "");
+          setGstNumber(d.organizationGstNumber || "");
+          setLocationType(
+            d.organizationType?.toLowerCase() === "multiple" ? "multiple" : "single"
+          );
+          setManageCentrally(
+            d.centralizedInventory === true
+              ? true
+              : d.centralizedInventory === false
+                ? false
+                : null
+          );
+          const wh = d.pharmacyRegistrationWareHouses?.[0];
+          if (wh) {
+            setWarehouse({
+              warehouseName: wh.warehouseName || "",
+              warehouseCode: wh.warehouseCode || "",
+              warehouseAddress: wh.warehouseAddress || "",
+              contactPersonName: wh.contactPersonName || "",
+              mobileNumber: wh.mobileNumber || "",
+            });
           }
         }
       } catch (err) {
@@ -117,8 +168,8 @@ function SetupBusinessContent() {
         </div>
       ) : (
         <>
-          {!hasOrganization && (
-            <SetupBusinessView 
+          {!hasOrganization && !showProductManagement && (
+            <SetupBusinessView
               businessName={businessName}
               setBusinessName={setBusinessName}
               ownershipType={ownershipType}
@@ -137,6 +188,12 @@ function SetupBusinessContent() {
             panNumber={panNumber}
             gstNumber={gstNumber}
             locationType={locationType}
+            manageCentrally={manageCentrally}
+            setManageCentrally={setManageCentrally}
+            warehouse={warehouse}
+            setWarehouse={setWarehouse}
+            showProductManagement={showProductManagement}
+            setShowProductManagement={setShowProductManagement}
             hasOrganization={hasOrganization}
             existingOrg={existingOrg}
             prefillData={prefillData}

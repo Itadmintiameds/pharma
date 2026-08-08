@@ -17,6 +17,10 @@ import {
 } from "@/services/SetupBusinessService";
 import { showToast } from "@/app/components/common/Toast";
 import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
+import { WarehouseDetails } from "@/types/SetupWarehouseData";
+import { buildWarehousePayload } from "@/services/SetupWarehouseService";
+import SetupWarehouse from "./SetupWarehouse";
 
 interface SetupPharmacyProps {
   businessName: string;
@@ -24,6 +28,12 @@ interface SetupPharmacyProps {
   panNumber: string;
   gstNumber: string;
   locationType: "single" | "multiple";
+  manageCentrally?: boolean | null;
+  setManageCentrally?: (val: boolean) => void;
+  warehouse?: WarehouseDetails;
+  setWarehouse?: React.Dispatch<React.SetStateAction<WarehouseDetails>>;
+  showProductManagement?: boolean;
+  setShowProductManagement?: (val: boolean) => void;
   hasOrganization?: boolean;
   existingOrg?: any;
   prefillData?: any;
@@ -42,6 +52,12 @@ const SetupPharmacy = ({
   panNumber,
   gstNumber,
   locationType,
+  manageCentrally = null,
+  setManageCentrally,
+  warehouse,
+  setWarehouse,
+  showProductManagement = false,
+  setShowProductManagement,
   hasOrganization = false,
   existingOrg = null,
   prefillData = null,
@@ -124,6 +140,7 @@ const SetupPharmacy = ({
     null,
   );
   const [open, setOpen] = useState(false);
+  const [showWarehouseForm, setShowWarehouseForm] = useState(false);
   const [requestId, setRequestId] = useState("");
   const [loading, setLoading] = useState(false);
   const [draftLoading, setDraftLoading] = useState(false);
@@ -168,7 +185,51 @@ const SetupPharmacy = ({
     setExistingManualFile(null);
     resetAddress("");
     setErrors({});
+    setShowProductManagement?.(false);
+    setShowWarehouseForm(false);
     setFormKey(prev => prev + 1);
+  };
+
+  // New multiple-location org: the primary form is followed by the Product
+  // Management screen (create org happens on final submit there).
+  const isNewMultiple = !hasOrganization && locationType === "multiple";
+
+  const handleNext = () => {
+    if (!validateForm()) return;
+
+    const businessResult = setupBusinessSchema.safeParse({
+      businessName,
+      ownershipType,
+      panNumber,
+      gstNumber,
+    });
+
+    if (!businessResult.success) {
+      showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
+      return;
+    }
+
+    setShowProductManagement?.(true);
+  };
+
+  // On the Product Maintenance step: "Yes" reveals the warehouse form (Continue),
+  // "No" submits directly.
+  const handleProductManagementNext = () => {
+    if (manageCentrally === null) {
+      showToast.error("Please select how you manage your products.");
+      return;
+    }
+    if (manageCentrally === true && !showWarehouseForm) {
+      setShowWarehouseForm(true);
+      return;
+    }
+    handleSubmit();
+  };
+
+  // Switching to "No" hides any revealed warehouse form
+  const handleManageCentrally = (val: boolean) => {
+    setManageCentrally?.(val);
+    if (!val) setShowWarehouseForm(false);
   };
 
   const getFormData = () => ({
@@ -450,6 +511,15 @@ const SetupPharmacy = ({
         ];
       }
 
+      // Central-inventory choice + warehouse list — only once a "Multiple" org
+      // has made the central-management choice
+      if (manageCentrally !== null) {
+        payload.centralizedInventory = manageCentrally === true;
+        if (manageCentrally === true && warehouse?.warehouseName?.trim()) {
+          payload.pharmacyRegistrationWareHouses = [{ ...warehouse }];
+        }
+      }
+
       const draftResponse = await savePharmacyDraft(payload, accessToken);
       console.log("Draft saved:", draftResponse);
 
@@ -503,6 +573,23 @@ const SetupPharmacy = ({
         showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
         return;
       }
+
+      // Multiple-location orgs must declare how products are managed, and a
+      // central warehouse requires an address before we can create the org.
+      if (locationType === "multiple") {
+        if (manageCentrally === null) {
+          showToast.error("Please select how you manage your products.");
+          return;
+        }
+        if (manageCentrally && !warehouse?.warehouseName?.trim()) {
+          showToast.error("Please enter the warehouse name.");
+          return;
+        }
+        if (manageCentrally && !warehouse?.warehouseAddress?.trim()) {
+          showToast.error("Please enter the central warehouse address.");
+          return;
+        }
+      }
     }
 
     setLoading(true);
@@ -510,13 +597,23 @@ const SetupPharmacy = ({
       let orgResponse = existingOrg;
       if (!hasOrganization) {
         // Step 1: Hit Pharma Backend (create organization)
-        orgResponse = await createOrganization({
+        const orgPayload: OrganizationCreateRequest = {
           organizationName: businessName,
           organizationType: locationType === "single" ? "Single" : "Multiple",
           ownershipType: ownershipType,
           panNumber: panNumber,
           gstNumber: gstNumber,
-        });
+        };
+
+        // For "Multiple" orgs, attach centralizedInventory (+ warehouse when central)
+        if (locationType === "multiple" && warehouse) {
+          Object.assign(
+            orgPayload,
+            buildWarehousePayload(manageCentrally, warehouse),
+          );
+        }
+
+        orgResponse = await createOrganization(orgPayload);
         console.log("Step 1 Success (Organization):", orgResponse);
       } else {
         console.log("Using existing organization details:", orgResponse);
@@ -536,6 +633,11 @@ const SetupPharmacy = ({
       // backend updates it in place instead of inserting a duplicate
       const existingDocId = isDraftEdit
         ? prefillData?.pharmacyRegistrationDocuments?.[0]?.registrationDocumentId
+        : undefined;
+
+      // Same for the central warehouse row on draft submit
+      const existingWarehouseId = isDraftEdit
+        ? prefillData?.pharmacyRegistrationWareHouses?.[0]?.pharmacyRegistrationWarehouseId
         : undefined;
 
       const registrationPayload = {
@@ -561,6 +663,20 @@ const SetupPharmacy = ({
         organizationType: locationType === "single" ? "Single" : "Multiple",
         organizationPanNumber: orgResponse.panNumber,
         organizationGstNumber: orgResponse.gstNumber,
+        // Central-inventory flag + warehouse list (only populated when a
+        // "Multiple" org manages products centrally)
+        centralizedInventory: manageCentrally === true,
+        pharmacyRegistrationWareHouses:
+          manageCentrally === true && warehouse
+            ? [
+                {
+                  ...(existingWarehouseId
+                    ? { pharmacyRegistrationWarehouseId: existingWarehouseId }
+                    : {}),
+                  ...warehouse,
+                },
+              ]
+            : [],
         pharmacyRegistrationDocuments: [
           {
             ...(existingDocId ? { registrationDocumentId: existingDocId } : {}),
@@ -640,12 +756,26 @@ const SetupPharmacy = ({
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           <div className="text-h4 font-semibold text-pneutral-900">
-            Setup Your Business
+            {showWarehouseForm
+              ? "Central Warehouse Details"
+              : showProductManagement
+                ? "Product Maintenance"
+                : "Setup Your Business"}
           </div>
           
         </div>
 
         <div key={formKey} className="flex flex-col gap-5">
+          {showProductManagement ? (
+            <SetupWarehouse
+              manageCentrally={manageCentrally}
+              setManageCentrally={handleManageCentrally}
+              warehouse={warehouse!}
+              setWarehouse={setWarehouse!}
+              showWarehouseForm={showWarehouseForm}
+            />
+          ) : (
+          <>
           <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">Business Type</div>
@@ -982,7 +1112,9 @@ const SetupPharmacy = ({
             />
           </div>
         </div>
-      </div>
+          </>
+          )}
+        </div>
 
       <div className="mt-5 flex justify-between">
         <div>
@@ -1002,10 +1134,24 @@ const SetupPharmacy = ({
           <Button
             variant="primary"
             className="w-[210px]"
-            onClick={handleSubmit}
+            onClick={
+              isNewMultiple && !showProductManagement
+                ? handleNext
+                : showProductManagement
+                  ? handleProductManagementNext
+                  : handleSubmit
+            }
             loading={loading}
           >
-            {isDraftEdit ? "Submit Draft" : "Submit Compliance"}
+            {isNewMultiple && !showProductManagement
+              ? "Next"
+              : showProductManagement &&
+                manageCentrally === true &&
+                !showWarehouseForm
+                ? "Continue"
+                : isDraftEdit
+                  ? "Submit Draft"
+                  : "Submit Compliance"}
           </Button>
         </div>
       </div>
