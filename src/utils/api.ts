@@ -74,6 +74,7 @@ api.interceptors.response.use(
 
         // Refresh token is expired or invalid -> force redirect to login
         if (typeof window !== "undefined") {
+          usePharmacyStore.getState().clearPharmacy();
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
@@ -156,6 +157,7 @@ adminApi.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError);
         if (typeof window !== "undefined") {
+          usePharmacyStore.getState().clearPharmacy();
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
