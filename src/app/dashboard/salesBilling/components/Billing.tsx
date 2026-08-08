@@ -6,7 +6,7 @@
  * Designed according to the high-fidelity Billing POS specifications.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ShoppingCart,
   Upload,
@@ -21,18 +21,28 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 import Input from "@/app/components/common/Input";
+import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import BillingItemsTable, {
   BillingRow,
   emptyBillingRow,
 } from "./BillingItemsTable";
 import { ProductService } from "@/services/ProductService";
+import { getCustomersByPhone } from "@/services/CustomerService";
+import { getAllDoctors, createDoctor } from "@/services/DoctorService";
 import {
   BillLine,
   BillableProduct,
   CustomerInfo,
+  CustomerRecord,
   CustomerType,
+  DoctorRecord,
 } from "@/types/BillingData";
-import { calculateBillTotals, formatAmount } from "@/utils/billingTotals";
+import {
+  billDiscountAsPercentage,
+  calculateBillTotals,
+  effectiveGstPercentage,
+  formatAmount,
+} from "@/utils/billingTotals";
 
 interface BillingProps {
   onCancel: () => void;
@@ -76,6 +86,8 @@ const ENABLED_CUSTOMER_TYPES: CustomerType[] = ["WALK_IN"];
 
 const EMPTY_CUSTOMER: CustomerInfo = {
   customerType: "",
+  customerId: null,
+  doctorId: null,
   customerName: "",
   mobileNo: "",
   age: "",
@@ -152,6 +164,19 @@ const Billing: React.FC<BillingProps> = ({
   const [batchCatalog, setBatchCatalog] = useState<BillableProduct[]>([]);
   const [loadingBatches, setLoadingBatches] = useState<boolean>(false);
 
+  // Customers registered against the typed phone number
+  const [knownCustomers, setKnownCustomers] = useState<CustomerRecord[]>([]);
+  const [isLookingUpCustomers, setIsLookingUpCustomers] = useState(false);
+  const [isAddingNewCustomer, setIsAddingNewCustomer] = useState(false);
+
+  // Referring doctors
+  const [doctors, setDoctors] = useState<DoctorRecord[]>([]);
+  const [isLoadingDoctors, setIsLoadingDoctors] = useState(false);
+  const [isAddingNewDoctor, setIsAddingNewDoctor] = useState(false);
+  const [newDoctorName, setNewDoctorName] = useState("");
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   useEffect(() => {
     const fetchBatches = async () => {
       setLoadingBatches(true);
@@ -185,29 +210,190 @@ const Billing: React.FC<BillingProps> = ({
     fetchBatches();
   }, []);
 
+  // Referring doctors for this pharmacy, loaded once.
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      setIsLoadingDoctors(true);
+      try {
+        setDoctors(await getAllDoctors());
+      } catch (err) {
+        console.error("Failed to fetch doctors:", err);
+      } finally {
+        setIsLoadingDoctors(false);
+      }
+    };
+    fetchDoctors();
+  }, []);
+
   const setField = <K extends keyof CustomerInfo>(
     key: K,
     value: CustomerInfo[K]
   ) => setCustomer((prev) => ({ ...prev, [key]: value }));
+
+  const customerOptions: DropdownOption[] = [
+    ...knownCustomers.map((c) => ({
+      label: c.customerName,
+      value: c.customerId,
+    })),
+    { label: "+ Add New Customer", value: "ADD_NEW" },
+  ];
+
+  const doctorOptions: DropdownOption[] = [
+    ...doctors.map((d) => ({ label: d.doctorName, value: d.doctorId })),
+    { label: "+ Add New Doctor", value: "ADD_NEW" },
+  ];
+
+  /**
+   * A number can be shared by a household, so a full number is looked up and
+   * the matching names offered. Nothing found means a new customer, which the
+   * billing API creates from the name and phone on submit.
+   */
+  const handlePhoneChange = async (raw: string) => {
+    const mobileNo = raw.replace(/\D/g, "").slice(0, 10);
+    setCustomer((prev) => ({
+      ...prev,
+      mobileNo,
+      // Any edit invalidates the customer picked for the previous number.
+      customerId: null,
+      customerName: "",
+    }));
+    setIsAddingNewCustomer(false);
+
+    if (mobileNo.length < 10) {
+      setKnownCustomers([]);
+      return;
+    }
+
+    setIsLookingUpCustomers(true);
+    try {
+      const matches = await getCustomersByPhone(mobileNo);
+      setKnownCustomers(matches);
+      // A single match needs no picking.
+      if (matches.length === 1) {
+        setCustomer((prev) => ({
+          ...prev,
+          customerId: matches[0].customerId,
+          customerName: matches[0].customerName,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to look up customers:", err);
+      setKnownCustomers([]);
+    } finally {
+      setIsLookingUpCustomers(false);
+    }
+  };
+
+  const handleCustomerSelect = (value: string | number) => {
+    if (value === "ADD_NEW") {
+      setIsAddingNewCustomer(true);
+      setCustomer((prev) => ({ ...prev, customerId: null, customerName: "" }));
+      return;
+    }
+    const picked = knownCustomers.find((c) => c.customerId === Number(value));
+    setCustomer((prev) => ({
+      ...prev,
+      customerId: picked?.customerId ?? null,
+      customerName: picked?.customerName ?? "",
+    }));
+  };
+
+  const handleDoctorSelect = (value: string | number) => {
+    if (value === "ADD_NEW") {
+      setIsAddingNewDoctor(true);
+      setCustomer((prev) => ({ ...prev, doctorId: null, referredBy: "" }));
+      return;
+    }
+    const picked = doctors.find((d) => d.doctorId === Number(value));
+    setCustomer((prev) => ({
+      ...prev,
+      doctorId: picked?.doctorId ?? null,
+      referredBy: picked?.doctorName ?? "",
+    }));
+  };
+
+  /**
+   * Validates the customer block, saves a newly typed doctor so the bill can
+   * carry its id, and hands the cart to the payment screen.
+   */
+  const handleProceed = async () => {
+    if (!customer.mobileNo || customer.mobileNo.length !== 10) {
+      toast.error("Enter a 10 digit mobile number");
+      return;
+    }
+    if (!customer.customerName.trim()) {
+      toast.error("Enter the customer name");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const doctorId = await resolveDoctor();
+
+      onProceedToPayment({
+        customer: { ...customer, doctorId },
+        lines,
+        billDiscountPercentage: billDiscountAsPercentage(
+          lines,
+          Number(billDiscountInput) || 0,
+          discountType
+        ),
+      });
+    } catch (err) {
+      console.error("Failed to save the referring doctor:", err);
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save the referring doctor."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /** Creates the typed-in doctor so the bill can reference its id. */
+  const resolveDoctor = async (): Promise<number | null> => {
+    if (!isAddingNewDoctor) return customer.doctorId ?? null;
+    if (!newDoctorName.trim()) return null;
+
+    const created = await createDoctor(newDoctorName.trim());
+    setDoctors((prev) => [...prev, created]);
+    setIsAddingNewDoctor(false);
+    setNewDoctorName("");
+    setCustomer((prev) => ({
+      ...prev,
+      doctorId: created.doctorId,
+      referredBy: created.doctorName,
+    }));
+    return created.doctorId;
+  };
 
   /**
    * Each customer type collects a different set of details, so switching type
    * clears whatever the previous one captured. Clicking the selected type again
    * collapses the card back to the picker.
    */
-  const selectCustomerType = (type: CustomerType) =>
+  const selectCustomerType = (type: CustomerType) => {
     setCustomer((prev) =>
       prev.customerType === type
         ? EMPTY_CUSTOMER
         : { ...EMPTY_CUSTOMER, customerType: type }
     );
+    setKnownCustomers([]);
+    setIsAddingNewCustomer(false);
+    setIsAddingNewDoctor(false);
+    setNewDoctorName("");
+  };
 
-  const lines = useMemo(() => rowsToLines(rows), [rows]);
+  // Both are plain arithmetic over a handful of rows — cheap enough to derive
+  // on every render, and hand-memoizing them defeats the React Compiler.
+  const lines = rowsToLines(rows);
 
-  const totals = useMemo(
-    () => calculateBillTotals(lines, Number(billDiscountInput) || 0, discountType),
-    [lines, billDiscountInput, discountType]
+  const totals = calculateBillTotals(
+    lines,
+    Number(billDiscountInput) || 0,
+    discountType
   );
+
+  const gstRate = effectiveGstPercentage(totals);
 
   /**
    * Refreshes stock and pricing for the batch the grid just selected. This is
@@ -296,13 +482,7 @@ const Billing: React.FC<BillingProps> = ({
         {customer.customerType === "WALK_IN" && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Name"
-                required
-                placeholder="e.g. Ramesh Kumar"
-                value={customer.customerName}
-                onChange={(e) => setField("customerName", e.target.value)}
-              />
+              {/* Phone first — the names below are looked up from it. */}
               <Input
                 label="Mobile Number"
                 type="tel"
@@ -310,16 +490,92 @@ const Billing: React.FC<BillingProps> = ({
                 maxLength={10}
                 placeholder="10 digit mobile number"
                 value={customer.mobileNo}
-                onChange={(e) =>
-                  setField("mobileNo", e.target.value.replace(/\D/g, ""))
+                onChange={(e) => handlePhoneChange(e.target.value)}
+                hint={
+                  isLookingUpCustomers
+                    ? "Looking up customers…"
+                    : customer.mobileNo.length === 10 && knownCustomers.length === 0
+                    ? "New number — a customer will be created with this bill."
+                    : undefined
                 }
               />
-              <Input
-                label="Referred By"
-                placeholder="e.g. Dr. Anitha Rao"
-                value={customer.referredBy}
-                onChange={(e) => setField("referredBy", e.target.value)}
-              />
+
+              {/* Known number: pick the person. Otherwise type a new name. */}
+              {knownCustomers.length > 0 && !isAddingNewCustomer ? (
+                <Dropdown
+                  label="Name"
+                  required
+                  placeholder="Select customer"
+                  options={customerOptions}
+                  value={customer.customerId ?? ""}
+                  onChange={handleCustomerSelect}
+                  isLoading={isLookingUpCustomers}
+                  searchable
+                />
+              ) : (
+                <Input
+                  label="Name"
+                  required
+                  placeholder="e.g. Ramesh Kumar"
+                  value={customer.customerName}
+                  onChange={(e) => {
+                    setField("customerName", e.target.value);
+                    // Typing a name means a new customer, not the picked one.
+                    setField("customerId", null);
+                  }}
+                  rightIcon={
+                    knownCustomers.length > 0 ? (
+                      <button
+                        type="button"
+                        aria-label="Pick an existing customer instead"
+                        title="Pick an existing customer instead"
+                        onClick={() => {
+                          setIsAddingNewCustomer(false);
+                          setField("customerName", "");
+                        }}
+                        className="flex items-center text-pneutral-500 hover:text-pneutral-900 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    ) : undefined
+                  }
+                />
+              )}
+
+              {!isAddingNewDoctor ? (
+                <Dropdown
+                  label="Referred By"
+                  placeholder="Select doctor or add new"
+                  options={doctorOptions}
+                  value={customer.doctorId ?? ""}
+                  onChange={handleDoctorSelect}
+                  isLoading={isLoadingDoctors}
+                  searchable
+                />
+              ) : (
+                <Input
+                  label="Referred By"
+                  placeholder="e.g. Dr. Anitha Rao"
+                  value={newDoctorName}
+                  onChange={(e) => setNewDoctorName(e.target.value)}
+                  hint="Saved as a new doctor when the bill is generated."
+                  rightIcon={
+                    <button
+                      type="button"
+                      aria-label="Select an existing doctor instead"
+                      title="Select an existing doctor instead"
+                      onClick={() => {
+                        setIsAddingNewDoctor(false);
+                        setNewDoctorName("");
+                      }}
+                      className="flex items-center text-pneutral-500 hover:text-pneutral-900 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  }
+                />
+              )}
+
               <Input
                 label="Address"
                 placeholder="e.g. 12, MG Road, Bengaluru"
@@ -476,11 +732,13 @@ const Billing: React.FC<BillingProps> = ({
               <span className="text-right">₹ {formatAmount(totals.grossAmount)}</span>
             </div>
 
-            {/* Discount */}
+            {/* Discount — line discounts plus the bill level one */}
             <div className="grid grid-cols-3 items-center w-full">
               <span className="text-left">Discount</span>
               <span className="text-center">(-)</span>
-              <span className="text-right">₹ {formatAmount(totals.billDiscount)}</span>
+              <span className="text-right">
+                ₹ {formatAmount(totals.itemDiscount + totals.billDiscount)}
+              </span>
             </div>
 
             {/* Taxable */}
@@ -490,9 +748,11 @@ const Billing: React.FC<BillingProps> = ({
               <span className="text-right">₹ {formatAmount(totals.taxableAmount)}</span>
             </div>
 
-            {/* GST (12%) */}
+            {/* GST — blended rate across the cart, never a fixed slab */}
             <div className="grid grid-cols-3 items-center w-full">
-              <span className="text-left">GST (12%)</span>
+              <span className="text-left">
+                GST{gstRate > 0 ? ` (${gstRate.toFixed(2)}%)` : ""}
+              </span>
               <span className="text-center">(+)</span>
               <span className="text-right">₹ {formatAmount(totals.gstAmount)}</span>
             </div>
@@ -508,22 +768,11 @@ const Billing: React.FC<BillingProps> = ({
           <div className="flex justify-end w-full">
             <button
               type="button"
-              disabled={lines.length === 0}
-              onClick={() =>
-                onProceedToPayment({
-                  customer,
-                  lines,
-                  billDiscountPercentage:
-                    discountType === "PERCENTAGE"
-                      ? Number(billDiscountInput) || 0
-                      : totals.grossAmount
-                      ? ((Number(billDiscountInput) || 0) / totals.grossAmount) * 100
-                      : 0,
-                })
-              }
+              disabled={lines.length === 0 || isSubmitting}
+              onClick={handleProceed}
               className="h-[48px] px-8 rounded-[8px] bg-[#7D32FC] hover:bg-[#6823df] text-white font-semibold text-base shadow-md disabled:opacity-50 transition-all w-full sm:w-auto cursor-pointer block"
             >
-              Proceed to Payment
+              {isSubmitting ? "Please wait…" : "Proceed to Payment"}
             </button>
           </div>
         </div>

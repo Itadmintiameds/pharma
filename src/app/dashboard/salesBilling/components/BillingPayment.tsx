@@ -14,7 +14,7 @@ import {
   PaymentDetails,
   PaymentMode,
 } from "@/types/BillingData";
-import { formatAmount } from "@/utils/billingTotals";
+import { effectiveGstPercentage, formatAmount } from "@/utils/billingTotals";
 
 interface BillingPaymentProps {
   customer: CustomerInfo;
@@ -200,8 +200,12 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
               </div>
 
               <div className="flex items-center justify-between text-[15px] text-[#5A5B57] pb-4 border-b border-[#EAEAE9]">
+                {/* Blended rate across the cart, not the first line's slab */}
                 <span>
-                  GST ({lines.length > 0 ? `${lines[0].gstPercentage}%` : "12%"})
+                  GST
+                  {effectiveGstPercentage(totals) > 0
+                    ? ` (${effectiveGstPercentage(totals).toFixed(2)}%)`
+                    : ""}
                 </span>
                 <div className="flex items-center">
                   <span className="w-12 text-center text-[#5A5B57]">(+)</span>

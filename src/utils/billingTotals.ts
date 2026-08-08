@@ -21,31 +21,84 @@ export const lineGst = (line: BillLine) =>
 export const lineNet = (line: BillLine) => lineTaxable(line) + lineGst(line);
 
 /**
+ * The bill level discount expressed as a percentage, so it can be pushed down
+ * onto every line. An amount is converted against the cart's gross.
+ */
+export const billDiscountAsPercentage = (
+  lines: BillLine[],
+  billDiscountValue = 0,
+  discountType: "PERCENTAGE" | "AMOUNT" = "PERCENTAGE"
+): number => {
+  if (!billDiscountValue) return 0;
+  if (discountType === "PERCENTAGE") return billDiscountValue;
+
+  const grossAmount = lines.reduce((sum, line) => sum + lineGross(line), 0);
+  return grossAmount > 0 ? (billDiscountValue / grossAmount) * 100 : 0;
+};
+
+/**
+ * A single line costed out with the bill level discount folded in — the bill
+ * discount adds to whatever discount the line already carries, and GST is then
+ * charged on what is left. This is the breakdown the billing API is sent, and
+ * summing it gives the totals below.
+ */
+export interface LineBreakdown {
+  grossAmount: number;
+  discountPercentage: number;
+  discountAmount: number;
+  taxableAmount: number;
+  gstAmount: number;
+  netAmount: number;
+}
+
+export const lineBreakdown = (
+  line: BillLine,
+  extraDiscountPercentage = 0
+): LineBreakdown => {
+  const grossAmount = lineGross(line);
+  const discountPercentage = Math.min(
+    100,
+    (line.discountPercentage || 0) + extraDiscountPercentage
+  );
+  const discountAmount = (grossAmount * discountPercentage) / 100;
+  const taxableAmount = grossAmount - discountAmount;
+  const gstAmount = (taxableAmount * (line.gstPercentage || 0)) / 100;
+
+  return {
+    grossAmount,
+    discountPercentage,
+    discountAmount,
+    taxableAmount,
+    gstAmount,
+    // (rate x qty - discount) + GST
+    netAmount: taxableAmount + gstAmount,
+  };
+};
+
+/**
  * Rolls the cart up into the numbers shown on the totals strip, the payment
- * screen and the invoice. `billDiscount` is the extra discount the cashier
- * applies on top of the per-line discounts.
+ * screen and the invoice. `billDiscountValue` is the extra discount the cashier
+ * applies on top of the per-line discounts; it is spread across the lines so
+ * each one's GST is charged on its own discounted amount.
  */
 export const calculateBillTotals = (
   lines: BillLine[],
   billDiscountValue = 0,
   discountType: "PERCENTAGE" | "AMOUNT" = "PERCENTAGE"
 ): BillTotals => {
+  const extraDiscount = billDiscountAsPercentage(
+    lines,
+    billDiscountValue,
+    discountType
+  );
+
   const grossAmount = lines.reduce((sum, line) => sum + lineGross(line), 0);
   const itemDiscount = lines.reduce((sum, line) => sum + lineDiscount(line), 0);
-  const totalGstFromItems = lines.reduce((sum, line) => sum + lineGst(line), 0);
 
-  const afterItemDiscount = grossAmount - itemDiscount;
-  const billDiscount =
-    discountType === "PERCENTAGE"
-      ? (afterItemDiscount * billDiscountValue) / 100
-      : Math.min(afterItemDiscount, billDiscountValue);
-  
-  const taxableAmount = Math.max(0, afterItemDiscount - billDiscount);
-
-  // If a bill discount is applied, scale GST proportionately with taxable amount
-  const gstAmount = afterItemDiscount > 0
-    ? totalGstFromItems * (taxableAmount / afterItemDiscount)
-    : 0;
+  const rows = lines.map((line) => lineBreakdown(line, extraDiscount));
+  const totalDiscount = rows.reduce((sum, row) => sum + row.discountAmount, 0);
+  const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
+  const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
 
   const totalPayable = taxableAmount + gstAmount;
   const netAmount = Math.round(totalPayable);
@@ -58,13 +111,18 @@ export const calculateBillTotals = (
     ),
     grossAmount,
     itemDiscount,
-    billDiscount,
+    // What the bill level discount alone took off, on top of the line discounts.
+    billDiscount: Math.max(0, totalDiscount - itemDiscount),
     taxableAmount,
     gstAmount,
     roundOff: netAmount - totalPayable,
     netAmount,
   };
 };
+
+/** Blended GST rate across the cart, for the "GST (x%)" label. */
+export const effectiveGstPercentage = (totals: BillTotals): number =>
+  totals.taxableAmount > 0 ? (totals.gstAmount / totals.taxableAmount) * 100 : 0;
 
 const ONES = [
   "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",

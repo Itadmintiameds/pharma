@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import Image from "next/image";
 import { Plus } from "lucide-react";
+import toast from "react-hot-toast";
 import SearchInput from "@/app/components/common/SearchInput";
 import DataTable from "@/app/components/common/table/DataTable";
 import Billing from "./components/Billing";
@@ -27,6 +28,7 @@ import {
   PaymentMode,
 } from "@/types/BillingData";
 import { calculateBillTotals, formatAmount } from "@/utils/billingTotals";
+import { buildBillingPayload, createBilling } from "@/services/BillingService";
 
 type Step = "list" | "billing" | "payment" | "invoice";
 
@@ -348,14 +350,35 @@ const Page = () => {
         lines={draft.lines}
         totals={totals}
         onBack={() => setStep("billing")}
-        onGenerateInvoice={(payment) => {
-          const invoiceNo = nextInvoiceNo();
+        onGenerateInvoice={async (payment) => {
+          if (!draft.customer) return;
+
           const billDate = new Date().toISOString().split("T")[0];
+          let invoiceNo = nextInvoiceNo();
+
+          try {
+            const created = await createBilling(
+              buildBillingPayload({
+                customer: draft.customer,
+                lines: draft.lines,
+                payment,
+                billDiscountValue: draft.billDiscountPercentage,
+                discountType: "PERCENTAGE",
+              })
+            );
+            // Prefer whatever the API named the bill; fall back to the local
+            // stand-in so the invoice screen always has something to print.
+            invoiceNo =
+              created?.invoiceNo ?? created?.billNo ?? created?.billingId ?? invoiceNo;
+          } catch (err) {
+            toast.error(
+              err instanceof Error ? err.message : "Failed to create the bill."
+            );
+            return;
+          }
 
           setDraft((prev) => ({ ...prev, payment, invoiceNo, billDate }));
 
-          // Optimistic row so the list reflects the new bill until the billing
-          // API is wired in.
           setBills((prev) => [
             {
               billId: prev.length + 1,

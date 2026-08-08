@@ -15,14 +15,78 @@ export type BillStatus = "Paid" | "Pending" | "Cancelled";
 export interface CustomerInfo {
   /** Empty until the counter staff picks a customer type. */
   customerType: CustomerType | "";
+  /** Set when an existing customer was picked; null creates one on submit. */
+  customerId?: number | null;
   customerName: string;
   mobileNo: string;
   age: string;
   gender: string;
   doctorName: string;
-  /** Who sent the customer in — doctor, staff, referral code. */
+  /** Referring doctor — the name shown, the id sent. */
   referredBy: string;
+  doctorId?: number | null;
   address: string;
+}
+
+/** A customer as the customer API returns it. */
+export interface CustomerRecord {
+  customerId: number;
+  customerName: string;
+  customerPhoneNo: string;
+  pharmacyId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  modifiedAt?: string | null;
+  modifiedBy?: string | null;
+}
+
+/** A referring doctor as the doctor API returns it. */
+export interface DoctorRecord {
+  doctorId: number;
+  doctorName: string;
+  pharmacyId?: string;
+  createdAt?: string;
+  createdBy?: string;
+  modifiedAt?: string | null;
+  modifiedBy?: string | null;
+}
+
+/** One line of the billing/create payload. */
+export interface BillingDetailPayload {
+  productId: string;
+  batchId: string;
+  unit: string;
+  billQuantity: number;
+  grossAmount: number;
+  discountPercentage: number;
+  discountAmount: number;
+  gstAmount: number;
+  netAmount: number;
+}
+
+export interface BillingPaymentPayload {
+  paymentMode: PaymentMode;
+  transactionId: string;
+  receivedAmount: number;
+  paymentType: "PAID" | "PENDING";
+}
+
+export interface CreateBillingPayload {
+  /** Omitted for a new customer — send name and phone instead and the API
+   *  creates the customer and keeps its id. */
+  customerId?: number;
+  customerName?: string;
+  customerPhoneNo?: string;
+  customerType: CustomerType;
+  doctorId?: number;
+  customerAddress?: string;
+  totalGrossAmount: number;
+  totalDiscountPercentage: number;
+  totalDiscountAmount: number;
+  totalGstAmount: number;
+  totalNetAmount: number;
+  billingDetails: BillingDetailPayload[];
+  billingPayments: BillingPaymentPayload[];
 }
 
 /** A medicine the counter staff can pull into the cart. */
