@@ -28,6 +28,7 @@ interface InputProps
     | "url"
     | "search"
     | "date"
+    | "month"
     | "time";
 }
 

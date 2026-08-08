@@ -5,6 +5,7 @@ import { BatchSchema, MIN_EXPIRY_MONTHS } from '@/app/schema/BatchSchema';
 import { collectErrors, hasErrors } from '@/utils/formValidation';
 import type { ProductBatchDetails } from '@/types/ProductData';
 import { daysUntil } from '@/utils/productStock';
+import { ProductService } from '@/services/ProductService';
 import { z } from 'zod';
 
 const CalendarIcon = () => (
@@ -42,6 +43,10 @@ export interface BatchDetailsProps {
    * The per-unit prices are divided down by this.
    */
   unitContains?: string;
+  /** Product the batch is being added under — needed to check for duplicate batch numbers. */
+  productId?: string;
+  /** Package the batch is being added under — needed to check for duplicate batch numbers. */
+  packagingId?: string;
 }
 
 const ADD_NEW_BATCH = 'ADD_NEW';
@@ -85,15 +90,36 @@ const divideToUnit = (perBox: string, unitCount: number): string => {
   return String(Math.round((Number(perBox) / unitCount) * 100) / 100);
 };
 
+/**
+ * The date inputs only collect a month and year ("YYYY-MM"), but the backend
+ * stores a real calendar date — so a batch is recorded as manufactured on the
+ * 1st and expiring on the last day of the picked month.
+ */
+const toFirstOfMonth = (monthYear: string): string => {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthYear);
+  return match ? `${match[1]}-${match[2]}-01` : monthYear;
+};
+
+const toLastOfMonth = (monthYear: string): string => {
+  const match = /^(\d{4})-(\d{2})$/.exec(monthYear);
+  if (!match) return monthYear;
+  const lastDay = new Date(Number(match[1]), Number(match[2]), 0).getDate();
+  return `${match[1]}-${match[2]}-${String(lastDay).padStart(2, '0')}`;
+};
+
 
 const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
-  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '' },
+  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '', productId = '', packagingId = '' },
   ref
 ) => {
   const [formData, setFormData] = useState({ ...EMPTY_FORM });
   const [errors, setErrors] = useState<Record<string, string>>({});
   // "" = nothing picked yet, ADD_NEW_BATCH = create one, otherwise a batchId.
   const [selectedBatch, setSelectedBatch] = useState('');
+  // Set by the duplicate check below; kept separate from `errors` so a passing
+  // schema re-validation doesn't silently wipe it out.
+  const [batchExistsError, setBatchExistsError] = useState('');
+  const [isCheckingBatch, setIsCheckingBatch] = useState(false);
 
   const isExistingMode = mode === 'existing';
   // Batch master data mirrors a saved batch and must not be edited.
@@ -170,6 +196,28 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       const derivedField = PER_UNIT_FIELD[field as PerBoxField];
       if (derivedField && isDerived) setErrors(prev => ({ ...prev, [derivedField]: '' }));
     }
+    // The batch number just changed, so any prior duplicate check is stale.
+    if (field === 'batchNumber' && batchExistsError) setBatchExistsError('');
+  };
+
+  /**
+   * A batch number only needs to be unique within the same product + package —
+   * checked against the backend rather than the batches already loaded, since
+   * those may not cover every batch on record.
+   */
+  const checkBatchNumberExists = async (batchNumber: string) => {
+    const trimmed = batchNumber.trim();
+    if (isLocked || !trimmed || !productId || !packagingId) return;
+
+    setIsCheckingBatch(true);
+    try {
+      const exists = await ProductService.checkBatchExists(trimmed, productId, packagingId);
+      setBatchExistsError(exists ? 'This batch number already exists for the selected product and packaging' : '');
+    } catch (error) {
+      console.error('Error checking batch number:', error);
+    } finally {
+      setIsCheckingBatch(false);
+    }
   };
 
   /**
@@ -180,6 +228,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const handleBatchChange = (value: string) => {
     setSelectedBatch(value);
     setErrors({});
+    setBatchExistsError('');
 
     const batch = batches.find((b) => b.batchId === value);
     if (!batch) {
@@ -227,6 +276,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     getFormData: () => ({
       ...resolvedFormData,
       purchaseUnit: effectivePurchaseUnit,
+      // A locked batch's dates already came from the backend as full dates;
+      // only the month/year picked for a new batch needs expanding.
+      manufacturingDate: isLocked || !resolvedFormData.manufacturingDate
+        ? resolvedFormData.manufacturingDate
+        : toFirstOfMonth(resolvedFormData.manufacturingDate),
+      expiryDate: isLocked || !resolvedFormData.expiryDate
+        ? resolvedFormData.expiryDate
+        : toLastOfMonth(resolvedFormData.expiryDate),
       // Empty unless a saved batch was picked — that is what tells the caller
       // no batch needs creating.
       batchId: isLocked ? selectedBatch : ''
@@ -260,6 +317,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
           sellingPricePerSmallestUnit: `Selling Price (per ${smallestUnitLabel}) is required`,
         }
       );
+
+      // A duplicate found on blur takes priority over the schema's own message.
+      if (batchExistsError) nextErrors.batchNumber = batchExistsError;
 
       setErrors(nextErrors);
       return !hasErrors(nextErrors);
@@ -324,15 +384,17 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
                 placeholder="Enter Batch Number"
                 value={formData.batchNumber}
                 onChange={(e) => handleChange('batchNumber', e.target.value)}
-                error={errors.batchNumber}
+                onBlur={(e) => checkBatchNumberExists(e.target.value)}
+                error={errors.batchNumber || batchExistsError}
+                hint={isCheckingBatch ? 'Checking batch number…' : undefined}
                 disabled={awaitingBatchChoice}
               />
             )}
 
             <Input
               label="Manufacturing Date"
-              type={isLocked ? 'text' : 'date'}
-              placeholder="Enter Manufacturing Date"
+              type={isLocked ? 'text' : 'month'}
+              placeholder="Select Month & Year"
               leftIcon={<CalendarIcon />}
               value={formData.manufacturingDate}
               onChange={(e) => handleChange('manufacturingDate', e.target.value)}
@@ -342,9 +404,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
 
             <Input
               label="Expiry Date"
-              type={isLocked ? 'text' : 'date'}
+              type={isLocked ? 'text' : 'month'}
               required={!isLocked}
-              placeholder="Enter Expiry Date"
+              placeholder="Select Month & Year"
               leftIcon={<CalendarIcon />}
               value={formData.expiryDate}
               onChange={(e) => handleChange('expiryDate', e.target.value)}

@@ -30,5 +30,17 @@ export class ProductService {
       throw error;
     }
   }
+
+  static async checkBatchExists(batchNumber: string, productId: string, packagingId: string) {
+    try {
+      const response = await api.get('/product/batchExists', {
+        params: { batchNumber, productId, packagingId }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error checking if batch ${batchNumber} exists:`, error);
+      throw error;
+    }
+  }
 }
 

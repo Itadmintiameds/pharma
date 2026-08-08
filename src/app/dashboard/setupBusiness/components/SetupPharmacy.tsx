@@ -15,6 +15,7 @@ import {
   submitPharmacyDraft,
   uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
+import { checkDocumentNumber } from "@/services/UserManagementService";
 import { showToast } from "@/app/components/common/Toast";
 import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
 import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
@@ -147,6 +148,7 @@ const SetupPharmacy = ({
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [formKey, setFormKey] = useState(0);
+  const [checkingDocumentNo, setCheckingDocumentNo] = useState(false);
 
   const issueDateRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
@@ -417,6 +419,38 @@ const SetupPharmacy = ({
     return false;
   };
 
+  // Returns true when the document number is already registered elsewhere.
+  // A draft re-saving its own document number is not a duplicate.
+  const isDocumentNumberDuplicate = async (value: string) => {
+    const originalDocumentNo =
+      prefillData?.pharmacyRegistrationDocuments?.[0]?.documentNumber;
+    if (originalDocumentNo && value === originalDocumentNo) return false;
+
+    return checkDocumentNumber(value);
+  };
+
+  const handleDocumentNoBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
+    const value = e.target.value.trim();
+
+    if (!value) return;
+
+    setCheckingDocumentNo(true);
+    try {
+      const exists = await isDocumentNumberDuplicate(value);
+
+      if (exists) {
+        setErrors((prev) => ({
+          ...prev,
+          documentNo: "This document number is already registered.",
+        }));
+      }
+    } catch (error) {
+      console.error("Document number check failed:", error);
+    } finally {
+      setCheckingDocumentNo(false);
+    }
+  };
+
   const handleFieldChange =
     <K extends keyof typeof pharmacyDetailsSchema.shape>(
       field: K,
@@ -560,6 +594,21 @@ const SetupPharmacy = ({
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    try {
+      const isDuplicate = await isDocumentNumberDuplicate(documentNo.trim());
+
+      if (isDuplicate) {
+        setErrors((prev) => ({
+          ...prev,
+          documentNo: "This document number is already registered.",
+        }));
+        return;
+      }
+    } catch (error) {
+      console.error("Document number check failed:", error);
+      return;
+    }
 
     if (!hasOrganization) {
       const businessResult = setupBusinessSchema.safeParse({
@@ -895,6 +944,7 @@ const SetupPharmacy = ({
               maxLength={30}
               value={documentNo}
               onChange={handleFieldChange("documentNo", setDocumentNo)}
+              onBlur={handleDocumentNoBlur}
               error={errors.documentNo}
               required
             />

@@ -14,12 +14,13 @@ export async function GET(request: NextRequest) {
     
     const userId = payload.userID || payload.userId || payload.sub;
     const email = payload.email || payload.sub || "";
-    
+    const role = payload.role || "";
+
     if (!userId) {
       return NextResponse.json({ error: "UserID claim not found in token" }, { status: 400 });
     }
-    
-    return NextResponse.json({ userId, email, accessToken: token });
+
+    return NextResponse.json({ userId, email, role, accessToken: token });
   } catch (e) {
     return NextResponse.json({ error: "Invalid token structure" }, { status: 400 });
   }
