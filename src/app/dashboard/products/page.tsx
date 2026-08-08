@@ -2,6 +2,10 @@
 
 import Button from "@/app/components/common/Button";
 import Dropdown from "@/app/components/common/Dropdown";
+import FilterPanel, {
+  FilterSection,
+  FilterValues,
+} from "@/app/components/common/FilterPanel";
 import Input from "@/app/components/common/Input";
 import StatusBadge, { BadgeStatus } from "@/app/components/common/table/StatusBadge";
 import TableWithoutGrid, {
@@ -13,6 +17,7 @@ import {
   getProductExpiryKpi,
   getProductStockSummary,
 } from "@/services/InventoryService";
+import { packageSmallestUnitName } from "@/types/ProductData";
 import type {
   ProductBatchDetails,
   ProductExpiryKpi,
@@ -21,7 +26,7 @@ import type {
   StockStatus,
 } from "@/types/ProductData";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface StatCard {
   /** Field on the expiry-KPI payload that supplies this card's count. */
@@ -73,9 +78,15 @@ const statCards: StatCard[] = [
   },
 ];
 
-const categoryOptions = [{ label: "All Categories", value: "all" }];
-const statusOptions = [{ label: "All Status", value: "all" }];
-const manufacturerOptions = [{ label: "All Manufacturers", value: "all" }];
+// Status is a fixed enum from the API; categories and manufacturers are derived
+// from whatever the stock-summary payload actually contains.
+const statusOptions = [
+  { label: "All Status", value: "all" },
+  { label: "Active", value: "ACTIVE" },
+  { label: "Near Expiry", value: "NEAR_EXPIRY" },
+  { label: "Expired", value: "EXPIRED" },
+  { label: "Out of Stock", value: "OUT_OF_STOCK" },
+];
 
 const PAGE_SIZE = 10;
 const NEAR_EXPIRY_DAYS = 30;
@@ -206,16 +217,20 @@ const batchColumns: TableColumn<ProductBatchDetails>[] = [
   },
 ];
 
-const packageColumns: TableColumn<ProductPackageDetails>[] = [
+const buildPackageColumns = (
+  productName: string
+): TableColumn<ProductPackageDetails>[] => [
   {
     header: "Variant (Pack)",
     render: (pkg) => (
       <div className="flex flex-col gap-1">
         <span className="text-label-l4 font-semibold text-pneutral-900">
-          {pkg.purchaseUnit}
+          {productName} {packageSmallestUnitName(pkg)}
         </span>
         <span className="text-label-l3 font-regular text-pneutral-900">
-          1 {pkg.purchaseUnit} = {pkg.purchaseUnitContains} {pkg.smallestUnit}
+          {pkg.purchaseUnitContains === 1
+            ? pkg.purchaseUnit
+            : `${pkg.purchaseUnit} of ${pkg.purchaseUnitContains}`}
         </span>
       </div>
     ),
@@ -246,14 +261,14 @@ const packageColumns: TableColumn<ProductPackageDetails>[] = [
     align: "center",
     render: (_pkg, { expanded, toggle }) => (
       <div className="flex items-center justify-center gap-3">
-        <button type="button" aria-label="View variant">
+        {/* <button type="button" aria-label="View variant">
           <Image
             src="/ProductManagement/ViewIcon.svg"
             alt=""
             width={20}
             height={16}
           />
-        </button>
+        </button> */}
         <button
           type="button"
           aria-label={expanded ? "Collapse batches" : "Expand batches"}
@@ -275,7 +290,7 @@ const productColumns: TableColumn<ProductStockSummary>[] = [
           {p.productName}
         </span>
         <span className="text-label-l3 font-regular text-pneutral-900">
-          {p.productId}
+          {p.brandName || "—"}
         </span>
       </div>
     ),
@@ -313,7 +328,7 @@ const renderPackageBatches = (pkg: ProductPackageDetails) => (
       rowKey={(b, i) => `${b.batchId}-${i}`}
       headerVariant="muted"
       container="box"
-      footer={
+      /* footer={
         <button
           type="button"
           className="flex w-full items-center justify-center gap-2 py-3 text-label-l4 font-medium text-secondary-700"
@@ -321,7 +336,7 @@ const renderPackageBatches = (pkg: ProductPackageDetails) => (
           <span className="text-p5 leading-none">+</span>
           Add/View More Batches
         </button>
-      }
+      } */
     />
   </div>
 );
@@ -331,7 +346,13 @@ const renderPackageBatches = (pkg: ProductPackageDetails) => (
  * Fetches the product's details on mount so the call only fires when
  * a product row is actually expanded.
  */
-const ProductPackages = ({ productId }: { productId: string }) => {
+const ProductPackages = ({
+  productId,
+  productName,
+}: {
+  productId: string;
+  productName: string;
+}) => {
   const [packages, setPackages] = useState<ProductPackageDetails[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -372,7 +393,7 @@ const ProductPackages = ({ productId }: { productId: string }) => {
   return (
     <div className="pl-10">
       <TableWithoutGrid
-        columns={packageColumns}
+        columns={buildPackageColumns(productName)}
         data={packages}
         rowKey={(pkg) => pkg.packagingId}
         headerVariant="muted"
@@ -384,12 +405,69 @@ const ProductPackages = ({ productId }: { productId: string }) => {
   );
 };
 
+/* ---------------------------- advanced filters ---------------------------- */
+
+/** Extra filters behind the "Filter" button, applied on top of the dropdowns. */
+interface AdvancedFilters extends FilterValues {
+  stock: "all" | "low" | "out";
+  expiryWithin: "all" | "30" | "60" | "90";
+  hasExpired: boolean;
+  hasNearExpiry: boolean;
+}
+
+const DEFAULT_ADVANCED_FILTERS: AdvancedFilters = {
+  stock: "all",
+  expiryWithin: "all",
+  hasExpired: false,
+  hasNearExpiry: false,
+};
+
+/** Upper bound (inclusive) for the "Low" stock bucket. */
+const LOW_STOCK_MAX = 10;
+
+/** Config that tells the shared FilterPanel what to render for this table. */
+const PRODUCT_FILTER_SECTIONS: FilterSection[] = [
+  {
+    type: "radio",
+    key: "stock",
+    title: "Stock level",
+    options: [
+      { label: "All", value: "all" },
+      { label: `Low (1-${LOW_STOCK_MAX})`, value: "low" },
+      { label: "Out of stock", value: "out" },
+    ],
+  },
+  {
+    type: "radio",
+    key: "expiryWithin",
+    title: "Expiry within",
+    options: [
+      { label: "All", value: "all" },
+      { label: "30 days", value: "30" },
+      { label: "60 days", value: "60" },
+      { label: "90 days", value: "90" },
+    ],
+  },
+  {
+    type: "checkbox",
+    title: "Batch health",
+    items: [
+      { key: "hasExpired", label: "Has expired batches" },
+      { key: "hasNearExpiry", label: "Has near-expiry batches" },
+    ],
+  },
+];
+
 /* ----------------------------------- page --------------------------------- */
 
 const Page = () => {
+  const [search, setSearch] = useState<string>("");
   const [category, setCategory] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
   const [manufacturer, setManufacturer] = useState<string>("all");
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(
+    DEFAULT_ADVANCED_FILTERS
+  );
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   const [products, setProducts] = useState<ProductStockSummary[]>([]);
@@ -425,13 +503,81 @@ const Page = () => {
     load();
   }, []);
 
-  const pageData = products.slice(
+  // Category options: one entry per distinct category present in the data.
+  const categoryOptions = useMemo(() => {
+    const seen = new Map<number, string>();
+    products.forEach((p) => {
+      if (p.productCategoryId != null && !seen.has(p.productCategoryId)) {
+        seen.set(p.productCategoryId, p.productCategoryName);
+      }
+    });
+    return [
+      { label: "All Categories", value: "all" },
+      ...[...seen].map(([id, name]) => ({ label: name, value: String(id) })),
+    ];
+  }, [products]);
+
+  // Manufacturer options: distinct non-null manufacturer names.
+  const manufacturerOptions = useMemo(() => {
+    const seen = new Set<string>();
+    products.forEach((p) => {
+      if (p.manufacturerName?.trim()) seen.add(p.manufacturerName);
+    });
+    return [
+      { label: "All Manufacturers", value: "all" },
+      ...[...seen].map((name) => ({ label: name, value: name })),
+    ];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const { stock, expiryWithin, hasExpired, hasNearExpiry } = advancedFilters;
+    return products.filter((p) => {
+      if (category !== "all" && String(p.productCategoryId) !== category)
+        return false;
+      if (status !== "all" && p.overallStatus !== status) return false;
+      if (manufacturer !== "all" && p.manufacturerName !== manufacturer)
+        return false;
+      if (query) {
+        const haystack =
+          `${p.productName} ${p.productId} ${p.brandName ?? ""}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+
+      // Advanced filters
+      if (stock === "out" && p.totalStock > 0) return false;
+      if (
+        stock === "low" &&
+        !(p.totalStock > 0 && p.totalStock <= LOW_STOCK_MAX)
+      )
+        return false;
+      if (expiryWithin !== "all") {
+        if (!p.nearestExpiryDate) return false;
+        if (daysUntil(p.nearestExpiryDate) > Number(expiryWithin)) return false;
+      }
+      if (hasExpired && p.expiredBatches <= 0) return false;
+      if (hasNearExpiry && p.nearExpiryBatches <= 0) return false;
+
+      return true;
+    });
+  }, [products, search, category, status, manufacturer, advancedFilters]);
+
+  // Any filter/search change collapses the result set — jump back to page 1 so
+  // the user isn't stranded on a now-empty page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, category, status, manufacturer, advancedFilters]);
+
+  const pageData = filteredProducts.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
   );
 
   const renderProductPackages = (product: ProductStockSummary) => (
-    <ProductPackages productId={product.productId} />
+    <ProductPackages
+      productId={product.productId}
+      productName={product.productName}
+    />
   );
 
   return (
@@ -442,7 +588,7 @@ const Page = () => {
           <span className="font-normal">/ Stock with Expiry Status</span>
         </div>
 
-        <Button
+        {/* <Button
           variant="primary"
           className="h-9! min-w-[108px] gap-2 px-3 bg-primary-800! text-label-l3! font-medium! shadow-[-1px_1px_4px_0px_#00000040]"
         >
@@ -454,7 +600,7 @@ const Page = () => {
             className="shrink-0"
           />
           Add Product
-        </Button>
+        </Button> */}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -505,6 +651,8 @@ const Page = () => {
             <Input
               type="text"
               placeholder="Search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               className="h-[43px]! border-0! rounded-none bg-transparent"
             />
           </div>
@@ -548,18 +696,13 @@ const Page = () => {
           />
         </div>
 
-        <Button
-          variant="outline"
-          className="w-[108px]! shrink-0 gap-2 px-4 border! border-pneutral-200! bg-pneutral-50 text-p3! font-semibold tracking-[-0.02em] text-pneutral-900!"
-        >
-          <Image
-            src="/ProductManagement/LeadingIcon.svg"
-            alt="Filter"
-            width={16}
-            height={16}
-          />
-          Filter
-        </Button>
+        <FilterPanel
+          sections={PRODUCT_FILTER_SECTIONS}
+          value={advancedFilters}
+          defaults={DEFAULT_ADVANCED_FILTERS}
+          onApply={(v) => setAdvancedFilters(v as AdvancedFilters)}
+          onReset={() => setAdvancedFilters(DEFAULT_ADVANCED_FILTERS)}
+        />
       </div>
 
       <TableWithoutGrid
@@ -573,7 +716,7 @@ const Page = () => {
         pagination={{
           page: currentPage,
           pageSize: PAGE_SIZE,
-          totalItems: products.length,
+          totalItems: filteredProducts.length,
           onPageChange: setCurrentPage,
         }}
       />

@@ -1141,6 +1141,11 @@ const SetupPharmacy = ({
                   ? handleProductManagementNext
                   : handleSubmit
             }
+            disabled={
+              showProductManagement &&
+              !showWarehouseForm &&
+              manageCentrally === null
+            }
             loading={loading}
           >
             {isNewMultiple && !showProductManagement

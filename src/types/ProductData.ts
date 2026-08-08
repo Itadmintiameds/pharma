@@ -145,6 +145,10 @@ export type StockStatus =
 export interface ProductStockSummary {
   productId: string;
   productName: string;
+  brandName: string | null;
+  manufacturerName: string | null;
+  productCategoryId: number;
+  productCategoryName: string;
   totalStock: number;
   activeBatches: number;
   nearExpiryBatches: number;
