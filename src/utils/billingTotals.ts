@@ -49,10 +49,10 @@ export const billDiscountBothWays = (
 
 /**
  * A single line costed out with the bill level discount folded in. The bill
- * discount lands on every line in full — a 15 rupee bill discount takes 15 off
- * each line, a 10% one takes 10% off each line — on top of whatever discount
- * the line already carries. GST is then charged on what is left, so the totals
- * are nothing more than the sum of the lines.
+ * discount reaches the line as a percentage that adds to whatever discount the
+ * line already carries — an amount is converted against the cart's gross first,
+ * so 15 rupees off a 170 cart is 8.82% off every line. GST is then charged on
+ * what is left, so the totals are nothing more than the sum of the lines.
  */
 export interface LineBreakdown {
   grossAmount: number;
@@ -65,15 +65,11 @@ export interface LineBreakdown {
 
 export const lineBreakdown = (
   line: BillLine,
-  billDiscountValue = 0,
-  discountType: DiscountType = "PERCENTAGE"
+  billDiscountPercentage = 0
 ): LineBreakdown => {
   const grossAmount = lineGross(line);
   const ownDiscount = (grossAmount * (line.discountPercentage || 0)) / 100;
-  const billShare =
-    discountType === "PERCENTAGE"
-      ? (grossAmount * billDiscountValue) / 100
-      : billDiscountValue;
+  const billShare = (grossAmount * billDiscountPercentage) / 100;
 
   // A line can never discount past its own gross.
   const discountAmount = Math.min(grossAmount, ownDiscount + billShare);
@@ -105,17 +101,15 @@ export const calculateBillTotals = (
   const grossAmount = lines.reduce((sum, line) => sum + lineGross(line), 0);
   const itemDiscount = lines.reduce((sum, line) => sum + lineDiscount(line), 0);
 
-  const rows = lines.map((line) =>
-    lineBreakdown(line, billDiscountValue, discountType)
-  );
-  const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
-  const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
-
   const billDiscount = billDiscountBothWays(
     grossAmount,
     billDiscountValue,
     discountType
   );
+
+  const rows = lines.map((line) => lineBreakdown(line, billDiscount.percentage));
+  const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
+  const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
 
   return {
     totalItems: lines.length,

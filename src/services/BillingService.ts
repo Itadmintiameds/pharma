@@ -6,6 +6,7 @@ import {
   CreateBillingPayload,
   CustomerInfo,
   PaymentDetails,
+  SettlePaymentPayload,
 } from '@/types/BillingData';
 import {
   billDiscountBothWays,
@@ -37,8 +38,20 @@ export const buildBillingPayload = ({
   billDiscountValue,
   discountType,
 }: BuildPayloadArgs): CreateBillingPayload => {
+  // An amount is converted against the cart's gross, then every line carries
+  // that same percentage on top of its own discount.
+  const cartGross = lines.reduce(
+    (sum, line) => sum + line.quantity * (line.sellingPricePerUnit ?? line.mrpPerUnit ?? 0),
+    0
+  );
+  const billDiscount = billDiscountBothWays(
+    cartGross,
+    billDiscountValue,
+    discountType
+  );
+
   const billingDetails = lines.map((line) => {
-    const row = lineBreakdown(line, billDiscountValue, discountType);
+    const row = lineBreakdown(line, billDiscount.percentage);
     return {
       productId: line.productId,
       batchId: line.batchId,
@@ -55,27 +68,31 @@ export const buildBillingPayload = ({
   const totalGrossAmount = billingDetails.reduce((sum, d) => sum + d.grossAmount, 0);
   const totalGstAmount = billingDetails.reduce((sum, d) => sum + d.gstAmount, 0);
   const totalNetAmount = billingDetails.reduce((sum, d) => sum + d.netAmount, 0);
-
-  // The bill level discount as the cashier entered it, in both units — not the
-  // sum of every discount in the cart; the lines already carry their own.
-  const billDiscount = billDiscountBothWays(
-    totalGrossAmount,
-    billDiscountValue,
-    discountType
-  );
+  const pendingAmount = Math.max(0, totalNetAmount - (payment.amountReceived || 0));
 
   return {
-    // An existing customer is referenced by id; a new one is created from the
-    // name and phone the counter typed.
+    // An existing customer is referenced by id alone; a new one is created from
+    // the name and phone the counter typed. `patientNumber` only travels when
+    // it isn't already on the record — the billing screen clears it otherwise.
     ...(customer.customerId
       ? { customerId: customer.customerId }
       : {
           customerName: customer.customerName,
           customerPhoneNo: customer.mobileNo,
         }),
+    ...(customer.patientNumber ? { patientNumber: customer.patientNumber } : {}),
+    ...(customer.visitNumber ? { opIpNumber: customer.visitNumber } : {}),
     customerType: (customer.customerType || 'WALK_IN') as CreateBillingPayload['customerType'],
     ...(customer.doctorId ? { doctorId: customer.doctorId } : {}),
     ...(customer.address ? { customerAddress: customer.address } : {}),
+    // PAID when nothing is owed, UNPAID when nothing was handed over, and
+    // PARTIAL in between.
+    paymentType:
+      pendingAmount <= 0
+        ? 'PAID'
+        : (payment.amountReceived || 0) > 0
+          ? 'PARTIAL'
+          : 'UNPAID',
 
     totalGrossAmount: money(totalGrossAmount),
     totalDiscountPercentage: money(billDiscount.percentage),
@@ -87,12 +104,54 @@ export const buildBillingPayload = ({
     billingPayments: [
       {
         paymentMode: payment.paymentMode,
-        transactionId: payment.referenceNo || '',
+        // Cash has no reference of its own.
+        transactionId: payment.referenceNo || null,
         receivedAmount: money(payment.amountReceived),
-        paymentType: payment.paymentMode === 'CREDIT' ? 'PENDING' : 'PAID',
+        pendingAmount: money(pendingAmount),
       },
     ],
   };
+};
+
+/** Prescriptions are capped at 5 MB. */
+export const PRESCRIPTION_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Attaches the prescription to a saved bill. Multipart, one field named `file`.
+ */
+export const uploadPrescription = async (
+  billingId: number | string,
+  file: File
+): Promise<{ billingId: number; prescriptionUrl: string }> => {
+  if (file.size > PRESCRIPTION_MAX_BYTES) {
+    throw new Error('Prescription must be 5 MB or smaller.');
+  }
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    // Let the browser set the multipart boundary.
+    const response = await api.post(`/billing/${billingId}/prescription`, form, {
+      headers: { 'Content-Type': undefined },
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to upload the prescription.');
+  }
+};
+
+/** Settles what is still owed on a saved bill. */
+export const settleBillingPayment = async (
+  billingId: number | string,
+  payload: SettlePaymentPayload
+) => {
+  try {
+    const response = await api.post(`/billing/${billingId}/payment`, payload);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to record the payment.');
+  }
 };
 
 export const createBilling = async (payload: CreateBillingPayload) => {

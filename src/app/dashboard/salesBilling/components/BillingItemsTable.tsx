@@ -10,7 +10,7 @@
  * of the same table system.
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useRef } from "react";
 import Image from "next/image";
 import {
   ColumnDef,
@@ -19,6 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import { sanitizeNumber, sanitizePercentage } from "@/app/schema/BillingSchema";
 import Input from "@/app/components/common/Input";
 import { BillableProduct } from "@/types/BillingData";
 import { formatAmount } from "@/utils/billingTotals";
@@ -40,6 +41,49 @@ export interface BillingRow {
   sellingPricePerUnit: number;
   gstPercentage: number;
 }
+
+const startOfToday = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+};
+
+/**
+ * Expiry as a timestamp, taken at the *end* of the stated period so stock
+ * expiring this month is still sellable today. Handles the shapes the batches
+ * endpoint uses — "YYYY-MM-DD", "YYYY-MM", "MM/YYYY", "DD/MM/YYYY".
+ * Anything unreadable sorts last and is never treated as expired.
+ */
+const expiryTime = (raw?: string): number => {
+  const value = (raw || "").trim();
+  if (!value || value === "N/A") return Number.POSITIVE_INFINITY;
+
+  const endOfDay = (y: number, m: number, d: number) =>
+    new Date(y, m - 1, d, 23, 59, 59).getTime();
+  /** Day 0 of the next month is the last day of this one. */
+  const endOfMonth = (y: number, m: number) =>
+    new Date(y, m, 0, 23, 59, 59).getTime();
+
+  let match = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(value);
+  if (match) return endOfDay(+match[1], +match[2], +match[3]);
+
+  match = /^(\d{4})[-/](\d{1,2})$/.exec(value);
+  if (match) return endOfMonth(+match[1], +match[2]);
+
+  match = /^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/.exec(value);
+  if (match) return endOfDay(+match[3], +match[2], +match[1]);
+
+  match = /^(\d{1,2})[-/](\d{4})$/.exec(value);
+  if (match) return endOfMonth(+match[2], +match[1]);
+
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+};
+
+/** Clamps a typed quantity to what the batch actually has on hand. */
+const capToStock = (value: string, available: number) => {
+  if (value === "" || !available) return value;
+  return Number(value) > available ? String(available) : value;
+};
 
 let rowSeq = 0;
 
@@ -103,14 +147,39 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
     return Array.from(seen, ([value, label]) => ({ label, value }));
   }, [catalog]);
 
+  /**
+   * Batches for a product, first-expiry-first and with expired stock left out
+   * entirely. A batch with no readable expiry sorts last rather than being
+   * hidden — better to offer it than to lose sellable stock.
+   */
   const batchOptionsFor = (productId: string): DropdownOption[] =>
     catalog
-      .filter((batch) => batch.productId === productId)
+      .filter(
+        (batch) =>
+          batch.productId === productId &&
+          // Nothing expired, and nothing with an empty shelf.
+          expiryTime(batch.expiryDate) >= startOfToday() &&
+          batch.availableQuantity > 0
+      )
+      .sort((a, b) => expiryTime(a.expiryDate) - expiryTime(b.expiryDate))
       .map((batch) => ({ label: batch.batchNumber, value: batch.batchId }));
 
+  /**
+   * The column defs must keep the same function identities across renders —
+   * rebuilding them remounts each cell, which would drop focus after a single
+   * keystroke. So the handlers read the current rows from a ref instead of
+   * closing over them.
+   */
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
   const patchRow = (rowId: string, patch: Partial<BillingRow>) =>
-    onChange(
-      rows.map((row) => (row.rowId === rowId ? { ...row, ...patch } : row))
+    onChangeRef.current(
+      rowsRef.current.map((row) =>
+        row.rowId === rowId ? { ...row, ...patch } : row
+      )
     );
 
   const handleProductChange = (row: BillingRow, productId: string) => {
@@ -143,7 +212,8 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         mrpPerUnit: batch.mrpPerUnit,
         sellingPricePerUnit: batch.sellingPricePerUnit || batch.mrpPerUnit,
         gstPercentage: batch.gstPercentage,
-        quantity: row.quantity || "1",
+        // Carrying a quantity across from a bigger batch could oversell this one.
+        quantity: capToStock(row.quantity || "1", batch.availableQuantity),
       });
 
     if (listed) applyBatch(listed);
@@ -156,12 +226,13 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
     }
   };
 
-  const addRow = () => onChange([...rows, emptyBillingRow()]);
+  const addRow = () =>
+    onChangeRef.current([...rowsRef.current, emptyBillingRow()]);
 
   const removeRow = (rowId: string) => {
-    const remaining = rows.filter((row) => row.rowId !== rowId);
+    const remaining = rowsRef.current.filter((row) => row.rowId !== rowId);
     // Never leave the grid without a row to type into.
-    onChange(remaining.length > 0 ? remaining : [emptyBillingRow()]);
+    onChangeRef.current(remaining.length > 0 ? remaining : [emptyBillingRow()]);
   };
 
   /**
@@ -234,14 +305,21 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
           <Input
             sizeVariant="sm"
             containerClassName="w-12 mx-auto"
-            type="number"
-            min={0}
-            max={row.original.availableQuantity || undefined}
+            // text + inputMode keeps the numeric keypad without the spinner or
+            // the scroll-wheel stepping a number input does.
+            type="text"
+            inputMode="decimal"
             placeholder="0.00"
             value={row.original.quantity}
             disabled={!row.original.batchId}
             onChange={(e) =>
-              patchRow(row.original.rowId, { quantity: e.target.value })
+              patchRow(row.original.rowId, {
+                // Never sell more than the batch holds.
+                quantity: capToStock(
+                  sanitizeNumber(e.target.value),
+                  row.original.availableQuantity
+                ),
+              })
             }
           />
         ),
@@ -263,15 +341,14 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
           <Input
             sizeVariant="sm"
             containerClassName="w-12 mx-auto"
-            type="number"
-            min={0}
-            max={100}
+            type="text"
+            inputMode="decimal"
             placeholder="0.00"
             value={row.original.discountPercentage}
             disabled={!row.original.batchId}
             onChange={(e) =>
               patchRow(row.original.rowId, {
-                discountPercentage: e.target.value,
+                discountPercentage: sanitizePercentage(e.target.value),
               })
             }
           />
@@ -342,9 +419,9 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         },
       },
     ],
-    // Handlers close over `rows`, so the defs have to be rebuilt when it changes.
+    // Deliberately not keyed on `rows` — see the ref note above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [productOptions, catalog, rows, isLoading]
+    [productOptions, catalog, isLoading]
   );
 
   const table = useReactTable({

@@ -102,9 +102,9 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
           </div>
           <div className="text-p3 font-normal font-noto-sans">
             {isCredit
-              ? `₹ ${formatAmount(totals.netAmount)} due in ${
-                  payment.creditDays ?? 0
-                } days`
+              ? `₹ ${formatAmount(payment.amountReceived)} received · ₹ ${formatAmount(
+                  payment.pendingAmount ?? 0
+                )} pending`
               : `₹ ${formatAmount(
                   payment.amountReceived
                 )} received via ${PAYMENT_MODE_LABELS[payment.paymentMode]}${
