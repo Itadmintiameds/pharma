@@ -383,12 +383,15 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             ref={batchRef}
             mode="existing"
             batches={selectedPackage?.batches ?? []}
+            productId={productId}
+            packagingId={selectedPackagingId}
             {...packagingUnits}
           />
         ) : (
           <BatchDetails
             key="new-package"
             ref={batchRef}
+            productId={productId}
             {...packagingUnits}
           />
         )}

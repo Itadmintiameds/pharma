@@ -30,7 +30,7 @@ export default function PurchaseSuccessModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
       <div className="relative w-[460px] h-[499px] rounded-[20px] bg-white px-6 py-8 flex flex-col gap-5">
         <div>
-          <button
+          {/* <button
             onClick={onClose}
             className="absolute top-4 right-4 flex h-5 w-5 items-center justify-center"
           >
@@ -41,7 +41,7 @@ export default function PurchaseSuccessModal({
               height={20}
               className="shrink-0"
             />
-          </button>
+          </button> */}
         </div>
 
         <div className="flex justify-center">

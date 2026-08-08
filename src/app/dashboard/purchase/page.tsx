@@ -37,6 +37,12 @@ interface InvoiceLine {
   amount: number;
 }
 
+/** "2026-08-03T00:00:00" / "2026-08-03" -> "03-08-2026"; unparseable -> "—". */
+const formatInvoiceDate = (value: string | null | undefined): string => {
+  const [year, month, day] = (value?.split("T")[0] ?? "").split("-");
+  return year && month && day ? `${day}-${month}-${year}` : "—";
+};
+
 /**
  * The purchase API returns only ids and amounts per line, so brand / variant /
  * HSN / expiry / price are pulled from each product's details. One call per
@@ -109,8 +115,8 @@ export const buildColumns = (
     accessorKey: "invoiceDate",
     header: "Invoice Date",
 
-    // Stored as "2026-08-03T00:00:00" — show just the date part.
-    cell: ({ row }) => row.original.invoiceDate?.split("T")[0] ?? "—",
+    // Stored as "2026-08-03T00:00:00" — show as dd-mm-yyyy.
+    cell: ({ row }) => formatInvoiceDate(row.original.invoiceDate),
   },
 
   {
