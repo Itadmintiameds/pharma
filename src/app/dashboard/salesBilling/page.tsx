@@ -9,7 +9,7 @@
  * everything the cashier already typed.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import Image from "next/image";
 import { Plus } from "lucide-react";
@@ -23,12 +23,22 @@ import {
   BillLine,
   BillRecord,
   BillStatus,
+  BillingRecord,
   CustomerInfo,
   PaymentDetails,
   PaymentMode,
 } from "@/types/BillingData";
-import { calculateBillTotals, formatAmount } from "@/utils/billingTotals";
-import { buildBillingPayload, createBilling } from "@/services/BillingService";
+import {
+  calculateBillTotals,
+  formatAmount,
+  type DiscountType,
+} from "@/utils/billingTotals";
+import {
+  buildBillingPayload,
+  createBilling,
+  getAllBillings,
+  getBillingById,
+} from "@/services/BillingService";
 
 type Step = "list" | "billing" | "payment" | "invoice";
 
@@ -45,76 +55,163 @@ const STATUS_STYLES: Record<BillStatus, string> = {
   Cancelled: "border-pneutral-300 bg-pneutral-100 text-pneutral-600",
 };
 
-/** Placeholder rows until the bills endpoint is available. */
-const MOCK_BILLS: BillRecord[] = [
-  {
-    billId: 1,
-    invoiceNo: "INV-2608/05-001",
-    billDate: "2026-08-05",
-    customerName: "Ramesh Kumar",
-    mobileNo: "9845012345",
-    totalItems: 3,
-    paymentMode: "CASH",
-    status: "Paid",
-    netAmount: 486,
-  },
-  {
-    billId: 2,
-    invoiceNo: "INV-2608/05-002",
-    billDate: "2026-08-05",
-    customerName: "Sunita Desai",
-    mobileNo: "9900112233",
-    totalItems: 5,
-    paymentMode: "UPI",
-    status: "Paid",
-    netAmount: 1250,
-  },
-  {
-    billId: 3,
-    invoiceNo: "INV-2608/04-014",
-    billDate: "2026-08-04",
-    customerName: "Ajay Prasad",
-    mobileNo: "9611098765",
-    totalItems: 2,
-    paymentMode: "CREDIT",
-    status: "Pending",
-    netAmount: 320.5,
-  },
-  {
-    billId: 4,
-    invoiceNo: "INV-2608/04-013",
-    billDate: "2026-08-04",
-    customerName: "Walk-in Customer",
-    mobileNo: "—",
-    totalItems: 1,
-    paymentMode: "CARD",
-    status: "Cancelled",
-    netAmount: 128,
-  },
-];
+/** A saved bill as the list needs it. */
+const toBillRecord = (bill: BillingRecord): BillRecord => {
+  const payment = bill.billingPayments?.[0];
+  return {
+    billId: bill.billingId,
+    invoiceNo: bill.billNo,
+    billDate: bill.createdAt?.split("T")[0] ?? "—",
+    customerName: bill.customerName || "Walk-in Customer",
+    mobileNo: bill.customerPhoneNo || "—",
+    totalItems: bill.billingDetails?.length ?? 0,
+    paymentMode: payment?.paymentMode ?? "CASH",
+    status: payment?.paymentType === "PENDING" ? "Pending" : "Paid",
+    netAmount: bill.totalNetAmount ?? 0,
+  };
+};
+
+/**
+ * Rebuilds cart lines from a saved bill. The API stores amounts rather than
+ * unit prices, so rate and GST rate are derived back out of them.
+ */
+const toBillLines = (bill: BillingRecord): BillLine[] =>
+  (bill.billingDetails ?? []).map((detail) => {
+    const quantity = detail.billQuantity || 0;
+    const rate = quantity > 0 ? detail.grossAmount / quantity : 0;
+    const taxable = detail.grossAmount - detail.discountAmount;
+    const gstPercentage = taxable > 0 ? (detail.gstAmount / taxable) * 100 : 0;
+
+    return {
+      lineId: String(detail.billingDetailsId),
+      productId: detail.productId,
+      productName: detail.productName,
+      batchId: detail.batchId,
+      batchNumber: detail.batchNumber,
+      unit: detail.unit,
+      // Not carried on a saved bill.
+      expiryDate: "",
+      quantity,
+      freeQuantity: 0,
+      mrpPerUnit: rate,
+      sellingPricePerUnit: rate,
+      discountPercentage: detail.discountPercentage || 0,
+      gstPercentage,
+      availableQuantity: 0,
+    };
+  });
 
 /** What the POS flow has collected so far. */
 interface BillDraft {
   customer?: CustomerInfo;
   lines: BillLine[];
-  billDiscountPercentage: number;
+  /** The bill level discount as typed, with the unit it was typed in. */
+  billDiscountValue: number;
+  discountType: DiscountType;
   payment?: PaymentDetails;
   invoiceNo?: string;
   billDate?: string;
 }
 
-const EMPTY_DRAFT: BillDraft = { lines: [], billDiscountPercentage: 0 };
+const EMPTY_DRAFT: BillDraft = {
+  lines: [],
+  billDiscountValue: 0,
+  discountType: "PERCENTAGE",
+};
 
 const Page = () => {
   const [step, setStep] = useState<Step>("list");
   const [search, setSearch] = useState("");
-  const [bills, setBills] = useState<BillRecord[]>(MOCK_BILLS);
+  const [bills, setBills] = useState<BillRecord[]>([]);
+  const [isLoadingBills, setIsLoadingBills] = useState(true);
   const [draft, setDraft] = useState<BillDraft>(EMPTY_DRAFT);
   const [summaryMode, setSummaryMode] = useState<"create" | "view" | "download">("create");
 
+  /** Re-reads the list; also used after a bill is created. */
+  const loadBills = async () => {
+    try {
+      const data = await getAllBillings();
+      setBills(data.map(toBillRecord));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to fetch bills.");
+    } finally {
+      setIsLoadingBills(false);
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const load = async () => {
+      try {
+        const data = await getAllBillings();
+        if (active) setBills(data.map(toBillRecord));
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to fetch bills.");
+      } finally {
+        if (active) setIsLoadingBills(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /** Pulls a saved bill and hands it to the invoice screen. */
+  const openSavedBill = async (
+    billingId: number,
+    mode: "view" | "download"
+  ) => {
+    try {
+      const bill = await getBillingById(billingId);
+      const payment = bill.billingPayments?.[0];
+
+      setDraft({
+        customer: {
+          customerType: bill.customerType || "WALK_IN",
+          customerId: bill.customerId,
+          customerName: bill.customerName || "Walk-in Customer",
+          mobileNo: bill.customerPhoneNo || "",
+          age: "",
+          gender: "",
+          doctorName: bill.doctorName || "",
+          referredBy: bill.doctorName || "",
+          doctorId: bill.doctorId,
+          address: bill.customerAddress || "",
+        },
+        lines: toBillLines(bill),
+        payment: {
+          paymentMode: payment?.paymentMode ?? "CASH",
+          amountReceived: payment?.receivedAmount ?? bill.totalNetAmount,
+          referenceNo: payment?.transactionId || "",
+          remarks: "",
+          changeDue: 0,
+        },
+        invoiceNo: bill.billNo,
+        billDate: bill.createdAt?.split("T")[0] ?? "",
+        // Saved lines already carry their share of the bill level discount.
+        billDiscountValue: 0,
+        discountType: "PERCENTAGE",
+      });
+
+      setSummaryMode(mode);
+      setStep("invoice");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to fetch the bill.");
+    }
+  };
+
   const totals = useMemo(
-    () => calculateBillTotals(draft.lines, draft.billDiscountPercentage),
-    [draft.lines, draft.billDiscountPercentage]
+    () =>
+      calculateBillTotals(
+        draft.lines,
+        draft.billDiscountValue,
+        draft.discountType
+      ),
+    [draft.lines, draft.billDiscountValue, draft.discountType]
   );
 
   const filteredBills = useMemo(() => {
@@ -182,52 +279,7 @@ const Page = () => {
             type="button"
             aria-label={`View invoice ${row.original.invoiceNo}`}
             title="View invoice"
-            onClick={() => {
-              setDraft({
-                customer: {
-                  customerType: "WALK_IN",
-                  customerName: row.original.customerName,
-                  mobileNo: row.original.mobileNo,
-                  age: "",
-                  gender: "",
-                  doctorName: "",
-                  referredBy: "",
-                  address: "",
-                },
-                lines: [
-                  {
-                    lineId: "1",
-                    productId: "prod1",
-                    productName: "Paracetamol 500mg",
-                    batchId: "batch1",
-                    batchNumber: "BATCH-001",
-                    expiryDate: "2027-01",
-                    quantity: row.original.totalItems || 1,
-                    freeQuantity: 0,
-                    availableQuantity: 100,
-                    unit: "BOX",
-                    sellingPricePerUnit:
-                      row.original.netAmount / (row.original.totalItems || 1),
-                    mrpPerUnit:
-                      row.original.netAmount / (row.original.totalItems || 1),
-                    discountPercentage: 0,
-                    gstPercentage: 5,
-                  },
-                ],
-                payment: {
-                  paymentMode: row.original.paymentMode,
-                  amountReceived: row.original.netAmount,
-                  referenceNo: "",
-                  remarks: "",
-                  changeDue: 0,
-                },
-                invoiceNo: row.original.invoiceNo,
-                billDate: row.original.billDate,
-                billDiscountPercentage: 0,
-              });
-              setSummaryMode("view");
-              setStep("invoice");
-            }}
+            onClick={() => openSavedBill(row.original.billId, "view")}
           >
             <Image
               src="/Purchase/ViewIcon.svg"
@@ -242,52 +294,7 @@ const Page = () => {
             type="button"
             aria-label={`Download invoice ${row.original.invoiceNo}`}
             title="Download invoice"
-            onClick={() => {
-              setDraft({
-                customer: {
-                  customerType: "WALK_IN",
-                  customerName: row.original.customerName,
-                  mobileNo: row.original.mobileNo,
-                  age: "",
-                  gender: "",
-                  doctorName: "",
-                  referredBy: "",
-                  address: "",
-                },
-                lines: [
-                  {
-                    lineId: "1",
-                    productId: "prod1",
-                    productName: "Paracetamol 500mg",
-                    batchId: "batch1",
-                    batchNumber: "BATCH-001",
-                    expiryDate: "2027-01",
-                    quantity: row.original.totalItems || 1,
-                    freeQuantity: 0,
-                    availableQuantity: 100,
-                    unit: "BOX",
-                    sellingPricePerUnit:
-                      row.original.netAmount / (row.original.totalItems || 1),
-                    mrpPerUnit:
-                      row.original.netAmount / (row.original.totalItems || 1),
-                    discountPercentage: 0,
-                    gstPercentage: 5,
-                  },
-                ],
-                payment: {
-                  paymentMode: row.original.paymentMode,
-                  amountReceived: row.original.netAmount,
-                  referenceNo: "",
-                  remarks: "",
-                  changeDue: 0,
-                },
-                invoiceNo: row.original.invoiceNo,
-                billDate: row.original.billDate,
-                billDiscountPercentage: 0,
-              });
-              setSummaryMode("download");
-              setStep("invoice");
-            }}
+            onClick={() => openSavedBill(row.original.billId, "download")}
           >
             <Image
               src="/Purchase/DownloadIcon.svg"
@@ -308,34 +315,24 @@ const Page = () => {
     setStep("billing");
   };
 
-  /**
-   * Stands in for the invoice number the billing API will return, so the
-   * invoice screen has something to print in the meantime.
-   */
-  const nextInvoiceNo = () => {
-    const now = new Date();
-    const stamp = `${String(now.getFullYear()).slice(2)}${String(
-      now.getMonth() + 1
-    ).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
-    return `INV-${stamp}-${String(bills.length + 1).padStart(3, "0")}`;
-  };
-
   if (step === "billing") {
     return (
       <Billing
         initialCustomer={draft.customer}
         initialLines={draft.lines}
-        initialBillDiscount={draft.billDiscountPercentage}
+        initialBillDiscount={draft.billDiscountValue}
+        initialDiscountType={draft.discountType}
         onCancel={() => {
           setDraft(EMPTY_DRAFT);
           setStep("list");
         }}
-        onProceedToPayment={({ customer, lines, billDiscountPercentage }) => {
+        onProceedToPayment={({ customer, lines, billDiscountValue, discountType }) => {
           setDraft((prev) => ({
             ...prev,
             customer,
             lines,
-            billDiscountPercentage,
+            billDiscountValue,
+            discountType,
           }));
           setStep("payment");
         }}
@@ -353,23 +350,21 @@ const Page = () => {
         onGenerateInvoice={async (payment) => {
           if (!draft.customer) return;
 
-          const billDate = new Date().toISOString().split("T")[0];
-          let invoiceNo = nextInvoiceNo();
+          let invoiceNo = "";
+          let billDate = new Date().toISOString().split("T")[0];
 
           try {
-            const created = await createBilling(
+            const created: BillingRecord = await createBilling(
               buildBillingPayload({
                 customer: draft.customer,
                 lines: draft.lines,
                 payment,
-                billDiscountValue: draft.billDiscountPercentage,
-                discountType: "PERCENTAGE",
+                billDiscountValue: draft.billDiscountValue,
+                discountType: draft.discountType,
               })
             );
-            // Prefer whatever the API named the bill; fall back to the local
-            // stand-in so the invoice screen always has something to print.
-            invoiceNo =
-              created?.invoiceNo ?? created?.billNo ?? created?.billingId ?? invoiceNo;
+            invoiceNo = created?.billNo ?? "";
+            if (created?.createdAt) billDate = created.createdAt.split("T")[0];
           } catch (err) {
             toast.error(
               err instanceof Error ? err.message : "Failed to create the bill."
@@ -379,20 +374,8 @@ const Page = () => {
 
           setDraft((prev) => ({ ...prev, payment, invoiceNo, billDate }));
 
-          setBills((prev) => [
-            {
-              billId: prev.length + 1,
-              invoiceNo,
-              billDate,
-              customerName: draft.customer?.customerName || "Walk-in Customer",
-              mobileNo: draft.customer?.mobileNo || "—",
-              totalItems: totals.totalItems,
-              paymentMode: payment.paymentMode,
-              status: payment.paymentMode === "CREDIT" ? "Pending" : "Paid",
-              netAmount: totals.netAmount,
-            },
-            ...prev,
-          ]);
+          // Re-read the list so it shows what the server actually saved.
+          loadBills();
 
           setSummaryMode("create");
           setStep("invoice");
@@ -457,7 +440,15 @@ const Page = () => {
         </button>
       </div>
 
-      <DataTable columns={columns} data={filteredBills} />
+      <DataTable
+        columns={columns}
+        data={filteredBills}
+        emptyState={
+          <div className="py-16 text-center text-label-l4 text-pneutral-500">
+            {isLoadingBills ? "Loading bills…" : "No bills yet."}
+          </div>
+        }
+      />
     </div>
   );
 };

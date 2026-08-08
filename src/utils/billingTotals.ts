@@ -20,27 +20,39 @@ export const lineGst = (line: BillLine) =>
 /** Net Amount is (Gross - Discount) + GST. */
 export const lineNet = (line: BillLine) => lineTaxable(line) + lineGst(line);
 
-/**
- * The bill level discount expressed as a percentage, so it can be pushed down
- * onto every line. An amount is converted against the cart's gross.
- */
-export const billDiscountAsPercentage = (
-  lines: BillLine[],
-  billDiscountValue = 0,
-  discountType: "PERCENTAGE" | "AMOUNT" = "PERCENTAGE"
-): number => {
-  if (!billDiscountValue) return 0;
-  if (discountType === "PERCENTAGE") return billDiscountValue;
+export type DiscountType = "PERCENTAGE" | "AMOUNT";
 
-  const grossAmount = lines.reduce((sum, line) => sum + lineGross(line), 0);
-  return grossAmount > 0 ? (billDiscountValue / grossAmount) * 100 : 0;
+/**
+ * The bill level discount in both units. Whichever one the cashier typed, the
+ * other is derived against the cart's gross — that pair is what the summary
+ * shows and what the billing API is sent.
+ */
+export const billDiscountBothWays = (
+  grossAmount: number,
+  billDiscountValue = 0,
+  discountType: DiscountType = "PERCENTAGE"
+): { amount: number; percentage: number } => {
+  if (!billDiscountValue) return { amount: 0, percentage: 0 };
+
+  if (discountType === "PERCENTAGE") {
+    return {
+      amount: (grossAmount * billDiscountValue) / 100,
+      percentage: billDiscountValue,
+    };
+  }
+
+  return {
+    amount: billDiscountValue,
+    percentage: grossAmount > 0 ? (billDiscountValue / grossAmount) * 100 : 0,
+  };
 };
 
 /**
- * A single line costed out with the bill level discount folded in — the bill
- * discount adds to whatever discount the line already carries, and GST is then
- * charged on what is left. This is the breakdown the billing API is sent, and
- * summing it gives the totals below.
+ * A single line costed out with the bill level discount folded in. The bill
+ * discount lands on every line in full — a 15 rupee bill discount takes 15 off
+ * each line, a 10% one takes 10% off each line — on top of whatever discount
+ * the line already carries. GST is then charged on what is left, so the totals
+ * are nothing more than the sum of the lines.
  */
 export interface LineBreakdown {
   grossAmount: number;
@@ -53,20 +65,24 @@ export interface LineBreakdown {
 
 export const lineBreakdown = (
   line: BillLine,
-  extraDiscountPercentage = 0
+  billDiscountValue = 0,
+  discountType: DiscountType = "PERCENTAGE"
 ): LineBreakdown => {
   const grossAmount = lineGross(line);
-  const discountPercentage = Math.min(
-    100,
-    (line.discountPercentage || 0) + extraDiscountPercentage
-  );
-  const discountAmount = (grossAmount * discountPercentage) / 100;
+  const ownDiscount = (grossAmount * (line.discountPercentage || 0)) / 100;
+  const billShare =
+    discountType === "PERCENTAGE"
+      ? (grossAmount * billDiscountValue) / 100
+      : billDiscountValue;
+
+  // A line can never discount past its own gross.
+  const discountAmount = Math.min(grossAmount, ownDiscount + billShare);
   const taxableAmount = grossAmount - discountAmount;
   const gstAmount = (taxableAmount * (line.gstPercentage || 0)) / 100;
 
   return {
     grossAmount,
-    discountPercentage,
+    discountPercentage: grossAmount > 0 ? (discountAmount / grossAmount) * 100 : 0,
     discountAmount,
     taxableAmount,
     gstAmount,
@@ -77,31 +93,29 @@ export const lineBreakdown = (
 
 /**
  * Rolls the cart up into the numbers shown on the totals strip, the payment
- * screen and the invoice. `billDiscountValue` is the extra discount the cashier
- * applies on top of the per-line discounts; it is spread across the lines so
- * each one's GST is charged on its own discounted amount.
+ * screen and the invoice. Everything but `billDiscount` is a straight sum of
+ * the lines; the discount shown is the bill level one as entered, not the sum
+ * of every discount in the cart.
  */
 export const calculateBillTotals = (
   lines: BillLine[],
   billDiscountValue = 0,
-  discountType: "PERCENTAGE" | "AMOUNT" = "PERCENTAGE"
+  discountType: DiscountType = "PERCENTAGE"
 ): BillTotals => {
-  const extraDiscount = billDiscountAsPercentage(
-    lines,
-    billDiscountValue,
-    discountType
-  );
-
   const grossAmount = lines.reduce((sum, line) => sum + lineGross(line), 0);
   const itemDiscount = lines.reduce((sum, line) => sum + lineDiscount(line), 0);
 
-  const rows = lines.map((line) => lineBreakdown(line, extraDiscount));
-  const totalDiscount = rows.reduce((sum, row) => sum + row.discountAmount, 0);
+  const rows = lines.map((line) =>
+    lineBreakdown(line, billDiscountValue, discountType)
+  );
   const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
   const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
 
-  const totalPayable = taxableAmount + gstAmount;
-  const netAmount = Math.round(totalPayable);
+  const billDiscount = billDiscountBothWays(
+    grossAmount,
+    billDiscountValue,
+    discountType
+  );
 
   return {
     totalItems: lines.length,
@@ -111,18 +125,15 @@ export const calculateBillTotals = (
     ),
     grossAmount,
     itemDiscount,
-    // What the bill level discount alone took off, on top of the line discounts.
-    billDiscount: Math.max(0, totalDiscount - itemDiscount),
+    billDiscount: billDiscount.amount,
+    billDiscountPercentage: billDiscount.percentage,
     taxableAmount,
     gstAmount,
-    roundOff: netAmount - totalPayable,
-    netAmount,
+    // Paise are kept — rounding to whole rupees turned 24.05 into 24.00.
+    roundOff: 0,
+    netAmount: taxableAmount + gstAmount,
   };
 };
-
-/** Blended GST rate across the cart, for the "GST (x%)" label. */
-export const effectiveGstPercentage = (totals: BillTotals): number =>
-  totals.taxableAmount > 0 ? (totals.gstAmount / totals.taxableAmount) * 100 : 0;
 
 const ONES = [
   "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",

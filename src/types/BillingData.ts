@@ -130,8 +130,12 @@ export interface BillTotals {
   totalItems: number;
   totalQuantity: number;
   grossAmount: number;
+  /** Sum of the per-row discounts only. */
   itemDiscount: number;
+  /** The bill level discount as entered, in rupees. */
   billDiscount: number;
+  /** The same bill level discount as a percentage of gross. */
+  billDiscountPercentage: number;
   taxableAmount: number;
   gstAmount: number;
   roundOff: number;
@@ -146,6 +150,56 @@ export interface PaymentDetails {
   /** Cash handed back. Zero for every non-cash mode. */
   changeDue: number;
   creditDays?: number;
+}
+
+/** One line of a bill as the billing API returns it. */
+export interface BillingDetailRecord {
+  billingDetailsId: number;
+  billingId: number;
+  productId: string;
+  productName: string;
+  batchId: string;
+  batchNumber: string;
+  unit: string;
+  billQuantity: number;
+  grossAmount: number;
+  discountPercentage: number;
+  discountAmount: number;
+  gstAmount: number;
+  netAmount: number;
+}
+
+export interface BillingPaymentRecord {
+  paymentId: number;
+  billingId: number;
+  paymentMode: PaymentMode;
+  paymentType: "PAID" | "PENDING";
+  receivedAmount: number;
+  transactionId: string | null;
+}
+
+/** A saved bill, from /billing/allBilling and /billing/{id}. */
+export interface BillingRecord {
+  billingId: number;
+  billNo: string;
+  createdAt: string;
+  customerId: number | null;
+  customerName: string | null;
+  customerPhoneNo: string | null;
+  customerAddress: string | null;
+  customerType: CustomerType | null;
+  doctorId: number | null;
+  doctorName: string | null;
+  prescriptionUrl: string | null;
+  sellingType: string | null;
+  pharmacyId?: string;
+  totalGrossAmount: number;
+  totalDiscountPercentage: number;
+  totalDiscountAmount: number;
+  totalGstAmount: number;
+  totalNetAmount: number;
+  billingDetails: BillingDetailRecord[];
+  billingPayments: BillingPaymentRecord[];
 }
 
 /** One row of the bills list on the Sales & Billing landing page. */

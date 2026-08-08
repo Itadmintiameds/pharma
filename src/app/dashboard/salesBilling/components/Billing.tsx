@@ -38,10 +38,10 @@ import {
   DoctorRecord,
 } from "@/types/BillingData";
 import {
-  billDiscountAsPercentage,
+  billDiscountBothWays,
   calculateBillTotals,
-  effectiveGstPercentage,
   formatAmount,
+  type DiscountType,
 } from "@/utils/billingTotals";
 
 interface BillingProps {
@@ -49,11 +49,14 @@ interface BillingProps {
   onProceedToPayment: (bill: {
     customer: CustomerInfo;
     lines: BillLine[];
-    billDiscountPercentage: number;
+    /** As typed on this screen — the unit is carried alongside it. */
+    billDiscountValue: number;
+    discountType: DiscountType;
   }) => void;
   initialCustomer?: CustomerInfo;
   initialLines?: BillLine[];
   initialBillDiscount?: number;
+  initialDiscountType?: DiscountType;
 }
 
 const WalkIcon = () => (
@@ -144,6 +147,7 @@ const Billing: React.FC<BillingProps> = ({
   initialCustomer,
   initialLines,
   initialBillDiscount,
+  initialDiscountType,
 }) => {
   const [customer, setCustomer] = useState<CustomerInfo>(
     initialCustomer ?? EMPTY_CUSTOMER
@@ -153,7 +157,9 @@ const Billing: React.FC<BillingProps> = ({
       ? linesToRows(initialLines)
       : [emptyBillingRow()]
   );
-  const [discountType, setDiscountType] = useState<"AMOUNT" | "PERCENTAGE">("AMOUNT");
+  const [discountType, setDiscountType] = useState<DiscountType>(
+    initialDiscountType ?? "AMOUNT"
+  );
   const [billDiscountInput, setBillDiscountInput] = useState(
     initialBillDiscount ? String(initialBillDiscount) : "0"
   );
@@ -333,11 +339,8 @@ const Billing: React.FC<BillingProps> = ({
       onProceedToPayment({
         customer: { ...customer, doctorId },
         lines,
-        billDiscountPercentage: billDiscountAsPercentage(
-          lines,
-          Number(billDiscountInput) || 0,
-          discountType
-        ),
+        billDiscountValue: Number(billDiscountInput) || 0,
+        discountType,
       });
     } catch (err) {
       console.error("Failed to save the referring doctor:", err);
@@ -393,7 +396,12 @@ const Billing: React.FC<BillingProps> = ({
     discountType
   );
 
-  const gstRate = effectiveGstPercentage(totals);
+  // Whichever unit the cashier typed, the other is shown back to them.
+  const billDiscount = billDiscountBothWays(
+    totals.grossAmount,
+    Number(billDiscountInput) || 0,
+    discountType
+  );
 
   /**
    * Refreshes stock and pricing for the batch the grid just selected. This is
@@ -702,8 +710,11 @@ const Billing: React.FC<BillingProps> = ({
               </span>
             </div>
 
+            {/* Typed in one unit, echoed back in the other */}
             <div className="text-[15px] font-medium text-[#378200]">
-              Discount Amount : {formatAmount(totals.billDiscount)}
+              {discountType === "AMOUNT"
+                ? `Discount Percentage : ${billDiscount.percentage.toFixed(2)}%`
+                : `Discount Amount : ₹ ${formatAmount(billDiscount.amount)}`}
             </div>
           </div>
 
@@ -732,12 +743,12 @@ const Billing: React.FC<BillingProps> = ({
               <span className="text-right">₹ {formatAmount(totals.grossAmount)}</span>
             </div>
 
-            {/* Discount — line discounts plus the bill level one */}
+            {/* Discount — the bill level one as entered, not a cart-wide sum */}
             <div className="grid grid-cols-3 items-center w-full">
               <span className="text-left">Discount</span>
               <span className="text-center">(-)</span>
               <span className="text-right">
-                ₹ {formatAmount(totals.itemDiscount + totals.billDiscount)}
+                ₹ {formatAmount(totals.billDiscount)}
               </span>
             </div>
 
@@ -748,11 +759,9 @@ const Billing: React.FC<BillingProps> = ({
               <span className="text-right">₹ {formatAmount(totals.taxableAmount)}</span>
             </div>
 
-            {/* GST — blended rate across the cart, never a fixed slab */}
+            {/* GST — the amount only; lines can sit on different slabs */}
             <div className="grid grid-cols-3 items-center w-full">
-              <span className="text-left">
-                GST{gstRate > 0 ? ` (${gstRate.toFixed(2)}%)` : ""}
-              </span>
+              <span className="text-left">GST</span>
               <span className="text-center">(+)</span>
               <span className="text-right">₹ {formatAmount(totals.gstAmount)}</span>
             </div>

@@ -14,7 +14,6 @@ import {
 } from "@/types/BillingData";
 import {
   amountInWords,
-  effectiveGstPercentage,
   formatAmount,
   lineNet,
 } from "@/utils/billingTotals";
@@ -239,13 +238,8 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                 </span>
               </div>
               <div className="flex items-center justify-between text-[#3C3D3A]">
-                {/* Blended rate across the cart, not the first line's slab */}
-                <span>
-                  GST
-                  {effectiveGstPercentage(totals) > 0
-                    ? ` (${effectiveGstPercentage(totals).toFixed(2)}%)`
-                    : ""}
-                </span>
+                {/* Amount only — lines can sit on different GST slabs */}
+                <span>GST</span>
                 <span className="font-semibold text-[#1E1E1D]">
                   ₹ {formatAmount(totals.gstAmount || 0)}
                 </span>
