@@ -9,6 +9,7 @@ interface UnlockAccountProps {
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
   userName?: string;
+  employeeId?: string;
   loading?: boolean;
 }
 
@@ -17,6 +18,7 @@ const UnlockAccount = ({
   onClose,
   onConfirm,
   userName,
+  employeeId,
   loading = false,
 }: UnlockAccountProps) => {
   if (!isOpen) return null;
@@ -55,7 +57,10 @@ const UnlockAccount = ({
 
         <div className="text-p4 font-500 font-noto-sans text-pneutral-800 flex flex-col justify-center items-center">
           Are you sure you want to unlock <br />{" "}
-          <span className="font-semibold">Rahul Sharma (EMP-0007)?</span>
+          <span className="font-semibold">
+            {userName || "this user"}
+            {employeeId ? ` (${employeeId})` : ""}?
+          </span>
         </div>
 
         <div className="text-p4 font-normal font-noto-sans flex justify-center text-pneutral-800">
@@ -71,7 +76,14 @@ const UnlockAccount = ({
             >
               Cancel
             </button>
-            <button className="w-27 h-9 min-w-27 min-h-9 max-h-11 opacity-100 shadow-[-1px_1px_4px_0px_#00000040] rounded-lg text-label-l3 font-medium bg-danger-500 text-pneutral-800">Unlock</button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={loading}
+              className="w-27 h-9 min-w-27 min-h-9 max-h-11 opacity-100 shadow-[-1px_1px_4px_0px_#00000040] rounded-lg text-label-l3 font-medium bg-danger-500 text-pneutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Unlock
+            </button>
         </div>
       </div>
     </div>

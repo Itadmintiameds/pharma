@@ -39,15 +39,24 @@ const Sidebar = () => {
         const { userId } = await userRes.json();
         if (!userId) return;
 
-        const { getUserPharmacyKPIs } =
-          await import("@/services/SetupBusinessService");
-        const kpiResponse = await getUserPharmacyKPIs(String(userId));
+        const [{ getUserPharmacyKPIs }, { getUserById }] = await Promise.all([
+          import("@/services/SetupBusinessService"),
+          import("@/services/UserManagementService"),
+        ]);
 
-        if (kpiResponse && kpiResponse.data) {
-          // Unlock ONLY User Management if there is at least 1 approved (ACCEPTED) pharmacy
-          if (kpiResponse.data.approved > 0) {
-            setHasApprovedPharmacy(true);
-          }
+        const [kpiResponse, userDetails] = await Promise.all([
+          getUserPharmacyKPIs(String(userId)).catch(() => null),
+          getUserById(userId).catch(() => null),
+        ]);
+
+        // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
+        // OR a Super Admin already assigned it to an existing (already-approved) pharmacy
+        // via User Management — that user never goes through Setup Business/compliance.
+        const hasOwnApprovedPharmacy = (kpiResponse?.data?.approved ?? 0) > 0;
+        const hasAssignedPharmacy = (userDetails?.pharmacies?.length ?? 0) > 0;
+
+        if (hasOwnApprovedPharmacy || hasAssignedPharmacy) {
+          setHasApprovedPharmacy(true);
         }
       } catch (err) {
         console.error("Failed to check registration status for sidebar:", err);

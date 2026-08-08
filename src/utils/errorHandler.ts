@@ -4,8 +4,6 @@ export const handleApiError = (
   error: unknown,
   defaultMessage: string
 ): never => {
-  console.error(defaultMessage, error);
-
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
 

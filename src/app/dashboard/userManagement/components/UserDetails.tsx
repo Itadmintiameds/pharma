@@ -25,7 +25,13 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [unlockModalOpen, setUnlockModalOpen] = useState(false);
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
+
+  const normalizeRole = (role?: string) => (role || "").toLowerCase().replace(/[^a-z]/g, "");
+  const isOwnAccount = currentUserId !== null && Number(currentUserId) === Number(userId);
+  const canManageActions = ["superadmin", "admin"].includes(normalizeRole(currentUserRole));
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,6 +42,22 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const fetchCurrentUserRole = async () => {
+      try {
+        const response = await fetch("/api/user-info");
+        if (!response.ok) return;
+        const { role, userId: loggedInUserId } = await response.json();
+        setCurrentUserRole(role || "");
+        setCurrentUserId(loggedInUserId ?? null);
+      } catch (error) {
+        console.error("Failed to fetch current user role:", error);
+      }
+    };
+
+    fetchCurrentUserRole();
   }, []);
 
   const handleStatusChange = async (userStatus: "Active" | "Inactive") => {
@@ -146,8 +168,8 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
             <div className="relative" ref={actionsRef}>
               <button
                 onClick={() => setActionsOpen((prev) => !prev)}
-                disabled={statusUpdating}
-                className="w-27 h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-between text-p2 font-normal p-3 disabled:opacity-60"
+                disabled={statusUpdating || !canManageActions}
+                className="w-27 h-9 shrink-0 border-[1.5px] border-pneutral-300 rounded-lg flex items-center justify-between text-p2 font-normal p-3 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Actions
                 <Image
@@ -160,13 +182,14 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
               </button>
 
               {actionsOpen && (
-                <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-pneutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1 w-29.25 h-23 opacity-100 bg-white border border-pneutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
                   <button
                     onClick={() => {
                       setActionsOpen(false);
                       setUnlockModalOpen(true);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-p3 text-pneutral-900 hover:bg-pneutral-50"
+                    disabled={isOwnAccount || user?.userStatus === "Active"}
+                    className="w-full text-left px-4 py-2.5 font-noto-sans font-normal text-p4 tracking-[-0.02em] bg-white text-pneutral-900 hover:bg-pneutral-50 disabled:cursor-not-allowed disabled:text-pneutral-400 disabled:hover:bg-white"
                   >
                     Unlock
                   </button>
@@ -175,7 +198,8 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
                       setActionsOpen(false);
                       setDeactivateModalOpen(true);
                     }}
-                    className="w-full text-left px-4 py-2.5 text-p3 text-warning-600 hover:bg-pneutral-50"
+                    disabled={isOwnAccount || user?.userStatus !== "Active"}
+                    className="w-full text-left px-4 py-2.5 font-noto-sans font-normal text-p4 tracking-[-0.02em] bg-white text-pneutral-900 hover:bg-pneutral-50 disabled:cursor-not-allowed disabled:text-pneutral-400 disabled:hover:bg-white"
                   >
                     Deactivate
                   </button>
@@ -311,6 +335,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
         onClose={() => setUnlockModalOpen(false)}
         onConfirm={() => handleStatusChange("Active")}
         userName={user?.fullName}
+        employeeId={user?.employeeId}
         loading={statusUpdating}
       />
 
@@ -319,6 +344,7 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
         onClose={() => setDeactivateModalOpen(false)}
         onConfirm={() => handleStatusChange("Inactive")}
         userName={user?.fullName}
+        employeeId={user?.employeeId}
         loading={statusUpdating}
       />
     </>

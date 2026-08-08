@@ -16,6 +16,7 @@ const page = () => {
   const [showAddUser, setShowAddUser] = useState(false);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 7;
 
@@ -25,12 +26,20 @@ const page = () => {
   const [selectedStatus, setSelectedStatus] = useState("All Status");
   const [sortOrder, setSortOrder] = useState("None");
 
-  const roles = ["All Roles", ...Array.from(new Set(users.map(u => u.roleName).filter(Boolean)))];
-  const locations = ["All Locations", ...Array.from(new Set(users.flatMap(u => u.pharmacyCities || []).filter(Boolean)))];
+  const normalizeRole = (role?: string) => (role || "").toLowerCase().replace(/[^a-z]/g, "");
+  const isCurrentUserSuperAdmin = normalizeRole(currentUserRole) === "superadmin";
+
+  // Super Admin users are only visible to another Super Admin viewer
+  const visibleUsers = isCurrentUserSuperAdmin
+    ? users
+    : users.filter((u) => normalizeRole(u.roleName) !== "superadmin");
+
+  const roles = ["All Roles", ...Array.from(new Set(visibleUsers.map(u => u.roleName).filter(Boolean)))];
+  const locations = ["All Locations", ...Array.from(new Set(visibleUsers.flatMap(u => u.pharmacyCities || []).filter(Boolean)))];
   const statuses = ["All Status", "Active", "Inactive"];
   const sortOptions = ["None", "Ascending (A-Z)", "Descending (Z-A)"];
 
-  const filteredUsers = users.filter((u) => {
+  const filteredUsers = visibleUsers.filter((u) => {
     const term = searchTerm.trim().toLowerCase();
     const matchesSearch =
       !term ||
@@ -72,7 +81,19 @@ const page = () => {
       setLoading(false);
     };
 
+    const fetchCurrentUserRole = async () => {
+      try {
+        const response = await fetch("/api/user-info");
+        if (!response.ok) return;
+        const { role } = await response.json();
+        setCurrentUserRole(role || "");
+      } catch (error) {
+        console.error("Failed to fetch current user role:", error);
+      }
+    };
+
     fetchUsers();
+    fetchCurrentUserRole();
   }, []);
 
   const handleExport = () => {
