@@ -198,6 +198,8 @@ export interface BillingDetailRecord {
   productName: string;
   batchId: string;
   batchNumber: string;
+  /** Not on every saved bill — the batch is read back when it is absent. */
+  expiryDate?: string | null;
   unit: string;
   billQuantity: number;
   grossAmount: number;

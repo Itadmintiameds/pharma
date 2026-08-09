@@ -24,7 +24,7 @@ import {
   lineNet,
 } from "@/utils/billingTotals";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
-import { formatDate } from "@/utils/formatDate";
+import { formatDate, formatMonthYear } from "@/utils/formatDate";
 
 interface BillingPaymentInvoiceProps {
   invoiceNo: string;
@@ -245,7 +245,7 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
                     {line.batchNumber}
                   </td>
                   <td className="border border-pneutral-200 px-3 text-center">
-                    {formatDate(line.expiryDate)}
+                    {formatMonthYear(line.expiryDate)}
                   </td>
                   <td className="border border-pneutral-200 px-3 text-center">
                     {line.quantity}

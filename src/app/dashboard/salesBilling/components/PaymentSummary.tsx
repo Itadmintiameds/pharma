@@ -6,7 +6,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { showToast } from "@/app/components/common/Toast";
 import BillingSuccessModal from "./BillingSuccessModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
-import { formatDate, formatDateTime } from "@/utils/formatDate";
+import { formatDateTime, formatMonthYear } from "@/utils/formatDate";
 import { printElement } from "@/utils/printElement";
 import { BACK_BUTTON, PRIMARY_BUTTON } from "./billingButtons";
 import {
@@ -160,7 +160,9 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     {
       accessorKey: "expiryDate",
       header: () => <Centered>Exp</Centered>,
-      cell: ({ row }) => <Centered>{formatDate(row.original.expiryDate)}</Centered>,
+      cell: ({ row }) => (
+        <Centered>{formatMonthYear(row.original.expiryDate)}</Centered>
+      ),
     },
     {
       accessorKey: "quantity",

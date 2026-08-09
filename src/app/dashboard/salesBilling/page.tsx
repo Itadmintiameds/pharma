@@ -42,6 +42,7 @@ import {
   settleBillingPayment,
   uploadPrescription,
 } from "@/services/BillingService";
+import { ProductService } from "@/services/ProductService";
 
 type Step = "list" | "billing" | "payment" | "invoice" | "settle";
 
@@ -111,8 +112,8 @@ const toBillLines = (bill: BillingRecord): BillLine[] =>
       batchId: detail.batchId,
       batchNumber: detail.batchNumber,
       unit: detail.unit,
-      // Not carried on a saved bill.
-      expiryDate: "",
+      // Filled in from the batch when the saved bill does not carry it.
+      expiryDate: detail.expiryDate ?? "",
       quantity,
       freeQuantity: 0,
       mrpPerUnit: rate,
@@ -122,6 +123,37 @@ const toBillLines = (bill: BillingRecord): BillLine[] =>
       availableQuantity: 0,
     };
   });
+
+/**
+ * A saved bill does not always carry the batch expiry, so any line missing one
+ * has it read back off its batch. Best effort and batched by batch id — a
+ * lookup that fails leaves the cell empty rather than holding up the invoice.
+ */
+const withBatchExpiry = async (lines: BillLine[]): Promise<BillLine[]> => {
+  const missing = Array.from(
+    new Set(lines.filter((l) => !l.expiryDate && l.batchId).map((l) => l.batchId))
+  );
+  if (missing.length === 0) return lines;
+
+  const expiries = new Map<string, string>();
+  await Promise.all(
+    missing.map(async (batchId) => {
+      try {
+        const res = await ProductService.getBatchById(batchId);
+        const expiry = res?.data?.expiryDate;
+        if (expiry) expiries.set(batchId, expiry);
+      } catch (err) {
+        console.error(`Failed to read the expiry for batch ${batchId}`, err);
+      }
+    })
+  );
+
+  return lines.map((line) =>
+    line.expiryDate
+      ? line
+      : { ...line, expiryDate: expiries.get(line.batchId) ?? "" }
+  );
+};
 
 /** What the POS flow has collected so far. */
 interface BillDraft {
@@ -234,7 +266,7 @@ const Page = () => {
           doctorId: bill.doctorId,
           address: bill.customerAddress || "",
         },
-        lines: toBillLines(bill),
+        lines: await withBatchExpiry(toBillLines(bill)),
         payment: {
           paymentMode: payment?.paymentMode ?? "CASH",
           amountReceived: payment?.receivedAmount ?? bill.totalNetAmount,
