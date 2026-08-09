@@ -119,20 +119,33 @@ export const transactionIdSchema = (required: boolean) =>
  */
 export const toPaise = (value: number) => Math.round((value || 0) * 100);
 
-export const receivedAmountSchema = (amountDue: number, mustClearBill: boolean) =>
+/**
+ * @param amountDue what the bill still owes — never overpaid, whoever pays.
+ * @param canPayPartially an in-patient may hand over part of it, or nothing at
+ *        all, and carry the rest as pending. Everyone else clears it in full.
+ */
+export const receivedAmountSchema = (
+    amountDue: number,
+    canPayPartially: boolean
+) =>
     z
         .string()
         .trim()
         .min(1, "Received amount is required")
-        .refine((value) => Number(value) > 0, {
-            message: "Received amount must be above 0",
-        })
+        .refine(
+            (value) => (canPayPartially ? Number(value) >= 0 : Number(value) > 0),
+            {
+                message: canPayPartially
+                    ? "Received amount cannot be negative"
+                    : "Received amount must be above 0",
+            }
+        )
         .refine((value) => toPaise(Number(value)) <= toPaise(amountDue), {
             message: `Received amount cannot exceed the amount due of ₹ ${amountDue.toFixed(2)}`,
         })
         .refine(
             (value) =>
-                !mustClearBill || toPaise(Number(value)) >= toPaise(amountDue),
+                canPayPartially || toPaise(Number(value)) >= toPaise(amountDue),
             { message: `Full payment of ₹ ${amountDue.toFixed(2)} is required` }
         );
 

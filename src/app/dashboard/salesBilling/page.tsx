@@ -33,6 +33,7 @@ import {
   formatAmount,
   type DiscountType,
 } from "@/utils/billingTotals";
+import { formatDate } from "@/utils/formatDate";
 import {
   buildBillingPayload,
   createBilling,
@@ -282,7 +283,7 @@ const Page = () => {
     {
       accessorKey: "billDate",
       header: "Bill Date",
-      cell: ({ row }) => row.original.billDate?.split("T")[0] ?? "—",
+      cell: ({ row }) => formatDate(row.original.billDate),
     },
     { accessorKey: "invoiceNo", header: "Invoice No" },
     {

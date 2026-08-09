@@ -55,6 +55,11 @@ import {
   formatAmount,
   type DiscountType,
 } from "@/utils/billingTotals";
+import {
+  BACK_BUTTON,
+  DARK_BUTTON,
+  PRIMARY_BUTTON,
+} from "./billingButtons";
 
 interface BillingProps {
   onCancel: () => void;
@@ -258,10 +263,6 @@ const Billing: React.FC<BillingProps> = ({
   const [isAddingNewDoctor, setIsAddingNewDoctor] = useState(false);
   const [newDoctorName, setNewDoctorName] = useState("");
 
-  // Patient ids already on file for this number. No endpoint serves these yet,
-  // so the field falls through to free text.
-  const [knownPatientNumbers, setKnownPatientNumbers] = useState<string[]>([]);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   /** Validation messages shown under the customer fields. */
@@ -275,15 +276,6 @@ const Billing: React.FC<BillingProps> = ({
   );
   /** "Customer" for a walk-in, "Patient" for OP/IP/Daycare. */
   const personLabel = isPatientType ? "Patient" : "Customer";
-  /**
-   * A saved patient's number comes with their record, so it is picked. A new
-   * name has no record yet, so its number is typed and created with the bill —
-   * another person's numbers must never be offered for it.
-   */
-  const showPatientNumberOptions =
-    !isAddingNewCustomer &&
-    !!customer.customerId &&
-    knownPatientNumbers.length > 0;
   const visitNumberLabel =
     VISIT_NUMBER_LABELS[customer.customerType as CustomerType] ?? "Visit Number";
 
@@ -352,6 +344,17 @@ const Billing: React.FC<BillingProps> = ({
   const patientNoOf = (record?: CustomerRecord) =>
     record?.patientNo ?? record?.patientNumber ?? "";
 
+  /**
+   * One patient, one patient number. It belongs to the person picked rather
+   * than to the phone number they share, so it is read straight off their
+   * record — never offered as a choice, and never re-typed. A person with no
+   * number on file has one captured with this bill.
+   */
+  const patientOnRecord = isAddingNewCustomer
+    ? undefined
+    : knownCustomers.find((c) => c.customerId === customer.customerId);
+  const patientNoOnRecord = patientNoOf(patientOnRecord);
+
   const doctorOptions: DropdownOption[] = [
     ...doctors.map((d) => ({ label: d.doctorName, value: d.doctorId })),
     { label: "+ Add New Doctor", value: "ADD_NEW" },
@@ -377,7 +380,6 @@ const Billing: React.FC<BillingProps> = ({
 
     if (mobileNo.length < 10) {
       setKnownCustomers([]);
-      setKnownPatientNumbers([]);
       return;
     }
 
@@ -385,10 +387,6 @@ const Billing: React.FC<BillingProps> = ({
     try {
       const matches = await getCustomersByPhone(mobileNo);
       setKnownCustomers(matches);
-      // The same lookup carries each record's patient number.
-      setKnownPatientNumbers(
-        Array.from(new Set(matches.map(patientNoOf).filter(Boolean)))
-      );
       // A single match needs no picking.
       if (matches.length === 1) {
         setCustomer((prev) => ({
@@ -401,7 +399,6 @@ const Billing: React.FC<BillingProps> = ({
     } catch (err) {
       console.error("Failed to look up customers:", err);
       setKnownCustomers([]);
-      setKnownPatientNumbers([]);
     } finally {
       setIsLookingUpCustomers(false);
     }
@@ -452,12 +449,17 @@ const Billing: React.FC<BillingProps> = ({
     const nextErrors = {
       mobileNo: validatePhone(customer.mobileNo),
       customerName: validateName(customer.customerName, `${personLabel} name`),
-      patientNumber: isPatientType
-        ? validateCode(customer.patientNumber ?? "", "Patient number", CODE_MAX)
-        : "",
-      visitNumber: isPatientType
-        ? validateCode(customer.visitNumber ?? "", visitNumberLabel, CODE_MAX)
-        : "",
+      // Required only when the patient has no number on file yet — a number
+      // that came off their record is already valid.
+      patientNumber:
+        isPatientType && !patientNoOnRecord
+          ? validateCode(customer.patientNumber ?? "", "Patient number", CODE_MAX)
+          : "",
+      // The visit number is optional, so it is only checked once typed.
+      visitNumber:
+        isPatientType && (customer.visitNumber ?? "").trim()
+          ? validateCode(customer.visitNumber ?? "", visitNumberLabel, CODE_MAX)
+          : "",
       address: validateAddress(customer.address),
     };
 
@@ -471,18 +473,16 @@ const Billing: React.FC<BillingProps> = ({
     try {
       const doctorId = await resolveDoctor();
 
-      // A patient number picked from the dropdown is already on the customer
-      // record, so the id alone identifies it. Only a newly typed one needs
-      // sending — either to attach it to the customer or to create them.
+      // A number already on the customer's record travels with their id, so
+      // only a newly typed one is sent — to attach it to the customer or to
+      // create them with it.
       const patientNumber = customer.patientNumber?.trim() ?? "";
-      const isOnRecord =
-        !!customer.customerId && knownPatientNumbers.includes(patientNumber);
 
       onProceedToPayment({
         customer: {
           ...customer,
           doctorId,
-          patientNumber: isOnRecord ? "" : patientNumber,
+          patientNumber: patientNoOnRecord ? "" : patientNumber,
         },
         lines,
         billDiscountValue: Number(billDiscountInput) || 0,
@@ -531,7 +531,6 @@ const Billing: React.FC<BillingProps> = ({
     setIsAddingNewCustomer(false);
     setIsAddingNewDoctor(false);
     setNewDoctorName("");
-    setKnownPatientNumbers([]);
   };
 
   // Both are plain arithmetic over a handful of rows — cheap enough to derive
@@ -639,16 +638,20 @@ const Billing: React.FC<BillingProps> = ({
             type that needs extra fields adds them alongside this grid. */}
         {customer.customerType !== "" && (
           <>
-            {/* Patient types open with their own section rule */}
+            {/* Patient types open with their own section heading — no rule
+                under it, and 16px clear of the type chips above. */}
             {isPatientType && (
-              <div className="h-8 pb-2 border-b border-pneutral-200 flex items-end">
+              <div className="flex items-end">
                 <span className="font-body font-medium text-label-l4 text-pneutral-900">
                   Patient Details
                 </span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* items-start keeps each field at its own height — without it a
+                short field stretches to match the address box beside it and
+                its dropdown menu opens well below the control. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
               {/* Phone first — the names below are looked up from it. */}
               <Input
                 label="Mobile Number"
@@ -717,24 +720,16 @@ const Billing: React.FC<BillingProps> = ({
                 />
               )}
 
-              {/* Patient id — picked for a saved patient, typed for a new one */}
+              {/* Patient id — filled from the patient's own record when they
+                  have one, typed once for a patient who does not. */}
               {isPatientType &&
-                (showPatientNumberOptions ? (
-                  <Dropdown
+                (patientNoOnRecord ? (
+                  <Input
                     label="Patient Number"
-                    required
-                    placeholder="Select patient number"
-                    options={knownPatientNumbers.map((no) => ({
-                      label: no,
-                      value: no,
-                    }))}
-                    value={customer.patientNumber ?? ""}
-                    onChange={(value: string) => {
-                      setField("patientNumber", value);
-                      setFieldError("patientNumber", "");
-                    }}
-                    error={fieldErrors.patientNumber}
-                    searchable
+                    readOnly
+                    value={patientNoOnRecord}
+                    onChange={() => {}}
+                    hint="On file for this patient."
                   />
                 ) : (
                   <Input
@@ -752,18 +747,18 @@ const Billing: React.FC<BillingProps> = ({
                     }}
                     error={fieldErrors.patientNumber}
                     hint={
-                      isAddingNewCustomer || !customer.customerId
-                        ? "Created with this bill."
+                      !fieldErrors.patientNumber
+                        ? "Saved against this patient with the bill."
                         : undefined
                     }
                   />
                 ))}
 
-              {/* Visit number — OP for outpatients, IP for inpatients/daycare */}
+              {/* Visit number — OP for outpatients, IP for inpatients/daycare.
+                  Optional: a patient may be billed without one. */}
               {isPatientType && (
                 <Input
                   label={visitNumberLabel}
-                  required
                   placeholder={`Enter ${visitNumberLabel}`}
                   value={customer.visitNumber ?? ""}
                   onChange={(e) => {
@@ -771,7 +766,7 @@ const Billing: React.FC<BillingProps> = ({
                     setField("visitNumber", code);
                     setFieldError(
                       "visitNumber",
-                      validateCode(code, visitNumberLabel)
+                      code ? validateCode(code, visitNumberLabel) : ""
                     );
                   }}
                   error={fieldErrors.visitNumber}
@@ -996,18 +991,6 @@ const Billing: React.FC<BillingProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => {
-              if (lines.length === 0) return;
-              setRows([emptyBillingRow()]);
-              showToast.success("Cart cleared");
-            }}
-            className="h-[48px] px-6 rounded-[8px] border-[2px] border-pneutral-900 bg-white hover:bg-pneutral-50 text-pneutral-900 font-semibold text-base flex items-center justify-center gap-2.5 shadow-sm transition-all w-fit cursor-pointer"
-          >
-            <ShoppingCart size={20} className="text-pneutral-900" />
-            Clear Cart
-          </button>
         </div>
 
         {/* Right Side - Totals Card & Proceed Button */}
@@ -1052,17 +1035,44 @@ const Billing: React.FC<BillingProps> = ({
             </div>
           </div>
 
-          <div className="flex justify-end w-full">
-            <button
-              type="button"
-              disabled={lines.length === 0 || isSubmitting}
-              onClick={handleProceed}
-              className="h-[48px] px-8 rounded-[8px] bg-[#7D32FC] hover:bg-[#6823df] text-white font-semibold text-base shadow-md disabled:opacity-50 transition-all w-full sm:w-auto cursor-pointer block"
-            >
-              {isSubmitting ? "Please wait…" : "Proceed to Payment"}
-            </button>
-          </div>
         </div>
+      </div>
+
+      {/* Action row under the two cards — leaving the cart, emptying it, and
+          taking it to payment. */}
+      <div className="w-full h-14 flex flex-wrap items-center justify-between gap-4 mt-4">
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isSubmitting}
+            className={`${BACK_BUTTON} w-[164px] shrink-0`}
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              if (lines.length === 0) return;
+              setRows([emptyBillingRow()]);
+              showToast.success("Cart cleared");
+            }}
+            className={`${DARK_BUTTON} w-[161px] shrink-0`}
+          >
+            <ShoppingCart size={24} />
+            Clear Cart
+          </button>
+        </div>
+
+        <button
+          type="button"
+          disabled={lines.length === 0 || isSubmitting}
+          onClick={handleProceed}
+          className={`${PRIMARY_BUTTON} w-[219px] shrink-0`}
+        >
+          {isSubmitting ? "Please wait…" : "Proceed to Payment"}
+        </button>
       </div>
       </>
       )}

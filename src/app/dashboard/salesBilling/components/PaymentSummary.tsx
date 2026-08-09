@@ -6,6 +6,9 @@ import { ColumnDef } from "@tanstack/react-table";
 import { showToast } from "@/app/components/common/Toast";
 import BillingSuccessModal from "./BillingSuccessModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
+import { formatDate, formatDateTime } from "@/utils/formatDate";
+import { printElement } from "@/utils/printElement";
+import { BACK_BUTTON, PRIMARY_BUTTON } from "./billingButtons";
 import {
   BillLine,
   BillTotals,
@@ -35,6 +38,32 @@ interface PaymentSummaryProps {
    */
   onSave?: () => Promise<{ billNo: string } | null>;
 }
+
+/** Every column of the invoice grid is centred, so both ends share a cell. */
+const Centered: React.FC<{ children: React.ReactNode; className?: string }> = ({
+  children,
+  className,
+}) => (
+  <span className={`block w-full text-center ${className ?? ""}`}>
+    {children}
+  </span>
+);
+
+/** One `Label : Value` line of the bill details card — 24px tall, 124px
+ *  label, 5px colon, the value taking the rest. */
+const Fact: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex h-6 items-center gap-3">
+    <span className="w-[124px] shrink-0 font-body text-p4 font-normal text-pneutral-800">
+      {label}
+    </span>
+    <span className="w-[5px] shrink-0 font-body text-p4 font-normal text-pneutral-800">
+      :
+    </span>
+    <span className="flex-1 truncate font-body text-p4 font-medium text-pneutral-900">
+      {value}
+    </span>
+  </div>
+);
 
 const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   invoiceNo,
@@ -79,6 +108,18 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     showToast.info("Feature coming soon.");
   };
 
+  /** Hands the invoice to the browser's print dialog — a real printer, not a
+   *  silent PDF download. */
+  const handlePrint = () => {
+    if (!printRef.current) return;
+    try {
+      printElement(printRef.current, `Invoice ${invoiceNo}`);
+    } catch (err) {
+      console.error("Failed to open the print view", err);
+      showToast.error("Could not open the print dialog.");
+    }
+  };
+
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
     setIsSubmitting(true);
@@ -98,68 +139,100 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
 
   const columns: ColumnDef<BillLine>[] = [
     {
-      header: "#",
-      cell: ({ row }) => row.index + 1,
+      id: "slNo",
+      header: () => <Centered>Sl. No.</Centered>,
+      cell: ({ row }) => <Centered>{row.index + 1}</Centered>,
     },
     {
       accessorKey: "productName",
-      header: "Product Name",
+      header: () => <Centered>Product Name</Centered>,
       cell: ({ row }) => (
-        <span className="font-medium text-[#1E1E1D]">
+        <Centered className="font-semibold text-pneutral-900">
           {row.original.productName || "—"}
-        </span>
+        </Centered>
       ),
     },
     {
       accessorKey: "batchNumber",
-      header: "Batch",
-      cell: ({ row }) => row.original.batchNumber || "—",
+      header: () => <Centered>Batch</Centered>,
+      cell: ({ row }) => <Centered>{row.original.batchNumber || "—"}</Centered>,
     },
     {
-      accessorKey: "unit",
-      header: "Unit",
-      cell: ({ row }) => row.original.unit || "BOX",
+      accessorKey: "expiryDate",
+      header: () => <Centered>Exp</Centered>,
+      cell: ({ row }) => <Centered>{formatDate(row.original.expiryDate)}</Centered>,
     },
     {
       accessorKey: "quantity",
-      header: "QTY",
+      // Stock is counted in smallest units, so this is what was billed of them.
+      header: () => <Centered>Purchase QTY</Centered>,
+      cell: ({ row }) => <Centered>{row.original.quantity}</Centered>,
+    },
+    {
+      accessorKey: "discountPercentage",
+      header: () => <Centered>Discount (%)</Centered>,
+      cell: ({ row }) => <Centered>{row.original.discountPercentage || 0}</Centered>,
+    },
+    {
+      id: "rate",
+      header: () => <Centered>Rate (₹)</Centered>,
       cell: ({ row }) => (
-        <span className="font-semibold text-[#1E1E1D]">{row.original.quantity}</span>
+        <Centered>
+          {formatAmount(
+            row.original.sellingPricePerUnit ?? row.original.mrpPerUnit ?? 0
+          )}
+        </Centered>
       ),
     },
     {
-      header: "Rate (₹)",
-      cell: ({ row }) => {
-        const rate =
-          row.original.sellingPricePerUnit ?? row.original.mrpPerUnit ?? 0;
-        return `₹ ${formatAmount(rate)}`;
-      },
-    },
-    {
       accessorKey: "gstPercentage",
-      header: "GST (%)",
-      cell: ({ row }) => `${row.original.gstPercentage ?? 0}%`,
+      header: () => <Centered>GST%</Centered>,
+      cell: ({ row }) => (
+        <Centered>{formatAmount(row.original.gstPercentage ?? 0)}</Centered>
+      ),
     },
     {
-      header: "Amount (₹)",
-      cell: ({ row }) => {
-        const lineAmt = lineNet(row.original);
-        return (
-          <span className="font-semibold text-[#1E1E1D]">
-            ₹ {formatAmount(lineAmt)}
-          </span>
-        );
-      },
+      id: "netAmount",
+      header: () => <Centered>Net Amount (₹)</Centered>,
+      cell: ({ row }) => (
+        <Centered>{formatAmount(lineNet(row.original))}</Centered>
+      ),
     },
+  ];
+
+  /** The three invoice facts on the left of the bill details card. */
+  const BILL_FACTS = [
+    { label: "Bill No", value: invoiceNo || "—" },
+    { label: "Bill Date & Time", value: formatDateTime(billDate) },
+    { label: "Payment Mode", value: payment.paymentMode || "CASH" },
+  ];
+
+  /** The four lines above NET PAYABLE. Discount holds whether or not one was
+   *  given, so the card keeps its 184px height either way. */
+  const AMOUNT_ROWS = [
+    { label: "Gross Amount", value: totals.grossAmount || 0 },
+    {
+      label: "Discount",
+      value: (totals.itemDiscount || 0) + (totals.billDiscount || 0),
+    },
+    { label: "Taxable Amt", value: totals.taxableAmount || 0 },
+    // Amount only — lines can sit on different GST slabs.
+    { label: "GST", value: totals.gstAmount || 0 },
+  ];
+
+  /** The two customer facts on the right. */
+  const CUSTOMER_FACTS = [
+    { label: "Customer", value: customer?.customerName || "Walk-in Customer" },
+    { label: "Mobile", value: customer?.mobileNo || "—" },
   ];
 
   return (
     <div className="flex flex-col gap-4 w-full bg-transparent pb-12">
       {/* Printable Ref Wrapper */}
       <div ref={printRef} className="flex flex-col gap-4 w-full bg-transparent">
-        {/* Title Header */}
-        <div className="w-full min-h-[70px] px-4 py-3 flex items-center bg-secondary-600 border-t border-secondary-50 rounded-xl shadow-sm">
-          <h1 className="text-white font-semibold text-[22px] sm:text-[24px] leading-tight">
+        {/* Title bar — 70px tall, 16px padding, with the light rule on top */}
+        <div className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600">
+          <h1 className="font-heading text-h4 font-semibold text-secondary-50">
             {currentMode === "view"
               ? "View Payment Invoice"
               : currentMode === "download"
@@ -168,122 +241,62 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           </h1>
         </div>
 
-        {/* Top Summary Card (Invoice & Customer Info Wrapper) */}
-        <div className="w-full bg-white border border-[#D5D5D4] rounded-xl p-4 shadow-2xs">
-          <div className="w-full px-4 py-3 bg-[#F8F5FF] border border-[#D5D5D4] rounded-lg flex flex-col md:flex-row items-start justify-between gap-6 text-[14px]">
-            {/* Left Side: Invoice details */}
-            <div className="flex-1 flex flex-col gap-2.5 w-full">
-              <div className="flex items-center">
-                <span className="w-[140px] sm:w-[160px] text-[#3C3D3A]">
-                  Invoice No
-                </span>
-                <span className="w-4 text-[#3C3D3A]">:</span>
-                <span className="font-medium text-[#1E1E1D]">
-                  {invoiceNo || "—"}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-[140px] sm:w-[160px] text-[#3C3D3A]">
-                  Invoice Date & Time
-                </span>
-                <span className="w-4 text-[#3C3D3A]">:</span>
-                <span className="font-medium text-[#1E1E1D]">
-                  {billDate
-                    ? billDate.includes("T")
-                      ? billDate.replace("T", " ")
-                      : billDate
-                    : "—"}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-[140px] sm:w-[160px] text-[#3C3D3A]">
-                  Payment Mode
-                </span>
-                <span className="w-4 text-[#3C3D3A]">:</span>
-                <span className="font-semibold text-[#1E1E1D] px-2 py-0.5 rounded bg-white border border-[#D5D5D4] text-xs uppercase shadow-2xs">
-                  {payment.paymentMode || "CASH"}
-                </span>
-              </div>
-            </div>
+        {/* Bill details — the invoice facts and the customer, side by side.
+            Each column is a stack of 24px lines at a 10px rhythm. */}
+        <div className="w-full rounded-xl border border-pneutral-200 bg-secondary-50 px-4 py-3 flex flex-col md:flex-row items-start gap-6">
+          <div className="flex-1 w-full flex flex-col gap-2.5">
+            {BILL_FACTS.map((fact) => (
+              <Fact key={fact.label} label={fact.label} value={fact.value} />
+            ))}
+          </div>
 
-            {/* Right Side: Customer info */}
-            <div className="flex-1 flex flex-col gap-2.5 w-full md:max-w-[420px]">
-              <div className="flex items-center">
-                <span className="w-[80px] sm:w-[100px] text-[#3C3D3A]">
-                  Customer
-                </span>
-                <span className="w-4 text-[#3C3D3A]">:</span>
-                <span className="font-medium text-[#1E1E1D]">
-                  {customer?.customerName || "Walk-in Customer"}
-                </span>
-              </div>
-              <div className="flex items-center">
-                <span className="w-[80px] sm:w-[100px] text-[#3C3D3A]">
-                  Mobile
-                </span>
-                <span className="w-4 text-[#3C3D3A]">:</span>
-                <span className="font-medium text-[#1E1E1D]">
-                  {customer?.mobileNo || "—"}
-                </span>
-              </div>
-            </div>
+          <div className="flex-1 w-full flex flex-col gap-2.5">
+            {CUSTOMER_FACTS.map((fact) => (
+              <Fact key={fact.label} label={fact.label} value={fact.value} />
+            ))}
           </div>
         </div>
 
-        {/* Data Table Section */}
-        <div className="w-full bg-white border border-[#D5D5D4] rounded-xl p-4 shadow-2xs">
+        {/* Invoice grid — DataTable brings its own rounded border, so it is not
+            boxed a second time. Height follows the number of lines: a fixed
+            minimum would leave dead space under a short bill. */}
+        <div className="w-full">
           <DataTable columns={columns} data={lines} />
         </div>
 
-        {/* Bottom Totals & Words Section */}
-        <div className="w-full bg-white border border-[#D5D5D4] rounded-xl p-3 flex flex-col lg:flex-row items-stretch gap-4 sm:gap-6 shadow-2xs">
-          {/* First Card: Amount in Words */}
-          <div className="flex-[2] w-full min-h-[160px] rounded-lg border border-[#D5D5D4] bg-white p-4 flex flex-col justify-start gap-2">
-            <div className="text-[14px] text-[#3C3D3A] font-normal">
+        {/* Amount in words beside the totals — 184px tall, 16px apart */}
+        <div className="w-full flex flex-col lg:flex-row items-stretch gap-4">
+          <div className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4">
+            <span className="font-body text-p4 font-normal text-pneutral-800">
               Amount in words
-            </div>
-            <div className="text-[16px] sm:text-[18px] font-semibold text-[#1E1E1D] capitalize">
+            </span>
+            <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
               {amountInWords(Math.round(totals.netAmount || 0))}
-            </div>
+            </span>
           </div>
 
-          {/* Next Card: Gross & Net Payable Summary */}
-          <div className="w-full lg:w-[360px] rounded-lg border border-[#D5D5D4] bg-white p-3 flex flex-col justify-between gap-3 shrink-0">
-            <div className="flex flex-col gap-1.5 text-[14px]">
-              <div className="flex items-center justify-between">
-                <span className="text-[#3C3D3A] font-normal">Gross Amount</span>
-                <span className="font-semibold text-[#1E1E1D]">
-                  ₹ {formatAmount(totals.grossAmount || 0)}
+          {/* Amount summary — four 24px lines at an 8px rhythm, then NET
+              PAYABLE on its own 32px line above a hairline. */}
+          <div className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2">
+            {AMOUNT_ROWS.map((row) => (
+              <div
+                key={row.label}
+                className="flex h-6 items-center justify-between"
+              >
+                <span className="font-body text-p4 font-normal text-pneutral-800">
+                  {row.label}
+                </span>
+                <span className="font-body text-p4 font-semibold text-pneutral-900">
+                  ₹ {formatAmount(row.value)}
                 </span>
               </div>
-              {(totals.itemDiscount > 0 || totals.billDiscount > 0) && (
-                <div className="flex items-center justify-between text-[#3C3D3A]">
-                  <span>Discount</span>
-                  <span className="font-semibold text-[#1E1E1D]">
-                    ₹ {formatAmount((totals.itemDiscount || 0) + (totals.billDiscount || 0))}
-                  </span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-[#3C3D3A]">
-                <span>Taxable Amt</span>
-                <span className="font-semibold text-[#1E1E1D]">
-                  ₹ {formatAmount(totals.taxableAmount || 0)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[#3C3D3A]">
-                {/* Amount only — lines can sit on different GST slabs */}
-                <span>GST</span>
-                <span className="font-semibold text-[#1E1E1D]">
-                  ₹ {formatAmount(totals.gstAmount || 0)}
-                </span>
-              </div>
-            </div>
+            ))}
 
-            <div className="w-full border-t border-[#D5D5D4] pt-2 flex items-center justify-between">
-              <span className="text-[16px] sm:text-[18px] font-semibold text-[#1E1E1D] uppercase">
+            <div className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2">
+              <span className="font-body text-p5 font-semibold text-pneutral-900">
                 NET PAYABLE
               </span>
-              <span className="text-[18px] sm:text-[20px] font-bold text-[#1E1E1D]">
+              <span className="font-body text-p5 font-semibold text-pneutral-900">
                 ₹ {formatAmount(totals.netAmount || 0)}
               </span>
             </div>
@@ -292,7 +305,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       </div>
 
       {/* Action Buttons Footer */}
-      <div className="w-full flex flex-wrap items-center justify-between gap-4 mt-2">
+      <div className="w-full h-14 flex flex-wrap items-center justify-between gap-4">
         <button
           type="button"
           onClick={() => {
@@ -305,50 +318,37 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
             }
           }}
           disabled={isSubmitting}
-          className="w-[164px] h-[56px] rounded-[8px] border-[2.5px] border-[#1E1E1D] bg-white hover:bg-gray-50 text-[#1E1E1D] font-semibold text-[16px] flex items-center justify-center transition-all shadow-xs cursor-pointer disabled:opacity-50 shrink-0"
+          className={`${BACK_BUTTON} w-[108px] shrink-0`}
         >
-          {currentMode === "view" ? "Cancel" : "Back"}
+          Back
         </button>
 
-        {/* Print moved into the success popup */}
-        <div className="flex items-center gap-3 shrink-0">
-          {currentMode !== "view" ? (
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSubmitting}
-              className="w-[272px] h-[56px] rounded-[8px] bg-primary-800 hover:opacity-90 text-white font-semibold text-[16px] flex items-center justify-center transition-all shadow-md cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              {isSubmitting
-                ? "Processing..."
-                : currentMode === "download"
-                ? "Download PDF"
-                : "Save Bill"}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isSubmitting}
-              className="w-[200px] h-[56px] rounded-[8px] bg-primary-800 hover:opacity-90 text-white font-semibold text-[16px] flex items-center justify-center transition-all shadow-md cursor-pointer disabled:opacity-50 shrink-0"
-            >
-              {isSubmitting ? "Generating..." : "Download Invoice"}
-            </button>
-          )}
-        </div>
+        {/* Viewing a saved bill prints it; the create flow saves it. */}
+        <button
+          type="button"
+          onClick={currentMode === "view" ? handlePrint : handleSave}
+          disabled={isSubmitting}
+          className={`${PRIMARY_BUTTON} ${
+            currentMode === "view" ? "w-[128px]" : "w-[108px]"
+          } shrink-0`}
+        >
+          {currentMode === "view"
+            ? "Print"
+            : isSubmitting
+            ? "Saving..."
+            : currentMode === "download"
+            ? "Download"
+            : "Save"}
+        </button>
       </div>
 
       <BillingSuccessModal
         isOpen={!!savedBillNo}
-        onClose={() => {
-          setSavedBillNo(null);
-          if (onDone) onDone();
-        }}
         billNo={savedBillNo ?? invoiceNo}
         totalItems={lines.length}
         netAmount={totals.netAmount}
         onSendToWhatsapp={handleSendToWhatsapp}
-        onPrint={handleDownloadPdf}
+        onPrint={handlePrint}
         onBackToDashboard={() => {
           setSavedBillNo(null);
           if (onDone) onDone();

@@ -185,7 +185,8 @@ export interface PaymentDetails {
   remarks: string;
   /** Cash handed back. Zero for every non-cash mode. */
   changeDue: number;
-  /** Still owed after this payment — non-zero only for credit. */
+  /** Still owed after this payment — non-zero only for an in-patient, who may
+   *  pay in part through any mode or bill the whole amount to credit. */
   pendingAmount: number;
 }
 

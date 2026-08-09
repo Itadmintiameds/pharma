@@ -25,7 +25,6 @@ const WhatsAppIcon = ({ size = 16 }: { size?: number }) => (
 
 interface BillingSuccessModalProps {
   isOpen: boolean;
-  onClose: () => void;
   billNo?: string;
   totalItems?: number;
   netAmount?: number;
@@ -36,7 +35,6 @@ interface BillingSuccessModalProps {
 
 export default function BillingSuccessModal({
   isOpen,
-  onClose,
   billNo,
   totalItems,
   netAmount,
@@ -48,22 +46,9 @@ export default function BillingSuccessModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+      {/* No close affordance in the corner — the bill is already saved, so the
+          popup is dismissed through one of the actions at the foot of it. */}
       <div className="relative w-[460px] min-h-[471px] rounded-[20px] bg-white px-6 py-8 flex flex-col gap-6">
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="absolute top-4 right-4 flex h-5 w-5 items-center justify-center cursor-pointer"
-        >
-          <Image
-            src="/Purchase/CloseIcon.svg"
-            alt=""
-            width={20}
-            height={20}
-            className="shrink-0"
-          />
-        </button>
-
         <div className="flex justify-center">
           <Image
             src="/Purchase/CheckIcon.svg"

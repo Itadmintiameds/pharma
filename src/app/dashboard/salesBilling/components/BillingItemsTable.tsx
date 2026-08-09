@@ -23,6 +23,7 @@ import { sanitizeNumber, sanitizePercentage } from "@/app/schema/BillingSchema";
 import Input from "@/app/components/common/Input";
 import { BillableProduct } from "@/types/BillingData";
 import { formatAmount } from "@/utils/billingTotals";
+import { formatDate } from "@/utils/formatDate";
 
 /** One editable line. Numeric inputs stay strings so the fields can be blank. */
 export interface BillingRow {
@@ -285,7 +286,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
       {
         id: "expiry",
         header: "Exp",
-        cell: ({ row }) => row.original.expiryDate || "\u2014",
+        cell: ({ row }) => formatDate(row.original.expiryDate),
       },
       {
         id: "quantity",

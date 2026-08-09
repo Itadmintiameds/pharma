@@ -24,6 +24,7 @@ import {
   lineNet,
 } from "@/utils/billingTotals";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
+import { formatDate } from "@/utils/formatDate";
 
 interface BillingPaymentInvoiceProps {
   invoiceNo: string;
@@ -75,6 +76,10 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
   };
 
   const isCredit = payment.paymentMode === "CREDIT";
+  /** Any mode can be part paid for an in-patient, so the balance drives the
+   *  banner rather than the mode. */
+  const pending = payment.pendingAmount ?? 0;
+  const isPartial = !isCredit && pending > 0;
 
   const summaryRows = [
     { label: "Sub Total", value: formatAmount(totals.grossAmount) },
@@ -90,7 +95,7 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
       {/* Payment status */}
       <div
         className={`flex items-center gap-4 rounded-[20px] border p-4 ${
-          isCredit
+          isCredit || isPartial
             ? "border-warning-600 bg-warning-50 text-warning-600"
             : "border-success-600 bg-success-50 text-success-800"
         }`}
@@ -98,16 +103,22 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
         <CheckCircle2 size={32} className="shrink-0" />
         <div className="flex flex-col">
           <div className="text-p4 font-bold font-noto-sans">
-            {isCredit ? "Bill Generated on Credit" : "Payment Success"}
+            {isCredit
+              ? "Bill Generated on Credit"
+              : isPartial
+                ? "Partial Payment Received"
+                : "Payment Success"}
           </div>
           <div className="text-p3 font-normal font-noto-sans">
             {isCredit
               ? `₹ ${formatAmount(payment.amountReceived)} received · ₹ ${formatAmount(
-                  payment.pendingAmount ?? 0
+                  pending
                 )} pending`
               : `₹ ${formatAmount(
                   payment.amountReceived
                 )} received via ${PAYMENT_MODE_LABELS[payment.paymentMode]}${
+                  isPartial ? ` · ₹ ${formatAmount(pending)} pending` : ""
+                }${
                   payment.changeDue
                     ? ` · ₹ ${formatAmount(payment.changeDue)} change returned`
                     : ""
@@ -142,7 +153,9 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
             </div>
             <div>
               Date{" "}
-              <span className="font-semibold text-pneutral-900">{billDate}</span>
+              <span className="font-semibold text-pneutral-900">
+                {formatDate(billDate)}
+              </span>
             </div>
           </div>
         </div>
@@ -232,7 +245,7 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
                     {line.batchNumber}
                   </td>
                   <td className="border border-pneutral-200 px-3 text-center">
-                    {line.expiryDate?.split("T")[0] ?? "—"}
+                    {formatDate(line.expiryDate)}
                   </td>
                   <td className="border border-pneutral-200 px-3 text-center">
                     {line.quantity}
@@ -303,6 +316,27 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
                 ₹ {formatAmount(totals.netAmount)}
               </span>
             </div>
+
+            {/* A part paid or credit bill carries its balance on the record. */}
+            {(isCredit || isPartial) && (
+              <>
+                <div className="flex items-center justify-between text-p3 font-noto-sans text-pneutral-700">
+                  <span>Amount Paid</span>
+                  <span className="font-medium text-pneutral-900">
+                    ₹ {formatAmount(payment.amountReceived)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-lg bg-warning-50 px-3 py-3">
+                  <span className="text-label-l4 font-semibold text-warning-600">
+                    Pending Amount
+                  </span>
+                  <span className="text-h6 font-semibold text-warning-600">
+                    ₹ {formatAmount(pending)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
