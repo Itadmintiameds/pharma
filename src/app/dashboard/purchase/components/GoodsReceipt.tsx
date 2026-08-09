@@ -152,7 +152,14 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   };
 
   if (showAddProducts) {
-    return <AddProducts onClose={onClose} />;
+    // This component stays mounted, so stepping back restores the supplier
+    // details exactly as they were typed.
+    return (
+      <AddProducts
+        onClose={onClose}
+        onBack={() => setShowAddProducts(false)}
+      />
+    );
   }
 
   const paymentDueDate =

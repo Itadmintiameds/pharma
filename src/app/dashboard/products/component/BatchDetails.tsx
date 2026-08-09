@@ -1,4 +1,5 @@
 import React, { useMemo, useState, forwardRef, useImperativeHandle } from 'react';
+import { X } from 'lucide-react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { BatchSchema, MIN_EXPIRY_MONTHS } from '@/app/schema/BatchSchema';
@@ -126,6 +127,12 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const isLocked = isExistingMode && !!selectedBatch && selectedBatch !== ADD_NEW_BATCH;
   // Shown but inert until the user says which batch the stock belongs to.
   const awaitingBatchChoice = isExistingMode && !selectedBatch;
+  /**
+   * Adding a batch takes over the picker's own slot rather than putting a
+   * second "Batch Number" field beside it — with a way back to the saved
+   * batches.
+   */
+  const isAddingNewBatch = isExistingMode && selectedBatch === ADD_NEW_BATCH;
 
   /**
    * Never user-editable: a saved batch keeps the unit it was recorded with,
@@ -364,7 +371,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
           )}
 
           <div className="grid grid-cols-2 items-start gap-x-xlg gap-y-sm">
-            {isExistingMode && (
+            {/* The picker and the new-batch field share one slot. */}
+            {isExistingMode && !isAddingNewBatch && (
               <Dropdown
                 label="Batch Number"
                 required
@@ -377,7 +385,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             )}
 
             {/* Omitted when locked — the dropdown above already names the batch. */}
-            {!isLocked && (
+            {!isLocked && !awaitingBatchChoice && (
               <Input
                 label="Batch Number"
                 required
@@ -387,7 +395,19 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
                 onBlur={(e) => checkBatchNumberExists(e.target.value)}
                 error={errors.batchNumber || batchExistsError}
                 hint={isCheckingBatch ? 'Checking batch number…' : undefined}
-                disabled={awaitingBatchChoice}
+                rightIcon={
+                  isAddingNewBatch ? (
+                    <button
+                      type="button"
+                      aria-label="Pick a saved batch instead"
+                      title="Pick a saved batch instead"
+                      onClick={() => handleBatchChange('')}
+                      className="flex items-center text-pneutral-500 transition-colors hover:text-pneutral-900"
+                    >
+                      <X size={16} />
+                    </button>
+                  ) : undefined
+                }
               />
             )}
 

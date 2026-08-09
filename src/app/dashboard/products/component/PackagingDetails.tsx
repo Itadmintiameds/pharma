@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import { X } from 'lucide-react';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
@@ -71,6 +72,12 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   const isLocked = isExistingMode && !!selectedPackage && selectedPackage !== ADD_NEW_PACKAGE;
   // Shown but inert until the user says which package the stock belongs to.
   const awaitingPackageChoice = isExistingMode && !selectedPackage;
+  /**
+   * Adding a package takes over the picker's own slot: the label turns from
+   * "Package" into "Purchase Unit" and the field becomes the unit dropdown,
+   * with a way back to the saved packages. No second field appears beside it.
+   */
+  const isAddingNewPackage = isExistingMode && selectedPackage === ADD_NEW_PACKAGE;
 
   const packageOptions = [
     ...packages.map((pkg) => ({ label: packageLabel(pkg), value: pkg.packagingId })),
@@ -220,7 +227,8 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
           </h3>
 
           <div className="grid grid-cols-2 items-start gap-x-xlg gap-y-sm">
-            {isExistingMode && (
+            {/* The picker and the new-package unit share one slot. */}
+            {isExistingMode && !isAddingNewPackage && (
               <Dropdown
                 label="Package"
                 required
@@ -270,6 +278,19 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   error={errors.purchaseUnit}
                   isLoading={isLoadingUnits}
                   disabled={awaitingPackageChoice}
+                  labelAction={
+                    isAddingNewPackage ? (
+                      <button
+                        type="button"
+                        aria-label="Pick a saved package instead"
+                        title="Pick a saved package instead"
+                        onClick={() => handlePackageChange('')}
+                        className="flex items-center text-pneutral-500 transition-colors hover:text-pneutral-900"
+                      >
+                        <X size={16} />
+                      </button>
+                    ) : undefined
+                  }
                 />
 
                 <Input

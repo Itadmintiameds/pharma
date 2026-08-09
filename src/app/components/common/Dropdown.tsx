@@ -26,6 +26,11 @@ interface DropdownProps {
   isLoading?: boolean;
   allowOther?: boolean;
   menuPlacement?: 'top' | 'bottom';
+  /**
+   * Rendered at the right of the label row — for a control that swapped in for
+   * another one and needs a way back, the way an Input uses `rightIcon`.
+   */
+  labelAction?: React.ReactNode;
 }
 
 const Dropdown: React.FC<DropdownProps> = ({
@@ -47,6 +52,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   isLoading = false,
   allowOther = false,
   menuPlacement = 'bottom',
+  labelAction,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -168,20 +174,23 @@ const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div className={clsx("w-full relative", className)} ref={dropdownRef}>
       {label && (
-        <label
-          className={clsx(
-            "mb-1 block text-label-l4 font-medium justify-center transition-colors duration-200",
-            disabled ? "text-pneutral-500" : "text-pneutral-900",
-            labelClassName
-          )}
-        >
-          {label}
-          {required && (
-            <span className="ml-2 text-warning-500 font-semibold text-label-l2">
-              *
-            </span>
-          )}
-        </label>
+        <div className="mb-1 flex items-center justify-between gap-2">
+          <label
+            className={clsx(
+              "block text-label-l4 font-medium justify-center transition-colors duration-200",
+              disabled ? "text-pneutral-500" : "text-pneutral-900",
+              labelClassName
+            )}
+          >
+            {label}
+            {required && (
+              <span className="ml-2 text-warning-500 font-semibold text-label-l2">
+                *
+              </span>
+            )}
+          </label>
+          {labelAction}
+        </div>
       )}
 
       <div

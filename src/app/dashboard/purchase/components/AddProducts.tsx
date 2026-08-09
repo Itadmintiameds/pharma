@@ -36,9 +36,11 @@ const PRODUCT_CATEGORIES = [
 
 interface AddProductsProps {
   onClose?: () => void;
+  /** Returns to the supplier details this invoice is being built against. */
+  onBack?: () => void;
 }
 
-const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
+const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Product Details");
   const [selectedCategory, setSelectedCategory] = useState(1);
@@ -420,7 +422,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
       {/* Top Header */}
       <div className="flex flex-col gap-1 w-full mb-1">
         <h2 className="font-semibold text-[24px] text-pneutral-900 leading-[32px]">
-          {/* {viewState === 'search' ? "Search Products" : viewState === 'add' ? "Add Items to Invoice" : ""} */}
           {viewState === 'search' || viewState === 'add' ? "Add Items to Invoice" : ""}
         </h2>
       </div>
@@ -569,6 +570,16 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
               onAddStock={handleAddStock}
             />
           </div>
+
+          {/* Back to the supplier details this invoice is being built against.
+              Sits at the foot of the step, like the wizard's own Back. */}
+          {onBack && (
+            <div className="flex justify-between items-center w-full mt-4 pt-4 border-t border-gray-100 pb-8">
+              <Button variant="outline" onClick={onBack} className="w-[120px]">
+                Back
+              </Button>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -684,12 +695,16 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose }) => {
           
           {/* Navigation Buttons */}
           <div className="flex justify-between items-center w-full mt-4 pt-4 border-t border-gray-100 pb-8">
+            {/* On the first step Back leaves the wizard for the search view;
+                after that it steps through the tabs. */}
             <div>
-              {activeTab !== "Product Details" && (
-                <Button variant="outline" onClick={handleBack} className="w-[120px]">
-                  Back
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                onClick={activeTab === "Product Details" ? handleCancel : handleBack}
+                className="w-[120px]"
+              >
+                Back
+              </Button>
             </div>
             <div className="flex gap-4">
               <Button variant="outline" onClick={handleCancel} className="w-[120px]">
