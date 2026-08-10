@@ -48,6 +48,21 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   // only of separators (e.g. "///") is not a valid invoice number.
   const hasAlphanumeric = (val: string) => /[A-Za-z0-9]/.test(val);
 
+  /**
+   * Keeps the field to a shape an invoice number can actually take:
+   * alphanumerics plus the usual `-` and `/` separators, no other special
+   * characters, no run of separators or spaces, and always starting on a
+   * letter or a digit — so "///" or "   " can never be typed in at all.
+   */
+  const sanitizeInvoiceNo = (raw: string) =>
+    raw
+      .replace(/[^A-Za-z0-9/\- ]/g, "")
+      // Two separators in a row (spaces included) collapse to the first.
+      .replace(/([/\- ])[/\- ]+/g, "$1")
+      // A leading separator would let the value open on a special character.
+      .replace(/^[/\- ]+/, "")
+      .slice(0, INVOICE_NO_MAX);
+
   const invoiceNoError =
     invoiceNo && !hasAlphanumeric(invoiceNo)
       ? "Invoice No. must contain letters or numbers"
@@ -248,14 +263,9 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
               name="invoiceNo"
               id="invoiceNo"
               value={invoiceNo}
-              onChange={(e) =>
-                setInvoiceNo(
-                  e.target.value
-                    // keep alphanumerics and the usual invoice separators only
-                    .replace(/[^A-Za-z0-9/\- ]/g, "")
-                    .slice(0, INVOICE_NO_MAX)
-                )
-              }
+              onChange={(e) => setInvoiceNo(sanitizeInvoiceNo(e.target.value))}
+              // A trailing separator is fine to type through but not to keep.
+              onBlur={() => setInvoiceNo((val) => val.replace(/[/\- ]+$/, ""))}
               maxLength={INVOICE_NO_MAX}
               error={invoiceNoError}
               required
