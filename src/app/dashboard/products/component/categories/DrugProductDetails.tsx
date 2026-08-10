@@ -1,5 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { ProductMasterService } from '@/services/ProductMasterService';
+import { ProductService } from '@/services/ProductService';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { Plus, Minus } from 'lucide-react';
@@ -16,13 +17,14 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   const [formData, setFormData] = useState({
     productName: "",
     brandName: "",
-    molecules: [{ id: Date.now(), name: '', strength: '' }],
+    molecules: [{ id: Date.now(), name: '', strength: '', strengthValue: '', strengthUnit: '' }],
     gst: "",
     hsnCode: ""
   });
 
   const [moleculeOptions, setMoleculeOptions] = useState<{label: string, value: string}[]>([]);
   const [moleculeSchedules, setMoleculeSchedules] = useState<Record<string, string>>({});
+  const [strengthUnitOptions, setStrengthUnitOptions] = useState<{label: string, value: string}[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -30,7 +32,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       try {
         const res = await ProductMasterService.getMolecules();
         setMoleculeOptions(res.data.map((m: any) => ({ label: m.moleculeName, value: String(m.moleculeId) })));
-        
+
         const schedulesMap: Record<string, string> = {};
         res.data.forEach((item: any) => {
           schedulesMap[String(item.moleculeId)] = item.drugSchedule;
@@ -41,6 +43,20 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       }
     };
     fetchMasterData();
+
+    const fetchMoleculeStrengths = async () => {
+      try {
+        const data = await ProductService.getMoleculeStrengths();
+        const options = (data ?? []).map((item: any) => ({
+          label: item.moleculeStrengthName,
+          value: String(item.moleculeStrengthId),
+        }));
+        setStrengthUnitOptions(options);
+      } catch (error) {
+        console.error("Error fetching molecule strengths:", error);
+      }
+    };
+    fetchMoleculeStrengths();
   }, []);
 
   const validateField = (field: keyof typeof formData, value: any) => {
@@ -63,7 +79,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   const addMolecule = () => {
     setFormData(prev => ({
       ...prev,
-      molecules: [...prev.molecules, { id: Date.now(), name: '', strength: '' }]
+      molecules: [...prev.molecules, { id: Date.now(), name: '', strength: '', strengthValue: '', strengthUnit: '' }]
     }));
   };
 
@@ -75,6 +91,12 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       }));
     }
   };
+
+  // The dropdown carries its own unit text; only the input beside it needs to
+  // be kept numeric-only.
+  const NUMERIC_ONLY = /^\d*\.?\d*$/;
+  const strengthValueError = (value: string): string =>
+    value.trim() !== '' && !NUMERIC_ONLY.test(value.trim()) ? 'Only numbers are allowed' : '';
 
   const validateMoleculeField = (id: number, field: string, value: string) => {
     if (field === 'strength') {
@@ -91,11 +113,38 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   };
 
   const updateMolecule = (id: number, field: string, value: string) => {
+    const molecule = formData.molecules.find(m => m.id === id);
+    if (!molecule) return;
+
+    // The value and unit are entered separately but stored — and validated —
+    // as the single "500mg"-style string the backend expects. The unit is
+    // selected by id, so its display label is what goes into that string.
+    const isStrengthPart = field === 'strengthValue' || field === 'strengthUnit';
+    const nextStrengthValue = field === 'strengthValue' ? value : molecule.strengthValue;
+    const nextStrengthUnit = field === 'strengthUnit' ? value : molecule.strengthUnit;
+    const nextStrengthUnitLabel = strengthUnitOptions.find(opt => opt.value === nextStrengthUnit)?.label ?? '';
+    const nextStrength = isStrengthPart
+      ? `${nextStrengthValue}${nextStrengthUnitLabel}`.trim()
+      : molecule.strength;
+
     setFormData(prev => ({
       ...prev,
-      molecules: prev.molecules.map(m => m.id === id ? { ...m, [field]: value } : m)
+      molecules: prev.molecules.map(m => m.id === id
+        ? { ...m, [field]: value, ...(isStrengthPart ? { strength: nextStrength } : {}) }
+        : m
+      )
     }));
-    validateMoleculeField(id, field, value);
+
+    if (isStrengthPart) {
+      // The numeric check on the value takes priority over the combined
+      // schema check, since a letter typed there is the more specific error.
+      const numericError = strengthValueError(nextStrengthValue);
+      if (numericError) {
+        setErrors(prev => ({ ...prev, [`mol_${id}_strength`]: numericError }));
+      } else {
+        validateMoleculeField(id, 'strength', nextStrength);
+      }
+    }
   };
 
   let finalDrugSchedule = "";
@@ -140,8 +189,13 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
         nextErrors[`mol_${mol.id}_name`] = hasName ? '' : 'Molecule is required';
 
-        const strength = MoleculeSchema.pick({ strength: true }).safeParse({ strength: mol.strength });
-        nextErrors[`mol_${mol.id}_strength`] = strength.success ? '' : strength.error.issues[0].message;
+        const numericError = strengthValueError(mol.strengthValue);
+        if (numericError) {
+          nextErrors[`mol_${mol.id}_strength`] = numericError;
+        } else {
+          const strength = MoleculeSchema.pick({ strength: true }).safeParse({ strength: mol.strength });
+          nextErrors[`mol_${mol.id}_strength`] = strength.success ? '' : strength.error.issues[0].message;
+        }
       });
 
       setErrors(nextErrors);
@@ -181,20 +235,55 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
             onChange={(val) => updateMolecule(mol.id, 'name', val)} 
             error={errors[`mol_${mol.id}_name`]}
           />
-          <div className="flex items-end gap-2 w-full">
+          {/* items-start + mt-7 (label's height) on the buttons — items-end would
+              re-align them under the error text, which only this field has. */}
+          <div className="flex items-start gap-2 w-full">
             <div className="flex-1">
-              <Input
-                label="Molecule Strength"
-                placeholder="e.g. 500mg, 10mg/ml"
-                value={mol.strength} 
-                onChange={(e) => updateMolecule(mol.id, 'strength', e.target.value)} 
-                error={errors[`mol_${mol.id}_strength`]}
-                maxLength={30}
-              />
+              <div className="flex flex-col gap-1 w-full">
+                <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+                  Molecule Strength
+                </label>
+                <div className="flex w-full">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      placeholder="e.g. 500"
+                      value={mol.strengthValue}
+                      onChange={(e) => updateMolecule(mol.id, 'strengthValue', e.target.value)}
+                      className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 ${
+                        errors[`mol_${mol.id}_strength`] ? "border-warning-500" : "border-pneutral-300"
+                      }`}
+                    />
+                  </div>
+                  <div className={`relative w-[140px] shrink-0 border rounded-r-md bg-gray-50 flex items-center px-3 cursor-pointer ${
+                    errors[`mol_${mol.id}_strength`] ? "border-warning-500 border-l-pneutral-300" : "border-pneutral-300"
+                  }`}>
+                    <span className="text-p4 text-pneutral-500 flex-1 truncate pointer-events-none">
+                      {strengthUnitOptions.find(opt => opt.value === mol.strengthUnit)?.label || "Select Unit"}
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500 shrink-0 pointer-events-none">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                    <select
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      value={mol.strengthUnit}
+                      onChange={(e) => updateMolecule(mol.id, 'strengthUnit', e.target.value)}
+                    >
+                      <option value="" disabled>Select Unit</option>
+                      {strengthUnitOptions.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {errors[`mol_${mol.id}_strength`] && (
+                  <p className="mt-1 text-p2 text-warning-500">{errors[`mol_${mol.id}_strength`]}</p>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0 h-[48px]">
+            <div className="mt-7 flex items-center gap-2 shrink-0 h-[48px]">
               {formData.molecules.length > 1 && (
-                <button 
+                <button
                   onClick={() => removeMolecule(mol.id)}
                   className="w-[48px] h-[48px] rounded-[8px] bg-red-50 border border-red-200 flex items-center justify-center hover:bg-red-100 transition-colors"
                 >
@@ -202,7 +291,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
                 </button>
               )}
               {index === formData.molecules.length - 1 ? (
-                <button 
+                <button
                   onClick={addMolecule}
                   className="w-[48px] h-[48px] rounded-[8px] bg-[#4C0080] border border-[#4C0080] flex items-center justify-center hover:bg-[#3a0063] transition-colors"
                 >

@@ -42,5 +42,15 @@ export class ProductService {
       throw error;
     }
   }
+
+  static async getMoleculeStrengths() {
+    try {
+      const response = await api.get('/moleculeStrength');
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching molecule strengths:', error);
+      throw error;
+    }
+  }
 }
 

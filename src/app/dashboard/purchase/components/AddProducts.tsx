@@ -179,8 +179,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   };
 
   const handleNext = () => {
+    // Each field already shows its own inline error — no need to also toast.
     if (!validateTab(activeTab)) {
-      toast.error("Please fill all mandatory fields before continuing");
       return;
     }
 
@@ -210,7 +210,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     for (let i = currentIndex; i < targetIndex; i++) {
       if (!validateTab(TABS[i])) {
         setActiveTab(TABS[i]);
-        toast.error("Please fill all mandatory fields before continuing");
         return;
       }
     }
