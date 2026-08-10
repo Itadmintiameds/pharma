@@ -264,6 +264,8 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         hsnCode: updated.hsnNo || details.hsnNo || "",
         variant,
         purchasePrice,
+        mrp: Number(batchData?.mrpPerBox || 0),
+        gstPercentage,
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,

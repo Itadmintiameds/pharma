@@ -23,6 +23,7 @@ import {
   type ProductStockRow,
 } from "@/utils/productStock";
 import { buildProductAttributes } from "@/utils/productOnboardPayload";
+import { formatMonthYear } from "@/utils/formatDate";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import toast from "react-hot-toast";
@@ -97,18 +98,28 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const { selectedPharmacy } = usePharmacyStore();
   const store = usePurchaseStore();
 
+  // Mirrors the tax invoice grid, so the line reads the same here as it does on
+  // the summary the user saves.
   const tableColumns = useMemo<ColumnDef<any, any>[]>(() => [
     { accessorKey: 'id', header: '#', cell: (info) => info.row.index + 1 },
+    { accessorKey: 'brandName', header: 'Brand Name', cell: (info) => info.getValue() || '-' },
+    { accessorKey: 'purchaseQuantity', header: 'QTY', cell: (info) => Number(info.getValue() || 0) },
+    { accessorKey: 'freeQty', header: 'Free', cell: (info) => Number(info.getValue() || 0) },
+    { accessorKey: 'variant', header: 'Variant', cell: (info) => info.getValue() || '-' },
     { accessorKey: 'productName', header: 'Product Name', cell: (info) => <span className="font-bold text-pneutral-900">{info.getValue() || info.row.original.productId}</span> },
-    { accessorKey: 'brandName', header: 'Brand', cell: (info) => info.getValue() || '-' },
-    { accessorKey: 'batchNumber', header: 'Batch No.', cell: (info) => info.getValue() || info.row.original.batchId },
-    { accessorKey: 'expiryDate', header: 'Expiry', cell: (info) => info.getValue() || '-' },
-    { accessorKey: 'purchaseQuantity', header: 'Qty', cell: (info) => info.getValue() },
-    { accessorKey: 'freeQty', header: 'Free Qty', cell: (info) => Number(info.getValue() || 0) },
-    { accessorKey: 'purchasePrice', header: 'Purchase Amt', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
-    { accessorKey: 'grossAmount', header: 'Gross Amt', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
-    { accessorKey: 'gst', header: 'GST', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
-    { accessorKey: 'netAmount', header: 'Net Amount', cell: (info) => <span className="font-semibold text-secondary-700">₹{Number(info.getValue() || 0).toFixed(2)}</span> },
+    { accessorKey: 'hsnCode', header: 'HSN', cell: (info) => info.getValue() || '-' },
+    { accessorKey: 'batchNumber', header: 'Batch', cell: (info) => info.getValue() || info.row.original.batchId },
+    { accessorKey: 'expiryDate', header: 'Expiry', cell: (info) => formatMonthYear(info.getValue()) },
+    { accessorKey: 'mrp', header: 'MRP', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
+    // What the line is worth before tax — the supplier's rate by the quantity.
+    {
+      id: 'value',
+      header: 'VALUE',
+      cell: (info) => Number(info.row.original.grossAmount || 0).toFixed(2),
+    },
+    { accessorKey: 'discountPercentage', header: 'DIS%', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
+    { accessorKey: 'gstPercentage', header: 'GST%', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
+    { accessorKey: 'netAmount', header: 'Amount (₹)', cell: (info) => <span className="font-semibold text-secondary-700">{Number(info.getValue() || 0).toFixed(2)}</span> },
   ], []);
 
   // Product master, loaded once so both the search dropdown and the table
@@ -377,6 +388,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         hsnCode: productData?.hsnCode || "",
         variant,
         purchasePrice,
+        mrp: Number(batchData?.mrpPerBox || 0),
+        gstPercentage,
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
@@ -484,12 +497,12 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       </div>
 
       {viewState !== 'summary' && store.purchaseDetails.length > 0 && (
-        <div className="flex flex-col gap-3 w-full bg-white p-4 rounded-xl border border-pneutral-200 shadow-sm mb-3">
-          <div className="flex justify-between items-center w-full">
-            <div className="flex flex-col">
-              <h3 className="text-base font-bold text-pneutral-900">Onboarded Items ({store.invoiceNo})</h3>
-              <p className="text-xs text-pneutral-600">Total Items: {store.purchaseDetails.length} | Net Payable: ₹{store.totalNetAmount.toFixed(2)}</p>
-            </div>
+        // The DataTable brings its own rounded border, so the rows sit straight
+        // on the page rather than inside a second card.
+        <div className="flex flex-col gap-3 w-full mb-3">
+          <DataTable columns={tableColumns} data={store.purchaseDetails} />
+
+          <div className="flex justify-end w-full">
             <button
               onClick={() => setViewState('summary')}
               className="px-4 py-2 bg-secondary-600 hover:bg-secondary-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -497,7 +510,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
               View Summary & Save Invoice
             </button>
           </div>
-          <DataTable columns={tableColumns} data={store.purchaseDetails} />
         </div>
       )}
 

@@ -15,6 +15,12 @@ export interface PurchaseDetail {
    * them, so the line is priced on this rather than on MRP.
    */
   purchasePrice?: number;
+  /** Printed rate for one purchase unit — shown on the invoice, not priced on. */
+  mrp?: number;
+  /** The slab the line sits on; `gst` below is the amount it works out to. */
+  gstPercentage?: number;
+  /** Per-line discount. Nothing captures one yet, so it reads as 0. */
+  discountPercentage?: number;
   freeQty: string | number;
   /** Unit name, e.g. "BOX" — the backend column is a varchar. */
   freeQtyUnit: string;

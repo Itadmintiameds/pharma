@@ -120,7 +120,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       <Input 
         label="Product Name" 
         required 
-        placeholder="Placeholder" 
+        placeholder="Enter Product Name" 
         value={formData.productName} 
         onChange={(e) => handleChange('productName', e.target.value)} 
         error={errors.productName}
@@ -189,7 +189,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
           <div className="flex-1">
             <input 
               type="text" 
-              placeholder="Placeholder" 
+              placeholder="Enter Quantity" 
               value={formData.netQuantity}
               onChange={(e) => handleChange('netQuantity', e.target.value)}
               className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 ${
