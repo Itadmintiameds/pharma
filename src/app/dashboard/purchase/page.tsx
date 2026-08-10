@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import GoodsReceipt from "./components/GoodsReceipt";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
@@ -361,6 +361,32 @@ const PurchaseContent = () => {
     }
   }, []);
 
+  // Filter the list by the search box. Matches the visible invoice fields
+  // (supplier, invoice/GRN no, payment type, date) as well as the product and
+  // batch numbers on each line, so a product search hits its purchases too.
+  const filteredPurchases = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return purchases;
+
+    return purchases.filter((purchase) => {
+      const fields = [
+        purchase.supplierName,
+        purchase.invoiceNo,
+        purchase.grnNo,
+        purchase.paymentType,
+        formatInvoiceDate(purchase.invoiceDate),
+        ...(purchase.purchaseDetails ?? []).flatMap((line) => [
+          line.productName,
+          line.batchNumber,
+        ]),
+      ];
+
+      return fields.some(
+        (field) => field && String(field).toLowerCase().includes(query)
+      );
+    });
+  }, [purchases, search]);
+
   // Fetch on the list view — on first load and each time we return from the
   // Add flow — so a just-added purchase shows up.
   useEffect(() => {
@@ -455,6 +481,10 @@ const PurchaseContent = () => {
                 <div className="text-p3 font-normal text-danger-600 py-8 text-center">
                   {error}
                 </div>
+              ) : filteredPurchases.length === 0 ? (
+                <div className="flex h-40 items-center justify-center rounded-xl border border-pneutral-200 bg-white text-label-l4 text-pneutral-500 shadow-sm">
+                  No records found.
+                </div>
               ) : (
                 <DataTable
                   columns={buildColumns(
@@ -462,7 +492,7 @@ const PurchaseContent = () => {
                     (purchase) => openInvoice(purchase, true),
                     isPreparing
                   )}
-                  data={purchases}
+                  data={filteredPurchases}
                 />
               )}
             </div>

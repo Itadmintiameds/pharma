@@ -8,6 +8,7 @@ import ProductDetails from "@/app/dashboard/products/component/ProductDetails";
 import PackagingDetails, { PackagingDetailsRef, PackagingUnits } from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/component/BatchDetails";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
+import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import InvoiceSummary from "./InvoiceSummary";
 import ProductSearchTable from "./ProductSearchTable";
 import AddStockToProduct from "./AddStockToProduct";
@@ -34,6 +35,26 @@ const PRODUCT_CATEGORIES = [
   { id: 5, label: 'Medical\nDevices & Equipment', iconPath: '/ProductManagement/MedicalDevices.svg', width: 'w-[200px]' },
 ];
 
+// A step form counts as "touched" if any of its fields holds a real value.
+// Auto-generated row ids (e.g. the blank molecule row's id) are ignored so a
+// fresh form still reads as empty.
+const hasMeaningfulValue = (value: unknown): boolean => {
+  if (value == null) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "boolean") return value;
+  if (Array.isArray(value)) return value.some(hasMeaningfulValue);
+  if (typeof value === "object") {
+    return Object.entries(value).some(
+      ([key, val]) => key !== "id" && hasMeaningfulValue(val)
+    );
+  }
+  return Boolean(value);
+};
+
+/** Identifies a category or medical-device sub-category the user is switching to. */
+type PendingSelection = { type: "category" | "subCategory"; id: number };
+
 interface AddProductsProps {
   onClose?: () => void;
   /** Returns to the supplier details this invoice is being built against. */
@@ -45,6 +66,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const [activeTab, setActiveTab] = useState("Product Details");
   const [selectedCategory, setSelectedCategory] = useState(1);
   const [selectedSubCategory, setSelectedSubCategory] = useState(5); // 5: Consumable, 6: Non-Consumable
+  // Set while confirming a category switch that would discard entered data.
+  const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [viewState, setViewState] = useState<'search' | 'add' | 'addStock' | 'summary'>('search');
   const [stockTarget, setStockTarget] = useState<ProductStockRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -199,14 +222,48 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     setPackagingUnits({ purchaseUnit: "", smallestUnit: "", unitContains: "" });
   };
 
-  const handleSelectCategory = (id: number) => {
-    setSelectedCategory(id);
+  // True when any step form holds data the user would lose on a category switch.
+  const hasEnteredData = (): boolean =>
+    [
+      productDetailsRef.current?.getFormData?.(),
+      packagingDetailsRef.current?.getFormData?.(),
+      batchDetailsRef.current?.getFormData?.(),
+    ].some(hasMeaningfulValue);
+
+  // Apply the switch and send the wizard back to step 1 with blank forms.
+  const applySelection = (sel: PendingSelection) => {
+    if (sel.type === "category") {
+      setSelectedCategory(sel.id);
+    } else {
+      setSelectedSubCategory(sel.id);
+    }
     resetWizardToStart();
   };
 
+  // Switch immediately when nothing is entered; otherwise confirm first, since
+  // changing category restarts the product from a blank step 1.
+  const requestSelection = (sel: PendingSelection) => {
+    const current = sel.type === "category" ? selectedCategory : selectedSubCategory;
+    if (sel.id === current) return;
+
+    if (hasEnteredData()) {
+      setPendingSelection(sel);
+      return;
+    }
+    applySelection(sel);
+  };
+
+  const handleSelectCategory = (id: number) => {
+    requestSelection({ type: "category", id });
+  };
+
   const handleSelectSubCategory = (id: number) => {
-    setSelectedSubCategory(id);
-    resetWizardToStart();
+    requestSelection({ type: "subCategory", id });
+  };
+
+  const handleConfirmSelection = () => {
+    if (pendingSelection) applySelection(pendingSelection);
+    setPendingSelection(null);
   };
 
   const handleCancel = () => {
@@ -729,7 +786,18 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         </>
       )}
 
-      <PurchaseSuccessModal 
+      <ConfirmDialog
+        isOpen={pendingSelection !== null}
+        title="Change product category?"
+        message="Switching category will clear the details you've entered and restart from Step 1. Do you want to continue?"
+        confirmLabel="Yes, start over"
+        cancelLabel="Keep editing"
+        destructive
+        onConfirm={handleConfirmSelection}
+        onCancel={() => setPendingSelection(null)}
+      />
+
+      <PurchaseSuccessModal
         isOpen={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
         onAddProduct={() => {
