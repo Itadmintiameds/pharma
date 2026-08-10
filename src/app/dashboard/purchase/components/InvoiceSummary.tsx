@@ -442,7 +442,6 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       {/* Confirmation Popup */}
       <ConfirmationPopup 
         isOpen={showConfirmation}
-        onClose={() => setShowConfirmation(false)}
         invoiceNo={currentMode === 'create' || currentMode === 'view' ? store.invoiceNo : "201233"}
         grnNo={store.grnNo}
         onViewTaxInvoice={() => {

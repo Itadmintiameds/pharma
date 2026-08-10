@@ -5,7 +5,6 @@ import Image from "next/image";
 
 interface ConfirmationPopupProps {
   isOpen: boolean;
-  onClose: () => void;
   onViewTaxInvoice: () => void;
   onGoToPurchase: () => void;
   invoiceNo?: string;
@@ -15,7 +14,6 @@ interface ConfirmationPopupProps {
 
 const ConfirmationPopup: React.FC<ConfirmationPopupProps> = ({
   isOpen,
-  onClose,
   onViewTaxInvoice,
   onGoToPurchase,
   invoiceNo = "201233",
@@ -25,22 +23,9 @@ const ConfirmationPopup: React.FC<ConfirmationPopupProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]">
+      {/* No close affordance — the invoice is already saved, so the popup is
+          dismissed through one of the two actions at the foot of it. */}
       <div className="relative w-[460px] min-h-[281px] rounded-[20px] bg-white px-6 py-8 flex flex-col gap-6">
-        <div>
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 flex h-5 w-5 items-center justify-center"
-          >
-            <Image
-              src="/Purchase/CloseIcon.svg"
-              alt="Close"
-              width={20}
-              height={20}
-              className="shrink-0"
-            />
-          </button>
-        </div>
-
         <div className="flex justify-center">
           <Image
             src="/Purchase/CheckIcon.svg"
