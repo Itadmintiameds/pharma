@@ -203,6 +203,21 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       const derivedField = PER_UNIT_FIELD[field as PerBoxField];
       if (derivedField && isDerived) setErrors(prev => ({ ...prev, [derivedField]: '' }));
     }
+    // Free quantity and free unit are judged together, so filling one can
+    // settle the complaint standing against the other. Only ever clears —
+    // raising the error mid-entry would flag the half not typed yet.
+    if (field === 'freeQuantity' || field === 'freeUnit') {
+      const pair = freeGoodsErrors(
+        field === 'freeQuantity' ? value : formData.freeQuantity,
+        field === 'freeUnit' ? value : formData.freeUnit
+      );
+      setErrors(prev => ({
+        ...prev,
+        freeUnit: pair.freeUnit ? prev.freeUnit : '',
+        freeQuantity: pair.freeQuantity ? prev.freeQuantity : ''
+      }));
+    }
+
     // The batch number just changed, so any prior duplicate check is stale.
     if (field === 'batchNumber' && batchExistsError) setBatchExistsError('');
   };
@@ -260,6 +275,37 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   };
 
   /**
+   * Free goods are optional as a pair, but half a pair says nothing: a
+   * quantity with no unit can't be received, and a unit with no quantity
+   * receives nothing. The schema can't express this — `z.coerce.number()`
+   * turns a blank quantity into 0, so by then "left empty" and "typed 0" look
+   * the same. Checked here, against the raw strings, instead.
+   */
+  const freeGoodsErrors = (
+    freeQuantity: string,
+    freeUnit: string
+  ): Record<string, string> => {
+    const next: Record<string, string> = {};
+
+    const quantity = String(freeQuantity).trim();
+    const unit = String(freeUnit).trim();
+    const hasQuantity = quantity !== '' && Number(quantity) > 0;
+
+    if (hasQuantity && !unit) {
+      next.freeUnit = 'Free Unit is required when a free quantity is entered';
+    }
+
+    if (unit && !hasQuantity) {
+      next.freeQuantity = 'Free Quantity is required when a free unit is selected';
+    }
+
+    return next;
+  };
+
+  const validateFreeGoods = () =>
+    freeGoodsErrors(formData.freeQuantity, formData.freeUnit);
+
+  /**
    * For a saved batch only the purchase fields are user-supplied, and of those
    * just the quantity is mandatory — free goods are optional.
    */
@@ -276,7 +322,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       next.freeQuantity = 'Cannot be negative';
     }
 
-    return next;
+    // The negative-quantity message is the more specific one, so it wins.
+    return { ...validateFreeGoods(), ...next };
   };
 
   useImperativeHandle(ref, () => ({
@@ -324,6 +371,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
           sellingPricePerSmallestUnit: `Selling Price (per ${smallestUnitLabel}) is required`,
         }
       );
+
+      Object.assign(nextErrors, validateFreeGoods());
 
       // A duplicate found on blur takes priority over the schema's own message.
       if (batchExistsError) nextErrors.batchNumber = batchExistsError;
@@ -464,6 +513,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               onChange={(val) => handleChange('freeUnit', val)}
               error={errors.freeUnit}
               disabled={awaitingBatchChoice}
+              // Free goods are optional, and there is only one unit to pick —
+              // so taking the pick back has to be possible.
+              clearable
             />
             <Input
               label="Free Quantity"

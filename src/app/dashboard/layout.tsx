@@ -2,6 +2,7 @@ import React from "react";
 import Sidebar from "../components/layout/Sidebar";
 import Navbar from "../components/layout/Navbar";
 import DashboardProvider from "../components/providers/DashboardProvider";
+import PharmacyScope from "../components/providers/PharmacyScope";
 
 export default function layout({
   children,
@@ -16,7 +17,9 @@ export default function layout({
         <div className="flex flex-1 overflow-hidden">
           <Sidebar />
 
-          <main className="flex-1 overflow-y-auto p-6 bg-secondary-50">{children}</main>
+          <main className="flex-1 overflow-y-auto p-6 bg-secondary-50">
+            <PharmacyScope>{children}</PharmacyScope>
+          </main>
         </div>
       </div>
     </DashboardProvider>
