@@ -12,7 +12,16 @@
  *  single dead asset cannot swallow the print. */
 const STYLE_TIMEOUT_MS = 3000;
 
-export const printElement = (element: HTMLElement, title = "Invoice") => {
+/**
+ * @param extraCss Stylesheet appended after the page's own, so it wins on
+ *   equal specificity. Use it for print-only layout — the on-screen component
+ *   and any html2canvas capture never see it.
+ */
+export const printElement = (
+    element: HTMLElement,
+    title = "Invoice",
+    extraCss = ""
+) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
     iframe.style.cssText =
@@ -52,7 +61,9 @@ export const printElement = (element: HTMLElement, title = "Invoice") => {
         // browser is told to keep them rather than drop them for ink.
         `*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}` +
         `@page{margin:12mm;}` +
-        `</style></head>` +
+        `</style>` +
+        (extraCss ? `<style>${extraCss}</style>` : "") +
+        `</head>` +
         `<body>${element.outerHTML}</body></html>`
     );
     doc.close();
