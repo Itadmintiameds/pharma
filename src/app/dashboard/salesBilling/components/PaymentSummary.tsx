@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { showToast } from "@/app/components/common/Toast";
+import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import BillingSuccessModal from "./BillingSuccessModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
 import { formatDateTime, formatMonthYear } from "@/utils/formatDate";
@@ -102,9 +103,12 @@ const BillHeader: React.FC<{
       data-print="header"
       className="w-full rounded-xl border border-secondary-200 bg-white p-4"
     >
+      {/* minmax(0,1fr) for the middle track: a plain 1fr floors at the pharmacy
+          name's min-content width, so a long name pushes the details column off
+          the card instead of truncating. */}
       <div
         data-print="header-grid"
-        className="grid grid-cols-1 items-center gap-4 md:grid-cols-[200px_1fr_200px]"
+        className="grid grid-cols-1 items-center gap-4 md:grid-cols-[200px_minmax(0,1fr)_200px]"
       >
         {/* Logo — the API has no URL yet, so the name's initial stands in for
             it and the slot keeps its size either way. */}
@@ -234,6 +238,9 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   const [currentMode] = useState<"create" | "view" | "download">(mode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedBillNo, setSavedBillNo] = useState<string | null>(null);
+  // Mounts the off-screen copy the PDF is captured from.
+  const [isCapturing, setIsCapturing] = useState(false);
+  const isCapturingRef = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
 
   // The header pharmacy: the pre-fetched prop when the caller has it, else
@@ -297,22 +304,39 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     }
   };
 
-  const handleDownloadPdf = async () => {
-    if (!printRef.current) return;
+  /** Mounts the off-screen copy; the capture itself runs in onReady below. */
+  const handleDownloadPdf = () => {
+    if (isCapturing) return;
     setIsSubmitting(true);
-    try {
-      await downloadElementAsPdf(
-        printRef.current,
-        `invoice-${invoiceNo.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`
-      );
-      showToast.success("Invoice downloaded successfully!");
-    } catch (err) {
-      console.error("Failed to generate the invoice PDF", err);
-      showToast.error("Could not generate the PDF.");
-    } finally {
-      setIsSubmitting(false);
-    }
+    setIsCapturing(true);
   };
+
+  /**
+   * Fired by OffscreenPortal once the copy is laid out and painted. The ref
+   * guards against a second capture if the callback identity changes while one
+   * is still running.
+   */
+  const handleCaptureReady = useCallback(
+    async (node: HTMLElement) => {
+      if (isCapturingRef.current) return;
+      isCapturingRef.current = true;
+      try {
+        await downloadElementAsPdf(
+          node,
+          `invoice-${invoiceNo.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`
+        );
+        showToast.success("Invoice downloaded successfully!");
+      } catch (err) {
+        console.error("Failed to generate the invoice PDF", err);
+        showToast.error("Could not generate the PDF.");
+      } finally {
+        isCapturingRef.current = false;
+        setIsCapturing(false);
+        setIsSubmitting(false);
+      }
+    },
+    [invoiceNo]
+  );
 
   const columns: ColumnDef<BillLine>[] = [
     {
@@ -405,109 +429,120 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     { label: "Mobile", value: customer?.mobileNo || "—" },
   ];
 
-  return (
-    <div className="flex flex-col gap-4 w-full bg-transparent pb-12">
-      {/* Printable Ref Wrapper */}
+  /**
+   * The bill itself — one definition, rendered twice: in place (holding
+   * printRef, which the print path clones) and, while a download runs, into the
+   * off-screen copy below. Same markup, so screen, print and PDF cannot drift.
+   */
+  const renderBill = (ref?: React.Ref<HTMLDivElement>) => (
+    <div
+      ref={ref}
+      data-print-root
+      // Transparent, not white: a fill here reads as a card wrapping the whole
+      // bill. The white ground for a capture comes from OffscreenPortal, and
+      // for print from the iframe's own body.
+      className="flex flex-col gap-4 w-full bg-transparent"
+    >
+      <BillHeader pharmacy={pharmacy} />
+
+      {/* Title bar — 70px tall, 16px padding, with the light rule on top */}
       <div
-        ref={printRef}
-        data-print-root
-        className="flex flex-col gap-4 w-full bg-transparent"
+        data-print="title"
+        className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600"
       >
-        <BillHeader pharmacy={pharmacy} />
+        <h1 className="font-heading text-h4 font-semibold text-secondary-50">
+          {currentMode === "view"
+            ? "View Payment Invoice"
+            : currentMode === "download"
+            ? "Download Payment Invoice"
+            : "Payment Invoice"}
+        </h1>
+      </div>
 
-        {/* Title bar — 70px tall, 16px padding, with the light rule on top */}
-        <div
-          data-print="title"
-          className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600"
-        >
-          <h1 className="font-heading text-h4 font-semibold text-secondary-50">
-            {currentMode === "view"
-              ? "View Payment Invoice"
-              : currentMode === "download"
-              ? "Download Payment Invoice"
-              : "Payment Invoice"}
-          </h1>
+      {/* Bill details — the invoice facts and the customer, side by side.
+          Each column is a stack of 24px lines at a 10px rhythm. */}
+      <div
+        data-print="facts"
+        className="w-full rounded-xl border border-pneutral-200 bg-white px-4 py-3 flex flex-col md:flex-row items-start gap-6"
+      >
+        <div className="flex-1 w-full flex flex-col gap-2.5">
+          {BILL_FACTS.map((fact) => (
+            <Fact key={fact.label} label={fact.label} value={fact.value} />
+          ))}
         </div>
 
-        {/* Bill details — the invoice facts and the customer, side by side.
-            Each column is a stack of 24px lines at a 10px rhythm. */}
-        <div
-          data-print="facts"
-          className="w-full rounded-xl border border-pneutral-200 bg-white px-4 py-3 flex flex-col md:flex-row items-start gap-6"
-        >
-          <div className="flex-1 w-full flex flex-col gap-2.5">
-            {BILL_FACTS.map((fact) => (
-              <Fact key={fact.label} label={fact.label} value={fact.value} />
-            ))}
-          </div>
+        <div className="flex-1 w-full flex flex-col gap-2.5">
+          {CUSTOMER_FACTS.map((fact) => (
+            <Fact key={fact.label} label={fact.label} value={fact.value} />
+          ))}
+        </div>
+      </div>
 
-          <div className="flex-1 w-full flex flex-col gap-2.5">
-            {CUSTOMER_FACTS.map((fact) => (
-              <Fact key={fact.label} label={fact.label} value={fact.value} />
-            ))}
-          </div>
+      {/* Invoice grid — DataTable brings its own rounded border, so it is not
+          boxed a second time. Height follows the number of lines: a fixed
+          minimum would leave dead space under a short bill. */}
+      <div className="w-full">
+        <DataTable columns={columns} data={lines} />
+      </div>
+
+      {/* Amount in words beside the totals — 184px tall, 16px apart */}
+      <div
+        data-print="summary"
+        className="w-full flex flex-col lg:flex-row items-stretch gap-4"
+      >
+        <div
+          data-print="words"
+          className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
+        >
+          <span className="font-body text-p4 font-normal text-pneutral-800">
+            Amount in words
+          </span>
+          <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
+            {amountInWords(Math.round(totals.netAmount || 0))}
+          </span>
         </div>
 
-        {/* Invoice grid — DataTable brings its own rounded border, so it is not
-            boxed a second time. Height follows the number of lines: a fixed
-            minimum would leave dead space under a short bill. */}
-        <div className="w-full">
-          <DataTable columns={columns} data={lines} />
-        </div>
-
-        {/* Amount in words beside the totals — 184px tall, 16px apart */}
+        {/* Amount summary — four 24px lines at an 8px rhythm, then NET
+            PAYABLE on its own 32px line above a hairline. */}
         <div
-          data-print="summary"
-          className="w-full flex flex-col lg:flex-row items-stretch gap-4"
+          data-print="totals"
+          className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
         >
-          <div
-            data-print="words"
-            className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
-          >
-            <span className="font-body text-p4 font-normal text-pneutral-800">
-              Amount in words
-            </span>
-            <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
-              {amountInWords(Math.round(totals.netAmount || 0))}
-            </span>
-          </div>
-
-          {/* Amount summary — four 24px lines at an 8px rhythm, then NET
-              PAYABLE on its own 32px line above a hairline. */}
-          <div
-            data-print="totals"
-            className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
-          >
-            {AMOUNT_ROWS.map((row) => (
-              <div
-                key={row.label}
-                className="flex h-6 items-center justify-between"
-              >
-                <span className="font-body text-p4 font-normal text-pneutral-800">
-                  {row.label}
-                </span>
-                <span className="font-body text-p4 font-semibold text-pneutral-900">
-                  ₹ {formatAmount(row.value)}
-                </span>
-              </div>
-            ))}
-
+          {AMOUNT_ROWS.map((row) => (
             <div
-              data-print="net"
-              className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2"
+              key={row.label}
+              className="flex h-6 items-center justify-between"
             >
-              <span className="font-body text-p5 font-semibold text-pneutral-900">
-                NET PAYABLE
+              <span className="font-body text-p4 font-normal text-pneutral-800">
+                {row.label}
               </span>
-              <span className="font-body text-p5 font-semibold text-pneutral-900">
-                ₹ {formatAmount(totals.netAmount || 0)}
+              <span className="font-body text-p4 font-semibold text-pneutral-900">
+                ₹ {formatAmount(row.value)}
               </span>
             </div>
+          ))}
+
+          <div
+            data-print="net"
+            className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2"
+          >
+            <span className="font-body text-p5 font-semibold text-pneutral-900">
+              NET PAYABLE
+            </span>
+            <span className="font-body text-p5 font-semibold text-pneutral-900">
+              ₹ {formatAmount(totals.netAmount || 0)}
+            </span>
           </div>
         </div>
-
-        <BillFooter />
       </div>
+
+      <BillFooter />
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col gap-4 w-full bg-transparent pb-12">
+      {renderBill(printRef)}
 
       {/* Action Buttons Footer */}
       <div className="w-full h-14 flex flex-wrap items-center justify-between gap-4">
@@ -540,12 +575,27 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           {currentMode === "view"
             ? "Print"
             : isSubmitting
-            ? "Saving..."
+            ? currentMode === "download"
+              ? "Preparing..."
+              : "Saving..."
             : currentMode === "download"
             ? "Download"
             : "Save"}
         </button>
       </div>
+
+      {/* The PDF is rasterised from this copy, not from the node on screen.
+          On screen the bill inherits whatever width the dashboard shell gives
+          it — and that shell nests pages in overflow-hidden containers, which
+          clip a capture. Rendered here at a fixed width, just over A4
+          landscape's 1123px at 96dpi, it always carries the full desktop design
+          and scales down to the page nearly 1:1. A WhatsApp send would go
+          through this same path. */}
+      {isCapturing && (
+        <OffscreenPortal width={1240} onReady={handleCaptureReady}>
+          {renderBill()}
+        </OffscreenPortal>
+      )}
 
       <BillingSuccessModal
         isOpen={!!savedBillNo}

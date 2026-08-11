@@ -24,7 +24,11 @@
  * than Tailwind class selectors, which change whenever the design does.
  */
 export const BILL_PRINT_CSS = `
-@page { size: A4 landscape; margin: 8mm; }
+/* Deliberately not "size: A4 landscape". Asking for landscape on a printer or
+   PDF target fixed to portrait makes the browser rotate the bill 90° onto the
+   portrait sheet, which is unreadable. "auto" hands the orientation back to the
+   print dialog, and the rules below make both orientations fit. */
+@page { size: auto; margin: 8mm; }
 
 html, body { background: #fff; }
 body { margin: 0 !important; padding: 0 !important; }
@@ -67,12 +71,26 @@ body { margin: 0 !important; padding: 0 !important; }
   break-inside: avoid;
 }
 
-/* Restated so a portrait page keeps the logo | name | details row. */
+/* Restated so a portrait page keeps the logo | name | details row. The middle
+   track is minmax(0, 1fr), not 1fr: a plain 1fr floors at the name's
+   min-content width, which on a narrow page shoves the details column clean off
+   the card. */
 [data-print="header-grid"] {
   display: grid !important;
-  grid-template-columns: 64px 1fr 30% !important;
+  grid-template-columns: 64px minmax(0, 1fr) 24% !important;
   align-items: center !important;
   gap: 8px !important;
+}
+
+/* Paper cannot scroll or ellipsise its way out of trouble, so anything the
+   screen truncates wraps instead. */
+[data-print="header-plate"] h2,
+[data-print="header-facts"] span,
+[data-print="facts"] span {
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  word-break: break-word !important;
 }
 
 [data-print="header-logo"] {
