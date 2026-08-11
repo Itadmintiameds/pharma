@@ -103,37 +103,28 @@ const BillHeader: React.FC<{
       data-print="header"
       className="w-full rounded-xl border border-secondary-200 bg-white p-4"
     >
-      {/* minmax(0,1fr) for the middle track: a plain 1fr floors at the pharmacy
-          name's min-content width, so a long name pushes the details column off
-          the card instead of truncating. */}
+      {/* The side tracks size to their content rather than a fixed 200px, which
+          left a dead gap between the logo and the name plate. minmax(0,1fr) for
+          the middle: a plain 1fr floors at the name's min-content width, so a
+          long name would push the details column off the card. */}
       <div
         data-print="header-grid"
-        className="grid grid-cols-1 items-center gap-4 md:grid-cols-[200px_minmax(0,1fr)_200px]"
+        className="grid grid-cols-1 items-center gap-4 md:grid-cols-[auto_minmax(0,1fr)_auto]"
       >
-        {/* Logo — the API has no URL yet, so the name's initial stands in for
-            it and the slot keeps its size either way. */}
-        <div className="flex justify-center md:justify-start">
-          <div
-            data-print="header-logo"
-            className="flex h-[76px] w-[76px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-secondary-200 bg-secondary-50"
-          >
-            {pharmacy?.pharmacyLogo ? (
-              // Plain <img>: the URL is whatever the API returns, so it cannot
-              // go through next/image's configured remote patterns.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pharmacy.pharmacyLogo}
-                alt={name}
-                crossOrigin="anonymous"
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <span className="font-heading text-h4 font-semibold text-secondary-600">
-                {name.trim().charAt(0).toUpperCase() || "P"}
-              </span>
-            )}
-          </div>
-        </div>
+        {/* Logo — the bare image, no tile or border around it. Height is
+            capped and the width follows, so a square mark and a wide wordmark
+            both sit right. Until /getCurrentPharmacy returns a URL this shows
+            the Tiameds logo as a stand-in.
+            Plain <img>: the URL is whatever the API returns, so it cannot go
+            through next/image's configured remote patterns. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          data-print="header-logo"
+          src={pharmacy?.pharmacyLogo || "/TiamedsLogo.svg"}
+          alt={pharmacy?.pharmacyLogo ? name : "Tiameds"}
+          crossOrigin="anonymous"
+          className="h-[52px] w-auto max-w-[150px] shrink-0 object-contain object-left justify-self-center md:justify-self-start"
+        />
 
         {/* Name plate — the purple outline is the header's anchor. */}
         <div
@@ -153,7 +144,7 @@ const BillHeader: React.FC<{
             edges of the column line up. */}
         <div
           data-print="header-facts"
-          className="flex flex-col gap-1.5 md:items-stretch"
+          className="flex flex-col gap-1.5 md:min-w-[196px] md:items-stretch"
         >
           {IDENTITY_ROWS.map((row) => (
             <div
@@ -183,11 +174,14 @@ const BillFooter: React.FC = () => (
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Powered by
     </span>
+    {/* priority, so it is not lazy: the print iframe is 0x0, and a lazy image
+        never enters a viewport there — the mark simply never loaded on paper. */}
     <Image
       src="/TiamedsLogo.svg"
       alt="Tiameds"
       width={96}
       height={26}
+      priority
       className="shrink-0"
     />
     <span className="font-body text-p3 font-normal text-pneutral-600">

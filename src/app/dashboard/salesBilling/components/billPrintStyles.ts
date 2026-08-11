@@ -77,7 +77,7 @@ body { margin: 0 !important; padding: 0 !important; }
    the card. */
 [data-print="header-grid"] {
   display: grid !important;
-  grid-template-columns: 64px minmax(0, 1fr) 24% !important;
+  grid-template-columns: 96px minmax(0, 1fr) 24% !important;
   align-items: center !important;
   gap: 8px !important;
 }
@@ -93,11 +93,13 @@ body { margin: 0 !important; padding: 0 !important; }
   word-break: break-word !important;
 }
 
+/* The logo is a bare image — no tile, no rule. Just smaller on paper. */
 [data-print="header-logo"] {
-  height: 56px !important;
-  width: 56px !important;
-  background-color: #fff !important;
-  border: 0.5pt solid #000 !important;
+  height: 34px !important;
+  width: auto !important;
+  max-width: 90px !important;
+  border: 0 !important;
+  padding: 0 !important;
 }
 
 /* The plate is the header's anchor on screen; on paper a heavier rule does
