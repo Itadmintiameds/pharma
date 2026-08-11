@@ -121,6 +121,22 @@ export const submitPharmacyDraft = async (
   }
 };
 
+// Resubmit a registration that a reviewer sent back for correction (PUT)
+export const resubmitPharmacy = async (
+  reqId: string,
+  data: PharmacyRegistrationRequest,
+  token?: string
+) => {
+  try {
+    const response = await adminApi.put(`/pharmacy-registration/${reqId}/resubmit`, data, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to resubmit registration.");
+  }
+};
+
 // Step 2: Hits Admin Backend (uses adminApi client)
 export const registerPharmacy = async (
   data: PharmacyRegistrationRequest,

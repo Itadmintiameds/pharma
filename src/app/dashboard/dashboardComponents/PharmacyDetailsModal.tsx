@@ -140,6 +140,64 @@ export default function PharmacyDetailsModal({
             </div>
           </section>
 
+          {/* Section: Warehouse Details — only when the registration has warehouses */}
+          {Array.isArray(data.pharmacyRegistrationWareHouses) &&
+            data.pharmacyRegistrationWareHouses.length > 0 && (
+              <section>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                  Warehouse Details
+                </h3>
+                <div className="flex flex-col gap-6">
+                  {data.pharmacyRegistrationWareHouses.map(
+                    (warehouse: any, index: number) => (
+                      <div
+                        key={warehouse.pharmacyRegistrationWarehouseId ?? index}
+                      >
+                        {/* Number the warehouses only when there is more than one. */}
+                        {data.pharmacyRegistrationWareHouses.length > 1 && (
+                          <p className="text-sm font-semibold text-gray-700 mb-2">
+                            Warehouse {index + 1}
+                          </p>
+                        )}
+                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+                          <div>
+                            <span className="font-medium text-gray-900">
+                              Name:{" "}
+                            </span>
+                            {warehouse.warehouseName || "-"}
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-900">
+                              Code:{" "}
+                            </span>
+                            {warehouse.warehouseCode || "-"}
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-900">
+                              Contact Person:{" "}
+                            </span>
+                            {warehouse.contactPersonName || "-"}
+                          </div>
+                          <div>
+                            <span className="font-medium text-gray-900">
+                              Mobile:{" "}
+                            </span>
+                            {warehouse.mobileNumber || "-"}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="font-medium text-gray-900">
+                              Address:{" "}
+                            </span>
+                            {warehouse.warehouseAddress || "-"}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  )}
+                </div>
+              </section>
+            )}
+
           {/* Section: Documents */}
           {data.pharmacyRegistrationDocuments && data.pharmacyRegistrationDocuments.length > 0 && (
             <section>

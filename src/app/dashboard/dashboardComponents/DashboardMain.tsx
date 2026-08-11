@@ -223,6 +223,10 @@ export default function DashboardMain() {
               case "SUBMITTED":
                 mappedStatus = "UNDER_REVIEW";
                 break;
+              // A registration resubmitted after correction is back under review
+              case "RESUBMITTED":
+                mappedStatus = "UNDER_REVIEW";
+                break;
               case "CORRECTION":
                 mappedStatus = "ACTION_REQUIRED";
                 break;
