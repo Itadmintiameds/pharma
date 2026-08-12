@@ -16,6 +16,24 @@ export const createOrganization = async (data: OrganizationCreateRequest) => {
   }
 };
 
+// Upload the organization logo (multipart/form-data, field name "logo").
+// Auth is via HttpOnly cookies on the shared api client, same as createOrganization.
+export const uploadOrganizationLogo = async (file: File) => {
+  try {
+    const formData = new FormData();
+    formData.append("logo", file);
+
+    const response = await api.post("/organization/logo", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to upload organization logo.");
+  }
+};
+
 // Fetch organization details for the logged-in user
 export const getUserOrganization = async () => {
   try {

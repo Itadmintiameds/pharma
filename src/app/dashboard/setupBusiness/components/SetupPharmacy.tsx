@@ -14,6 +14,7 @@ import {
   savePharmacyDraft,
   submitPharmacyDraft,
   resubmitPharmacy,
+  uploadOrganizationLogo,
   uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
 import { checkDocumentNumber } from "@/services/UserManagementService";
@@ -39,6 +40,7 @@ interface SetupPharmacyProps {
   hasOrganization?: boolean;
   existingOrg?: any;
   prefillData?: any;
+  logo?: File | null;
 }
 
 interface PostOffice {
@@ -63,6 +65,7 @@ const SetupPharmacy = ({
   hasOrganization = false,
   existingOrg = null,
   prefillData = null,
+  logo = null,
 }: SetupPharmacyProps) => {
   const [selected, setSelected] = useState("");
 
@@ -666,6 +669,18 @@ const SetupPharmacy = ({
 
         orgResponse = await createOrganization(orgPayload);
         console.log("Step 1 Success (Organization):", orgResponse);
+
+        // Upload the org logo once the organization exists. It's optional, so a
+        // failure here shouldn't abort the registration — warn and continue.
+        if (logo) {
+          try {
+            await uploadOrganizationLogo(logo);
+            console.log("Organization logo uploaded");
+          } catch (logoErr) {
+            console.error("Logo upload failed:", logoErr);
+            showToast.error("Organization created, but the logo upload failed.");
+          }
+        }
       } else {
         console.log("Using existing organization details:", orgResponse);
       }
