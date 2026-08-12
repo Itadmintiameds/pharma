@@ -21,7 +21,7 @@ import {
 import {
   amountInWords,
   formatAmount,
-  lineNet,
+  lineBreakdown,
 } from "@/utils/billingTotals";
 import {
   getCurrentPharmacy,
@@ -332,6 +332,15 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     [invoiceNo]
   );
 
+  /**
+   * A row costed out with its share of the bill level discount folded in, so
+   * the grid reconciles with the summary: the Net Amount column sums to NET
+   * PAYABLE. The percentage comes off the totals, which is where the cashier's
+   * rupees-or-percent entry has already been resolved.
+   */
+  const rowBreakdown = (line: BillLine) =>
+    lineBreakdown(line, totals.billDiscountPercentage || 0);
+
   const columns: ColumnDef<BillLine>[] = [
     {
       id: "slNo",
@@ -346,6 +355,11 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           {row.original.productName || "—"}
         </Centered>
       ),
+    },
+    {
+      accessorKey: "hsnCode",
+      header: () => <Centered>HSN</Centered>,
+      cell: ({ row }) => <Centered>{row.original.hsnCode || "—"}</Centered>,
     },
     {
       accessorKey: "batchNumber",
@@ -367,18 +381,20 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     },
     {
       accessorKey: "discountPercentage",
+      // The effective discount: the row's own plus its share of any bill level
+      // one, so the rows add up to NET PAYABLE.
       header: () => <Centered>Discount (%)</Centered>,
-      cell: ({ row }) => <Centered>{row.original.discountPercentage || 0}</Centered>,
+      cell: ({ row }) => (
+        <Centered>{formatAmount(rowBreakdown(row.original).discountPercentage)}</Centered>
+      ),
     },
     {
-      id: "rate",
-      header: () => <Centered>Rate (₹)</Centered>,
+      id: "mrp",
+      // MRP, not the selling price: the bill is raised at the printed price,
+      // which already includes GST.
+      header: () => <Centered>MRP (₹)</Centered>,
       cell: ({ row }) => (
-        <Centered>
-          {formatAmount(
-            row.original.sellingPricePerUnit ?? row.original.mrpPerUnit ?? 0
-          )}
-        </Centered>
+        <Centered>{formatAmount(row.original.mrpPerUnit ?? 0)}</Centered>
       ),
     },
     {
@@ -390,9 +406,10 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     },
     {
       id: "netAmount",
+      // (MRP x qty) less the effective discount. GST is inside it, never added.
       header: () => <Centered>Net Amount (₹)</Centered>,
       cell: ({ row }) => (
-        <Centered>{formatAmount(lineNet(row.original))}</Centered>
+        <Centered>{formatAmount(rowBreakdown(row.original).netAmount)}</Centered>
       ),
     },
   ];
@@ -404,17 +421,27 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     { label: "Payment Mode", value: payment.paymentMode || "CASH" },
   ];
 
-  /** The four lines above NET PAYABLE. Discount holds whether or not one was
-   *  given, so the card keeps its 184px height either way. */
+  /**
+   * The lines above NET PAYABLE.
+   *
+   * Taxable and GST are the tax split of what is actually being paid — the GST
+   * shown was extracted out of the net, not added to it. `Total` then answers a
+   * different question: what the goods came to at MRP, before any discount. It
+   * is a display row only, never sent anywhere, and it is what makes the card
+   * read as arithmetic: Total - Discount = NET PAYABLE.
+   *
+   * Every row renders whether or not it applies, so the card keeps its height.
+   */
   const AMOUNT_ROWS = [
-    { label: "Gross Amount", value: totals.grossAmount || 0 },
-    {
-      label: "Discount",
-      value: (totals.itemDiscount || 0) + (totals.billDiscount || 0),
-    },
     { label: "Taxable Amt", value: totals.taxableAmount || 0 },
     // Amount only — lines can sit on different GST slabs.
     { label: "GST", value: totals.gstAmount || 0 },
+    { label: "Total", value: totals.grossAmount || 0 },
+    {
+      // Every rupee taken off: the per-row discounts and the bill level one.
+      label: "Discount",
+      value: (totals.itemDiscount || 0) + (totals.billDiscount || 0),
+    },
   ];
 
   /** The two customer facts on the right. */
@@ -520,10 +547,12 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
             data-print="net"
             className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2"
           >
-            <span className="font-body text-p5 font-semibold text-pneutral-900">
+            {/* Purple: the one figure the customer and the counter both look
+                for. Total less the discount. */}
+            <span className="font-body text-p5 font-semibold text-secondary-700">
               NET PAYABLE
             </span>
-            <span className="font-body text-p5 font-semibold text-pneutral-900">
+            <span className="font-body text-p5 font-bold text-secondary-700">
               ₹ {formatAmount(totals.netAmount || 0)}
             </span>
           </div>

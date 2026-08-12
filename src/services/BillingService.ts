@@ -38,36 +38,56 @@ export const buildBillingPayload = ({
   billDiscountValue,
   discountType,
 }: BuildPayloadArgs): CreateBillingPayload => {
-  // An amount is converted against the cart's gross, then every line carries
-  // that same percentage on top of its own discount.
-  const cartGross = lines.reduce(
-    (sum, line) => sum + line.quantity * (line.sellingPricePerUnit ?? line.mrpPerUnit ?? 0),
+  // An amount is converted against the cart's MRP total, then every line
+  // carries that same percentage on top of its own discount.
+  const cartMrpTotal = lines.reduce(
+    (sum, line) => sum + line.quantity * (line.mrpPerUnit ?? 0),
     0
   );
   const billDiscount = billDiscountBothWays(
-    cartGross,
+    cartMrpTotal,
     billDiscountValue,
     discountType
   );
 
   const billingDetails = lines.map((line) => {
     const row = lineBreakdown(line, billDiscount.percentage);
+
+    // (MRP x qty) - discount, which is what the customer pays, and the GST
+    // extracted from inside it — never added to it.
+    const netAmount = money(row.netAmount);
+    const gstAmount = money(row.gstAmount);
+
     return {
       productId: line.productId,
       batchId: line.batchId,
       unit: String(line.unit || ''),
       billQuantity: line.quantity,
-      grossAmount: money(row.grossAmount),
+      // grossAmount carries the *taxable* value, not MRP x qty: MRP is
+      // tax-inclusive, so the pre-tax figure is what is worth storing. It is
+      // derived from the two rounded figures rather than rounded on its own —
+      // rounding all three independently left gross + gst a paisa off net.
+      grossAmount: money(netAmount - gstAmount),
       discountPercentage: money(row.discountPercentage),
       discountAmount: money(row.discountAmount),
-      gstAmount: money(row.gstAmount),
-      netAmount: money(row.netAmount),
+      gstAmount,
+      netAmount,
     };
   });
 
+  // Every total is a straight sum of the lines, so the header always reconciles
+  // with the rows it was built from.
   const totalGrossAmount = billingDetails.reduce((sum, d) => sum + d.grossAmount, 0);
   const totalGstAmount = billingDetails.reduce((sum, d) => sum + d.gstAmount, 0);
-  const totalNetAmount = billingDetails.reduce((sum, d) => sum + d.netAmount, 0);
+  const totalDiscountAmount = billingDetails.reduce(
+    (sum, d) => sum + d.discountAmount,
+    0
+  );
+  // Taxable + GST. Identical to the sum of the line nets, by construction.
+  const totalNetAmount = totalGrossAmount + totalGstAmount;
+  // The discount as a share of what it was actually taken off: the MRP total.
+  const totalDiscountPercentage =
+    cartMrpTotal > 0 ? (totalDiscountAmount / cartMrpTotal) * 100 : 0;
   const pendingAmount = Math.max(0, totalNetAmount - (payment.amountReceived || 0));
 
   return {
@@ -95,8 +115,8 @@ export const buildBillingPayload = ({
           : 'UNPAID',
 
     totalGrossAmount: money(totalGrossAmount),
-    totalDiscountPercentage: money(billDiscount.percentage),
-    totalDiscountAmount: money(billDiscount.amount),
+    totalDiscountPercentage: money(totalDiscountPercentage),
+    totalDiscountAmount: money(totalDiscountAmount),
     totalGstAmount: money(totalGstAmount),
     totalNetAmount: money(totalNetAmount),
 

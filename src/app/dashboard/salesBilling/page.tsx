@@ -101,9 +101,14 @@ const pendingOf = (bill: BillingRecord) => {
 const toBillLines = (bill: BillingRecord): BillLine[] =>
   (bill.billingDetails ?? []).map((detail) => {
     const quantity = detail.billQuantity || 0;
-    const rate = quantity > 0 ? detail.grossAmount / quantity : 0;
-    const taxable = detail.grossAmount - detail.discountAmount;
-    const gstPercentage = taxable > 0 ? (detail.gstAmount / taxable) * 100 : 0;
+    // A saved line stores the taxable value in grossAmount and the GST that was
+    // extracted out of the net, so the GST rate is one against the other.
+    const gstPercentage =
+      detail.grossAmount > 0 ? (detail.gstAmount / detail.grossAmount) * 100 : 0;
+    // netAmount is (MRP x qty) - discount, so adding the discount back and
+    // dividing by the quantity recovers the MRP exactly.
+    const rate =
+      quantity > 0 ? (detail.netAmount + detail.discountAmount) / quantity : 0;
 
     return {
       lineId: String(detail.billingDetailsId),
@@ -125,34 +130,46 @@ const toBillLines = (bill: BillingRecord): BillLine[] =>
   });
 
 /**
- * A saved bill does not always carry the batch expiry, so any line missing one
- * has it read back off its batch. Best effort and batched by batch id — a
+ * A saved bill stores neither the batch expiry nor the HSN, so any line missing
+ * one has it read back off its batch. Best effort and batched by batch id — a
  * lookup that fails leaves the cell empty rather than holding up the invoice.
  */
-const withBatchExpiry = async (lines: BillLine[]): Promise<BillLine[]> => {
+const withBatchDetails = async (lines: BillLine[]): Promise<BillLine[]> => {
   const missing = Array.from(
-    new Set(lines.filter((l) => !l.expiryDate && l.batchId).map((l) => l.batchId))
+    new Set(
+      lines
+        .filter((l) => l.batchId && (!l.expiryDate || !l.hsnCode))
+        .map((l) => l.batchId)
+    )
   );
   if (missing.length === 0) return lines;
 
-  const expiries = new Map<string, string>();
+  const found = new Map<string, { expiryDate?: string; hsnCode?: string }>();
   await Promise.all(
     missing.map(async (batchId) => {
       try {
-        const res = await ProductService.getBatchById(batchId);
-        const expiry = res?.data?.expiryDate;
-        if (expiry) expiries.set(batchId, expiry);
+        const b = (await ProductService.getBatchById(batchId))?.data;
+        if (!b) return;
+        found.set(batchId, {
+          expiryDate: b.expiryDate,
+          // The two product shapes disagree on the name of this field.
+          hsnCode: b.hsnCode || b.hsnNo,
+        });
       } catch (err) {
-        console.error(`Failed to read the expiry for batch ${batchId}`, err);
+        console.error(`Failed to read the details for batch ${batchId}`, err);
       }
     })
   );
 
-  return lines.map((line) =>
-    line.expiryDate
-      ? line
-      : { ...line, expiryDate: expiries.get(line.batchId) ?? "" }
-  );
+  return lines.map((line) => {
+    const batch = found.get(line.batchId);
+    if (!batch) return line;
+    return {
+      ...line,
+      expiryDate: line.expiryDate || batch.expiryDate || "",
+      hsnCode: line.hsnCode || batch.hsnCode || "",
+    };
+  });
 };
 
 /** What the POS flow has collected so far. */
@@ -266,7 +283,7 @@ const Page = () => {
           doctorId: bill.doctorId,
           address: bill.customerAddress || "",
         },
-        lines: await withBatchExpiry(toBillLines(bill)),
+        lines: await withBatchDetails(toBillLines(bill)),
         payment: {
           paymentMode: payment?.paymentMode ?? "CASH",
           amountReceived: payment?.receivedAmount ?? bill.totalNetAmount,

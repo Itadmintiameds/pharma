@@ -34,6 +34,7 @@ export interface BillingRow {
   batchId: string;
   batchNumber: string;
   unit: string;
+  hsnCode: string;
   expiryDate: string;
   availableQuantity: number;
   quantity: string;
@@ -96,6 +97,7 @@ export const emptyBillingRow = (): BillingRow => ({
   batchId: "",
   batchNumber: "",
   unit: "",
+  hsnCode: "",
   expiryDate: "",
   availableQuantity: 0,
   quantity: "",
@@ -105,13 +107,13 @@ export const emptyBillingRow = (): BillingRow => ({
   gstPercentage: 0,
 });
 
-/** Rate × qty, less the row discount, plus GST. */
+/** (MRP × qty) less the row discount. Nothing is added for GST — MRP already
+ *  includes it. */
 export const billingRowNet = (row: BillingRow) => {
   const quantity = Number(row.quantity) || 0;
   const discount = Number(row.discountPercentage) || 0;
-  const gross = quantity * (row.sellingPricePerUnit || row.mrpPerUnit || 0);
-  const taxable = gross - (gross * discount) / 100;
-  return taxable + (taxable * (row.gstPercentage || 0)) / 100;
+  const gross = quantity * (row.mrpPerUnit || 0);
+  return gross - (gross * discount) / 100;
 };
 
 /** Per-column overrides for the cell that renders it. */
@@ -193,6 +195,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
       batchId: "",
       batchNumber: "",
       unit: "",
+      hsnCode: product?.hsnCode || "",
       expiryDate: "",
       availableQuantity: 0,
       mrpPerUnit: 0,
@@ -208,6 +211,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         batchId: batch.batchId,
         batchNumber: batch.batchNumber,
         unit: String(batch.unit || ""),
+        hsnCode: batch.hsnCode || "",
         expiryDate: batch.expiryDate,
         availableQuantity: batch.availableQuantity,
         mrpPerUnit: batch.mrpPerUnit,
@@ -274,6 +278,12 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
             searchable
           />
         ),
+      },
+      {
+        id: "hsn",
+        header: "HSN",
+        // Sits on the product, so it fills in with the product, not the batch.
+        cell: ({ row }) => row.original.hsnCode || "—",
       },
       {
         id: "available",
@@ -356,13 +366,13 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         ),
       },
       {
-        id: "rate",
-        header: "Rate (₹)",
+        id: "mrp",
+        // The bill is raised at MRP, which is tax-inclusive — never the
+        // selling price.
+        header: "MRP (₹)",
         cell: ({ row }) =>
           row.original.batchId
-            ? formatAmount(
-                row.original.sellingPricePerUnit || row.original.mrpPerUnit
-              )
+            ? formatAmount(row.original.mrpPerUnit)
             : "\u2014",
       },
       {

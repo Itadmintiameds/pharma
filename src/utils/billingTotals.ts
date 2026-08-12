@@ -1,34 +1,52 @@
 import { BillLine, BillTotals } from "@/types/BillingData";
 
-/** Rate is sellingPricePerUnit (fallback to mrpPerUnit if missing). */
-export const lineRate = (line: BillLine) => line.sellingPricePerUnit ?? line.mrpPerUnit ?? 0;
+/**
+ * MRP is what a line is billed at — the printed price, which already includes
+ * GST. So the money flows the other way round from a supplier invoice: the net
+ * is known first and the tax is *extracted* out of it, rather than a taxable
+ * amount being built up and GST added on top.
+ */
+export const lineRate = (line: BillLine) => line.mrpPerUnit ?? 0;
 
-/** Gross is rate X qty. */
+/** MRP X qty — the line before any discount. */
 export const lineGross = (line: BillLine) => line.quantity * lineRate(line);
 
-/** Discount applied to gross. */
+/** The row's own discount, off the MRP total. */
 export const lineDiscount = (line: BillLine) =>
   (lineGross(line) * (line.discountPercentage || 0)) / 100;
 
-/** Taxable amount after item discount. */
-export const lineTaxable = (line: BillLine) => lineGross(line) - lineDiscount(line);
+/** What the customer pays for the line: (MRP X qty) - discount. Nothing is
+ *  added for GST, because MRP is inclusive of it. */
+export const lineNet = (line: BillLine) => lineGross(line) - lineDiscount(line);
 
-/** Product GST added on taxable amount. */
+/**
+ * The GST sitting inside a tax-inclusive amount — 12% inside ₹900 is
+ * 900 X 12/112 = ₹96.43, not 900 X 12/100. This is the only place the rate is
+ * applied, so every taxable figure in the module comes out of one formula.
+ */
+export const gstWithin = (inclusiveAmount: number, gstPercentage = 0) =>
+  (inclusiveAmount * gstPercentage) / (100 + gstPercentage);
+
+/** The GST inside the line's net. */
 export const lineGst = (line: BillLine) =>
-  (lineTaxable(line) * (line.gstPercentage || 0)) / 100;
+  gstWithin(lineNet(line), line.gstPercentage || 0);
 
-/** Net Amount is (Gross - Discount) + GST. */
-export const lineNet = (line: BillLine) => lineTaxable(line) + lineGst(line);
+/** Net less the GST inside it. */
+export const lineTaxable = (line: BillLine) => lineNet(line) - lineGst(line);
 
 export type DiscountType = "PERCENTAGE" | "AMOUNT";
 
 /**
  * The bill level discount in both units. Whichever one the cashier typed, the
- * other is derived against the cart's gross — that pair is what the summary
+ * other is derived against the cart's MRP total — that pair is what the summary
  * shows and what the billing API is sent.
+ *
+ * The MRP total is the right base for the conversion: since the percentage is
+ * then charged against each line's own MRP total, the shares add back up to
+ * exactly the rupees that were typed.
  */
 export const billDiscountBothWays = (
-  grossAmount: number,
+  cartMrpTotal: number,
   billDiscountValue = 0,
   discountType: DiscountType = "PERCENTAGE"
 ): { amount: number; percentage: number } => {
@@ -36,23 +54,24 @@ export const billDiscountBothWays = (
 
   if (discountType === "PERCENTAGE") {
     return {
-      amount: (grossAmount * billDiscountValue) / 100,
+      amount: (cartMrpTotal * billDiscountValue) / 100,
       percentage: billDiscountValue,
     };
   }
 
   return {
     amount: billDiscountValue,
-    percentage: grossAmount > 0 ? (billDiscountValue / grossAmount) * 100 : 0,
+    percentage: cartMrpTotal > 0 ? (billDiscountValue / cartMrpTotal) * 100 : 0,
   };
 };
 
 /**
  * A single line costed out with the bill level discount folded in. The bill
  * discount reaches the line as a percentage that adds to whatever discount the
- * line already carries — an amount is converted against the cart's gross first,
- * so 15 rupees off a 170 cart is 8.82% off every line. GST is then charged on
- * what is left, so the totals are nothing more than the sum of the lines.
+ * line already carries — an amount is converted against the cart's MRP total
+ * first, so 15 rupees off a 170 cart is 8.82% off every line. GST is then
+ * extracted from what is left, so the totals are nothing more than the sum of
+ * the lines.
  */
 export interface LineBreakdown {
   grossAmount: number;
@@ -68,22 +87,26 @@ export const lineBreakdown = (
   billDiscountPercentage = 0
 ): LineBreakdown => {
   const grossAmount = lineGross(line);
-  const ownDiscount = (grossAmount * (line.discountPercentage || 0)) / 100;
-  const billShare = (grossAmount * billDiscountPercentage) / 100;
 
-  // A line can never discount past its own gross.
-  const discountAmount = Math.min(grossAmount, ownDiscount + billShare);
-  const taxableAmount = grossAmount - discountAmount;
-  const gstAmount = (taxableAmount * (line.gstPercentage || 0)) / 100;
+  // The two discounts simply add. Capped at 100%, since a line can never
+  // discount past its own MRP total.
+  const discountPercentage = Math.min(
+    100,
+    (line.discountPercentage || 0) + billDiscountPercentage
+  );
+  const discountAmount = (grossAmount * discountPercentage) / 100;
+
+  // (MRP x qty) - discount. This is what is paid; GST lives inside it.
+  const netAmount = grossAmount - discountAmount;
+  const gstAmount = gstWithin(netAmount, line.gstPercentage || 0);
 
   return {
     grossAmount,
-    discountPercentage: grossAmount > 0 ? (discountAmount / grossAmount) * 100 : 0,
+    discountPercentage,
     discountAmount,
-    taxableAmount,
+    taxableAmount: netAmount - gstAmount,
     gstAmount,
-    // (rate x qty - discount) + GST
-    netAmount: taxableAmount + gstAmount,
+    netAmount,
   };
 };
 
@@ -110,6 +133,7 @@ export const calculateBillTotals = (
   const rows = lines.map((line) => lineBreakdown(line, billDiscount.percentage));
   const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
   const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
+  const netAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
 
   return {
     totalItems: lines.length,
@@ -125,7 +149,7 @@ export const calculateBillTotals = (
     gstAmount,
     // Paise are kept — rounding to whole rupees turned 24.05 into 24.00.
     roundOff: 0,
-    netAmount: taxableAmount + gstAmount,
+    netAmount,
   };
 };
 

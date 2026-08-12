@@ -107,17 +107,24 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   /** What is still owed after this payment. */
   const shortfall = Math.max(0, toPaise(amountDue) - toPaise(received)) / 100;
 
-  /** The four summary rows. GST is an amount only — lines can sit on
-   *  different slabs — and the sign column stays aligned across all four. */
+  /**
+   * The summary rows above Net Amount. Taxable and GST are the tax split of
+   * what is being paid — MRP is tax-inclusive, so the GST was extracted out of
+   * the net rather than added to it, hence no sign against it. Total is a
+   * different figure: the MRP value before any discount, so the card reads as
+   * Total - Discount = Net Amount. GST is an amount only, since lines can sit
+   * on different slabs.
+   */
   const SUMMARY_ROWS = [
-    { label: "Gross Amount", sign: "", value: totals.grossAmount },
+    { label: "Taxable", sign: "", value: totals.taxableAmount },
+    { label: "GST", sign: "", value: totals.gstAmount },
+    // What the goods came to at MRP, before any discount — a display row only.
+    { label: "Total", sign: "", value: totals.grossAmount },
     {
       label: "Discount",
       sign: "(-)",
       value: totals.itemDiscount + totals.billDiscount,
     },
-    { label: "Taxable", sign: "", value: totals.taxableAmount },
-    { label: "GST", sign: "(+)", value: totals.gstAmount },
   ];
 
   /**

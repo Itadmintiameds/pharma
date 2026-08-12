@@ -170,6 +170,10 @@ interface BatchApiRow {
   batchId?: string;
   batchNumber?: string;
   purchaseSmallestUnitName?: string;
+  // The batches endpoint is untyped and the two product shapes disagree on the
+  // name, so both are read.
+  hsnCode?: string;
+  hsnNo?: string;
   expiryDate?: string;
   stockQty?: number | string;
   totalStock?: number | string;
@@ -193,6 +197,7 @@ const rowsToLines = (rows: BillingRow[]): BillLine[] =>
       batchId: row.batchId,
       batchNumber: row.batchNumber,
       unit: row.unit || "Unit",
+      hsnCode: row.hsnCode,
       expiryDate: row.expiryDate,
       quantity: Number(row.quantity) || 0,
       freeQuantity: 0,
@@ -213,6 +218,7 @@ const linesToRows = (lines: BillLine[]): BillingRow[] =>
     batchId: line.batchId,
     batchNumber: line.batchNumber,
     unit: String(line.unit || "Unit"),
+    hsnCode: line.hsnCode || "",
     expiryDate: line.expiryDate,
     availableQuantity: line.availableQuantity,
     quantity: String(line.quantity),
@@ -294,6 +300,7 @@ const Billing: React.FC<BillingProps> = ({
           // Stock is counted in smallest units, so never fall back to the
           // purchase unit here — it would label the quantity wrongly.
           unit: b.purchaseSmallestUnitName || "",
+          hsnCode: b.hsnCode || b.hsnNo || "",
           expiryDate: b.expiryDate || "N/A",
           availableQuantity: Number(b.stockQty ?? b.totalStock) || 0,
           mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || 0,
@@ -997,23 +1004,9 @@ const Billing: React.FC<BillingProps> = ({
         <div className="flex flex-col gap-5 w-full">
           {/* Payment Summary Card */}
           <div className="w-full rounded-[16px] border border-[#D5D5D4] bg-white p-4 shadow-sm flex flex-col justify-between h-[226px] text-[15px] font-normal text-pneutral-800">
-            {/* Gross Amount */}
-            <div className="grid grid-cols-3 items-center w-full">
-              <span className="text-left">Gross Amount</span>
-              <span className="text-center"></span>
-              <span className="text-right">₹ {formatAmount(totals.grossAmount)}</span>
-            </div>
-
-            {/* Discount — the bill level one as entered, not a cart-wide sum */}
-            <div className="grid grid-cols-3 items-center w-full">
-              <span className="text-left">Discount</span>
-              <span className="text-center">(-)</span>
-              <span className="text-right">
-                ₹ {formatAmount(totals.billDiscount)}
-              </span>
-            </div>
-
-            {/* Taxable */}
+            {/* Taxable and GST are the tax split of what is being paid — MRP is
+                tax-inclusive, so the GST was extracted out of the net rather
+                than added to it. */}
             <div className="grid grid-cols-3 items-center w-full">
               <span className="text-left">Taxable</span>
               <span className="text-center"></span>
@@ -1023,8 +1016,26 @@ const Billing: React.FC<BillingProps> = ({
             {/* GST — the amount only; lines can sit on different slabs */}
             <div className="grid grid-cols-3 items-center w-full">
               <span className="text-left">GST</span>
-              <span className="text-center">(+)</span>
+              <span className="text-center"></span>
               <span className="text-right">₹ {formatAmount(totals.gstAmount)}</span>
+            </div>
+
+            {/* Total — what the goods came to at MRP, before any discount. A
+                display row only; nothing is sent from it. */}
+            <div className="grid grid-cols-3 items-center w-full">
+              <span className="text-left">Total</span>
+              <span className="text-center"></span>
+              <span className="text-right">₹ {formatAmount(totals.grossAmount)}</span>
+            </div>
+
+            {/* Discount — every rupee taken off: the per-row discounts and the
+                bill level one together. */}
+            <div className="grid grid-cols-3 items-center w-full">
+              <span className="text-left">Discount</span>
+              <span className="text-center">(-)</span>
+              <span className="text-right">
+                ₹ {formatAmount(totals.itemDiscount + totals.billDiscount)}
+              </span>
             </div>
 
             {/* Net Amount */}

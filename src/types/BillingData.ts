@@ -67,12 +67,20 @@ export interface DoctorRecord {
   modifiedBy?: string | null;
 }
 
-/** One line of the billing/create payload. */
+/**
+ * One line of the billing/create payload.
+ *
+ * MRP is tax-inclusive, so the amounts here are not a build-up from a rate:
+ * `netAmount` is (MRP x qty) less the discount, `gstAmount` is the tax found
+ * inside it, and `grossAmount` is what is left — the taxable value. Hence
+ * `grossAmount + gstAmount = netAmount`.
+ */
 export interface BillingDetailPayload {
   productId: string;
   batchId: string;
   unit: string;
   billQuantity: number;
+  /** The taxable value — net less the GST inside it, NOT MRP x qty. */
   grossAmount: number;
   discountPercentage: number;
   discountAmount: number;
@@ -116,10 +124,14 @@ export interface CreateBillingPayload {
   customerAddress?: string;
   /** PAID unless the customer still owes something. */
   paymentType: PaymentType;
+  /** Sum of the lines' taxable values — see BillingDetailPayload. */
   totalGrossAmount: number;
+  /** The whole discount given, per-line and bill level together, as a share of
+   *  the cart's MRP total. */
   totalDiscountPercentage: number;
   totalDiscountAmount: number;
   totalGstAmount: number;
+  /** totalGrossAmount + totalGstAmount. */
   totalNetAmount: number;
   billingDetails: BillingDetailPayload[];
   billingPayments: BillingPaymentPayload[];
@@ -133,6 +145,8 @@ export interface BillableProduct {
   batchId: string;
   batchNumber: string;
   unit?: string | number;
+  /** The product's HSN, shown on the cart grid and the invoice. */
+  hsnCode?: string;
   expiryDate: string;
   /** Units on hand for this batch. */
   availableQuantity: number;
@@ -151,6 +165,8 @@ export interface BillLine {
   batchId: string;
   batchNumber: string;
   unit?: string | number;
+  /** The product's HSN, shown on the cart grid and the invoice. */
+  hsnCode?: string;
   expiryDate: string;
   quantity: number;
   freeQuantity: number;
@@ -165,6 +181,11 @@ export interface BillLine {
 export interface BillTotals {
   totalItems: number;
   totalQuantity: number;
+  /**
+   * MRP x qty summed, before any discount. Not shown on the summaries — MRP is
+   * tax-inclusive, so taxable leads there — but it is the base the bill level
+   * discount is converted against, and the payload carries it.
+   */
   grossAmount: number;
   /** Sum of the per-row discounts only. */
   itemDiscount: number;
