@@ -17,6 +17,7 @@ function SetupBusinessContent() {
   const [locationType, setLocationType] = useState<"single" | "multiple">("single");
   const [manageCentrally, setManageCentrally] = useState<boolean | null>(null);
   const [warehouse, setWarehouse] = useState<WarehouseDetails>(EMPTY_WAREHOUSE);
+  const [logo, setLogo] = useState<File | null>(null);
   const [showProductManagement, setShowProductManagement] = useState(false);
   const [hasOrganization, setHasOrganization] = useState(false);
   const [existingOrg, setExistingOrg] = useState<any>(null);
@@ -180,6 +181,7 @@ function SetupBusinessContent() {
               setGstNumber={setGstNumber}
               locationType={locationType}
               setLocationType={setLocationType}
+              setLogo={setLogo}
             />
           )}
           <SetupPharmacy
@@ -197,6 +199,7 @@ function SetupBusinessContent() {
             hasOrganization={hasOrganization}
             existingOrg={existingOrg}
             prefillData={prefillData}
+            logo={logo}
           />
         </>
       )}
