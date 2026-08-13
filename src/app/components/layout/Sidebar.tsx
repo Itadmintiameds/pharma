@@ -127,6 +127,12 @@ const Sidebar = () => {
           path: "/dashboard/salesBilling",
           isLocked: !hasApprovedPharmacy,
         },
+        {
+          name: "Warehouse Distribution",
+          icon: Receipt,
+          path: "/dashboard/warehouseDistribution",
+          isLocked: !hasApprovedPharmacy,
+        },
       ],
     },
     {
