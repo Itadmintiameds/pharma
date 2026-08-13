@@ -208,12 +208,19 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
 
   const handleBatchChange = async (row: BillingRow, batchId: string) => {
     const listed = catalog.find((batch) => batch.batchId === batchId);
-    const applyBatch = (batch: BillableProduct) =>
+
+    // HSN belongs to the product, not the batch, and the batch endpoints do not
+    // all return it. It is therefore carried across both passes below: an empty
+    // one must never wipe the value picking the product already filled in.
+    let hsnCode = row.hsnCode || listed?.hsnCode || "";
+
+    const applyBatch = (batch: BillableProduct) => {
+      hsnCode = batch.hsnCode || hsnCode;
       patchRow(row.rowId, {
         batchId: batch.batchId,
         batchNumber: batch.batchNumber,
         unit: String(batch.unit || ""),
-        hsnCode: batch.hsnCode || "",
+        hsnCode,
         expiryDate: batch.expiryDate,
         availableQuantity: batch.availableQuantity,
         mrpPerUnit: batch.mrpPerUnit,
@@ -222,6 +229,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         // Carrying a quantity across from a bigger batch could oversell this one.
         quantity: capToStock(row.quantity || "1", batch.availableQuantity),
       });
+    };
 
     if (listed) applyBatch(listed);
 

@@ -939,7 +939,7 @@ const Billing: React.FC<BillingProps> = ({
           {/* Discount Card */}
           <div className="w-full rounded-[12px] border border-[#EAEAE9] bg-white p-4 shadow-sm flex flex-col justify-between h-[226px]">
             <div className="flex items-center justify-between">
-              <span className="text-[18px] font-medium text-[#000000]">Discount</span>
+              <span className="text-[18px] font-medium text-[#000000]">Additional Discount</span>
               <div className="h-[36px] w-[122px] p-[4px] rounded-[12px] border border-[#EAEAE9] bg-[#F5F5F5] flex items-center">
                 <button
                   type="button"
@@ -1031,7 +1031,7 @@ const Billing: React.FC<BillingProps> = ({
             {/* Discount — every rupee taken off: the per-row discounts and the
                 bill level one together. */}
             <div className="grid grid-cols-3 items-center w-full">
-              <span className="text-left">Discount</span>
+              <span className="text-left">Total Discount</span>
               <span className="text-center">(-)</span>
               <span className="text-right">
                 ₹ {formatAmount(totals.itemDiscount + totals.billDiscount)}
