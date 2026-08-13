@@ -19,6 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import { showToast } from "@/app/components/common/Toast";
 import { sanitizeNumber, sanitizePercentage } from "@/app/schema/BillingSchema";
 import Input from "@/app/components/common/Input";
 import { BillableProduct } from "@/types/BillingData";
@@ -156,18 +157,35 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
    * Batches for a product, first-expiry-first and with expired stock left out
    * entirely. A batch with no readable expiry sorts last rather than being
    * hidden — better to offer it than to lose sellable stock.
+   *
+   * Batches already on another row are dropped too: the same product and batch
+   * must not appear twice on one bill, since two rows against one batch could
+   * each pass the stock check on their own and together oversell it. Offering
+   * only what is still free is a quieter way to enforce that than rejecting the
+   * pick afterwards.
    */
-  const batchOptionsFor = (productId: string): DropdownOption[] =>
-    catalog
+  const batchOptionsFor = (
+    productId: string,
+    currentRowId: string
+  ): DropdownOption[] => {
+    const taken = new Set(
+      rowsRef.current
+        .filter((row) => row.rowId !== currentRowId && row.batchId)
+        .map((row) => row.batchId)
+    );
+
+    return catalog
       .filter(
         (batch) =>
           batch.productId === productId &&
+          !taken.has(batch.batchId) &&
           // Nothing expired, and nothing with an empty shelf.
           expiryTime(batch.expiryDate) >= startOfToday() &&
           batch.availableQuantity > 0
       )
       .sort((a, b) => expiryTime(a.expiryDate) - expiryTime(b.expiryDate))
       .map((batch) => ({ label: batch.batchNumber, value: batch.batchId }));
+  };
 
   /**
    * The column defs must keep the same function identities across renders —
@@ -207,6 +225,18 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
   };
 
   const handleBatchChange = async (row: BillingRow, batchId: string) => {
+    // The dropdown already hides taken batches; this catches the pick arriving
+    // any other way — a reopened bill, or a stale option list.
+    const duplicateAt = rowsRef.current.findIndex(
+      (other) => other.rowId !== row.rowId && other.batchId === batchId
+    );
+    if (duplicateAt >= 0) {
+      showToast.error(
+        `This batch is already on row ${duplicateAt + 1}. Change the quantity there instead.`
+      );
+      return;
+    }
+
     const listed = catalog.find((batch) => batch.batchId === batchId);
 
     // HSN belongs to the product, not the batch, and the batch endpoints do not
@@ -281,7 +311,10 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         cell: ({ row }) => (
           <Dropdown
             placeholder="Batch"
-            options={batchOptionsFor(row.original.productId)}
+            options={batchOptionsFor(
+              row.original.productId,
+              row.original.rowId
+            )}
             value={row.original.batchId}
             onChange={(value: string) => handleBatchChange(row.original, value)}
             disabled={!row.original.productId}
