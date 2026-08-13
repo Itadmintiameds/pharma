@@ -333,13 +333,16 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   );
 
   /**
-   * A row costed out with its share of the bill level discount folded in, so
-   * the grid reconciles with the summary: the Net Amount column sums to NET
-   * PAYABLE. The percentage comes off the totals, which is where the cashier's
-   * rupees-or-percent entry has already been resolved.
+   * A row costed out on its own terms — the discount typed against that
+   * product, and nothing else. The bill level discount is deliberately left
+   * out: it belongs to the bill, not to any one line, so it appears once in the
+   * summary's Discount row. The grid therefore reads exactly as it did on the
+   * billing screen, row by row: Total - Discount = Net Amount.
+   *
+   * The trade-off is that with a bill level discount the Net Amount column sums
+   * to more than NET PAYABLE; the summary accounts for the difference.
    */
-  const rowBreakdown = (line: BillLine) =>
-    lineBreakdown(line, totals.billDiscountPercentage || 0);
+  const rowBreakdown = (line: BillLine) => lineBreakdown(line, 0);
 
   const columns: ColumnDef<BillLine>[] = [
     {
@@ -381,8 +384,8 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     },
     {
       accessorKey: "discountPercentage",
-      // The effective discount: the row's own plus its share of any bill level
-      // one, so the rows add up to NET PAYABLE.
+      // The discount typed against this product. Any bill level discount is
+      // shown once in the summary instead of being spread over the rows.
       header: () => <Centered>Discount (%)</Centered>,
       cell: ({ row }) => (
         <Centered>{formatAmount(rowBreakdown(row.original).discountPercentage)}</Centered>
@@ -405,8 +408,17 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       ),
     },
     {
+      id: "total",
+      // MRP x qty, before the discount — so the row reads as
+      // Total - Discount = Net Amount, same as the cart grid.
+      header: () => <Centered>Total (₹)</Centered>,
+      cell: ({ row }) => (
+        <Centered>{formatAmount(rowBreakdown(row.original).grossAmount)}</Centered>
+      ),
+    },
+    {
       id: "netAmount",
-      // (MRP x qty) less the effective discount. GST is inside it, never added.
+      // Total less this row's own discount. GST is inside it, never added.
       header: () => <Centered>Net Amount (₹)</Centered>,
       cell: ({ row }) => (
         <Centered>{formatAmount(rowBreakdown(row.original).netAmount)}</Centered>
@@ -425,10 +437,11 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
    * The lines above NET PAYABLE.
    *
    * Taxable and GST are the tax split of what is actually being paid — the GST
-   * shown was extracted out of the net, not added to it. `Total` then answers a
-   * different question: what the goods came to at MRP, before any discount. It
-   * is a display row only, never sent anywhere, and it is what makes the card
-   * read as arithmetic: Total - Discount = NET PAYABLE.
+   * shown was extracted out of the net, not added to it.
+   *
+   * `Total` is the sum of the rows' own totals (MRP x qty), so the card reads as
+   * arithmetic the customer can follow: Total - Discount = NET PAYABLE. It is a
+   * display row only and is never sent anywhere.
    *
    * Every row renders whether or not it applies, so the card keeps its height.
    */

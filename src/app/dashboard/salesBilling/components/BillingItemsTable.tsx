@@ -107,13 +107,15 @@ export const emptyBillingRow = (): BillingRow => ({
   gstPercentage: 0,
 });
 
-/** (MRP × qty) less the row discount. Nothing is added for GST — MRP already
+/** MRP × qty — the row before any discount. */
+export const billingRowTotal = (row: BillingRow) =>
+  (Number(row.quantity) || 0) * (row.mrpPerUnit || 0);
+
+/** Total less the row discount. Nothing is added for GST — MRP already
  *  includes it. */
 export const billingRowNet = (row: BillingRow) => {
-  const quantity = Number(row.quantity) || 0;
-  const discount = Number(row.discountPercentage) || 0;
-  const gross = quantity * (row.mrpPerUnit || 0);
-  return gross - (gross * discount) / 100;
+  const total = billingRowTotal(row);
+  return total - (total * (Number(row.discountPercentage) || 0)) / 100;
 };
 
 /** Per-column overrides for the cell that renders it. */
@@ -382,6 +384,16 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
           row.original.batchId
             ? Number(row.original.gstPercentage || 0).toFixed(2)
             : "\u2014",
+      },
+      {
+        id: "total",
+        // MRP x qty, before the discount — so the row reads as
+        // Total - Discount = Net Amount.
+        header: "Total (₹)",
+        cell: ({ row }) =>
+          row.original.batchId
+            ? formatAmount(billingRowTotal(row.original))
+            : "—",
       },
       {
         id: "netAmount",

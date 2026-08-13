@@ -1020,8 +1020,8 @@ const Billing: React.FC<BillingProps> = ({
               <span className="text-right">₹ {formatAmount(totals.gstAmount)}</span>
             </div>
 
-            {/* Total — what the goods came to at MRP, before any discount. A
-                display row only; nothing is sent from it. */}
+            {/* Total — the sum of the grid's own Total column (MRP x qty), so
+                Total - Discount = Net Amount. Display only; nothing is sent. */}
             <div className="grid grid-cols-3 items-center w-full">
               <span className="text-left">Total</span>
               <span className="text-center"></span>

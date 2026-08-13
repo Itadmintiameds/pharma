@@ -80,6 +80,9 @@ export interface BillingDetailPayload {
   batchId: string;
   unit: string;
   billQuantity: number;
+  /** MRP x billQuantity — the line before any discount. Despite the name it is
+   *  the line total, not a per-unit price. */
+  totalMrpAmountPerUnit: number;
   /** The taxable value — net less the GST inside it, NOT MRP x qty. */
   grossAmount: number;
   discountPercentage: number;
@@ -124,6 +127,8 @@ export interface CreateBillingPayload {
   customerAddress?: string;
   /** PAID unless the customer still owes something. */
   paymentType: PaymentType;
+  /** Sum of the lines' MRP totals, before any discount. */
+  totalMrpAmount: number;
   /** Sum of the lines' taxable values — see BillingDetailPayload. */
   totalGrossAmount: number;
   /** The whole discount given, per-line and bill level together, as a share of
@@ -223,6 +228,14 @@ export interface BillingDetailRecord {
   expiryDate?: string | null;
   unit: string;
   billQuantity: number;
+  /** Stored on the line, so nothing has to be derived back out of the amounts. */
+  gstPercentage?: number;
+  /** The product's HSN, as the billing API names it. */
+  hsnNo?: string;
+  /** MRP x billQuantity. Absent on bills saved before the column existed, so
+   *  the reader falls back to netAmount + discountAmount. */
+  totalMrpAmountPerUnit?: number;
+  /** The taxable value — see BillingDetailPayload. */
   grossAmount: number;
   discountPercentage: number;
   discountAmount: number;
@@ -255,6 +268,9 @@ export interface BillingRecord {
   prescriptionUrl: string | null;
   sellingType: string | null;
   pharmacyId?: string;
+  /** Sum of the lines' MRP totals. Absent on bills saved before the column
+   *  existed. */
+  totalMrpAmount?: number;
   totalGrossAmount: number;
   totalDiscountPercentage: number;
   totalDiscountAmount: number;

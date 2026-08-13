@@ -110,15 +110,16 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   /**
    * The summary rows above Net Amount. Taxable and GST are the tax split of
    * what is being paid — MRP is tax-inclusive, so the GST was extracted out of
-   * the net rather than added to it, hence no sign against it. Total is a
-   * different figure: the MRP value before any discount, so the card reads as
+   * the net rather than added to it, hence no sign against it. Total is the MRP
+   * value of the lines before any discount, so the card reads as
    * Total - Discount = Net Amount. GST is an amount only, since lines can sit
    * on different slabs.
    */
   const SUMMARY_ROWS = [
     { label: "Taxable", sign: "", value: totals.taxableAmount },
     { label: "GST", sign: "", value: totals.gstAmount },
-    // What the goods came to at MRP, before any discount — a display row only.
+    // Sum of the lines' totals (MRP x qty), so Total - Discount = Net Amount.
+    // A display row only.
     { label: "Total", sign: "", value: totals.grossAmount },
     {
       label: "Discount",
