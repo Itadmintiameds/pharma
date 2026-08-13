@@ -315,6 +315,8 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       if (isCapturingRef.current) return;
       isCapturingRef.current = true;
       try {
+        // Portrait A4. The bill marks its header and footer with data-print
+        // hooks, so they are redrawn on every page.
         await downloadElementAsPdf(
           node,
           `invoice-${invoiceNo.replace(/[^a-zA-Z0-9-_]+/g, "-")}.pdf`
