@@ -8,6 +8,7 @@ import Image from "next/image";
 import { X } from "lucide-react";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { getAllSupplier, createSupplier } from "@/services/SupplierService";
+import { PurchaseService } from "@/services/PurchaseService";
 import { SupplierData } from "@/types/SupplierData";
 import toast from "react-hot-toast";
 
@@ -63,10 +64,95 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
       .replace(/^[/\- ]+/, "")
       .slice(0, INVOICE_NO_MAX);
 
-  const invoiceNoError =
-    invoiceNo && !hasAlphanumeric(invoiceNo)
-      ? "Invoice No. must contain letters or numbers"
-      : "";
+  /**
+   * A supplier's invoice number has to be unique within a year, so the three
+   * together are checked against the server as the number is typed.
+   *
+   * The year comes off the invoice date rather than being assumed to be the
+   * current one, so the check waits until that date is set.
+   */
+  const invoiceYear = invoiceDate ? invoiceDate.slice(0, 4) : "";
+  // A trailing separator is typed through, so the value sent is the tidied one.
+  const cleanInvoiceNo = invoiceNo.replace(/[/\- ]+$/, "").trim();
+  const canCheckInvoiceNo =
+    // A supplier being created has no id to check against yet; handleNext
+    // checks that case once the id exists.
+    !isAddingNewSupplier &&
+    !!selectedSupplierId &&
+    !!invoiceYear &&
+    cleanInvoiceNo.length > 0 &&
+    hasAlphanumeric(cleanInvoiceNo);
+
+  /**
+   * The verdict is stored against the exact query it answers, and both flags
+   * below are derived from it. That way a stale answer can never be read as
+   * current, and nothing has to be cleared when the field changes — the key
+   * simply stops matching.
+   */
+  const invoiceCheckKey = canCheckInvoiceNo
+    ? `${selectedSupplierId}|${cleanInvoiceNo}|${invoiceYear}`
+    : "";
+  const [invoiceCheck, setInvoiceCheck] = useState<{
+    key: string;
+    // "unknown" when the request itself failed — not the same as free, and the
+    // field must not claim availability it never established.
+    status: "free" | "taken" | "unknown";
+  } | null>(null);
+  /** Set while handleNext re-checks, which the typing check cannot cover. */
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const isDuplicate =
+    !!invoiceCheckKey &&
+    invoiceCheck?.key === invoiceCheckKey &&
+    invoiceCheck.status === "taken";
+  const isAvailable =
+    !!invoiceCheckKey &&
+    invoiceCheck?.key === invoiceCheckKey &&
+    invoiceCheck.status === "free";
+  const isCheckingInvoiceNo =
+    isVerifying || (!!invoiceCheckKey && invoiceCheck?.key !== invoiceCheckKey);
+
+  useEffect(() => {
+    if (!invoiceCheckKey) return;
+
+    // Debounced so a five-character invoice number is one request, not five,
+    // and cancelled on the way out so a slow reply cannot land after the field
+    // has moved on.
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const exists = await PurchaseService.checkInvoiceExists(
+          selectedSupplierId!,
+          cleanInvoiceNo,
+          invoiceYear
+        );
+        if (active)
+          setInvoiceCheck({
+            key: invoiceCheckKey,
+            status: exists ? "taken" : "free",
+          });
+      } catch (error) {
+        // A failed check must not read as "already exists", nor as available —
+        // handleNext checks again and refuses to continue if that fails too.
+        console.error("Could not check the invoice number", error);
+        if (active) setInvoiceCheck({ key: invoiceCheckKey, status: "unknown" });
+      }
+    }, 400);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [invoiceCheckKey, selectedSupplierId, cleanInvoiceNo, invoiceYear]);
+
+  const DUPLICATE_INVOICE_MESSAGE =
+    "Invoice No. already exists for this supplier";
+
+  const invoiceNoError = invoiceNo && !hasAlphanumeric(invoiceNo)
+    ? "Invoice No. must contain letters or numbers"
+    : isDuplicate
+    ? DUPLICATE_INVOICE_MESSAGE
+    : "";
 
   // Local (not UTC) date so "today" is always selectable regardless of timezone
   const today = (() => {
@@ -153,6 +239,35 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
         toast.error("Please select a supplier");
         return;
       }
+    }
+
+    // Checked again here rather than trusting the field: the typing check is
+    // debounced and may not have landed, it is skipped entirely for a supplier
+    // created moments ago, and another till could have used the number since.
+    // A failed check blocks — a duplicate invoice is worse than a retry.
+    const year = invoiceDate.slice(0, 4);
+    try {
+      setIsVerifying(true);
+      const exists = await PurchaseService.checkInvoiceExists(
+        finalSupplierId!,
+        cleanInvoiceNo,
+        year
+      );
+      // Recorded against this exact query, so the field shows the same verdict.
+      setInvoiceCheck({
+        key: `${finalSupplierId}|${cleanInvoiceNo}|${year}`,
+        status: exists ? "taken" : "free",
+      });
+      if (exists) {
+        toast.error(DUPLICATE_INVOICE_MESSAGE);
+        return;
+      }
+    } catch (error) {
+      console.error("Could not check the invoice number", error);
+      toast.error("Could not verify the Invoice No. Please try again.");
+      return;
+    } finally {
+      setIsVerifying(false);
     }
 
     setPurchaseHeader({
@@ -268,6 +383,13 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
               onBlur={() => setInvoiceNo((val) => val.replace(/[/\- ]+$/, ""))}
               maxLength={INVOICE_NO_MAX}
               error={invoiceNoError}
+              hint={
+                isCheckingInvoiceNo
+                  ? "Checking availability…"
+                  : isAvailable
+                  ? "Invoice No. is available"
+                  : undefined
+              }
               required
             />
 
@@ -384,9 +506,19 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
           <button
             className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800 disabled:opacity-50"
             onClick={handleNext}
-            disabled={isCreatingSupplier || isLoadingSuppliers}
+            // A known duplicate is refused here rather than one screen later.
+            disabled={
+              isCreatingSupplier ||
+              isLoadingSuppliers ||
+              isCheckingInvoiceNo ||
+              isDuplicate
+            }
           >
-            {isCreatingSupplier ? "Creating..." : "Next"}
+            {isCreatingSupplier
+              ? "Creating..."
+              : isCheckingInvoiceNo
+              ? "Checking..."
+              : "Next"}
           </button>
         </div>
       </div>
