@@ -23,6 +23,7 @@ import {
   BillLine,
   BillRecord,
   BillStatus,
+  BillTotals,
   BillingRecord,
   CustomerInfo,
   PaymentDetails,
@@ -95,15 +96,18 @@ const pendingOf = (bill: BillingRecord) => {
 };
 
 /**
- * Rebuilds cart lines from a saved bill. The API stores amounts rather than
- * unit prices, so rate and GST rate are derived back out of them.
+ * Rebuilds cart lines from a saved bill. billing/{id} carries the line whole —
+ * amounts, GST rate and HSN — so the only thing derived here is the per-unit
+ * MRP, because the API stores the line total rather than the unit price.
  */
 const toBillLines = (bill: BillingRecord): BillLine[] =>
   (bill.billingDetails ?? []).map((detail) => {
     const quantity = detail.billQuantity || 0;
-    const rate = quantity > 0 ? detail.grossAmount / quantity : 0;
-    const taxable = detail.grossAmount - detail.discountAmount;
-    const gstPercentage = taxable > 0 ? (detail.gstAmount / taxable) * 100 : 0;
+    // Bills saved before totalMrpAmountPerUnit existed reach the same figure
+    // from netAmount + discountAmount, which is what the total is.
+    const lineTotal =
+      detail.totalMrpAmountPerUnit ?? detail.netAmount + detail.discountAmount;
+    const rate = quantity > 0 ? lineTotal / quantity : 0;
 
     return {
       lineId: String(detail.billingDetailsId),
@@ -112,26 +116,38 @@ const toBillLines = (bill: BillingRecord): BillLine[] =>
       batchId: detail.batchId,
       batchNumber: detail.batchNumber,
       unit: detail.unit,
-      // Filled in from the batch when the saved bill does not carry it.
+      hsnCode: detail.hsnNo ?? "",
+      // The one field the bill does not store — read off the batch afterwards.
       expiryDate: detail.expiryDate ?? "",
       quantity,
       freeQuantity: 0,
       mrpPerUnit: rate,
       sellingPricePerUnit: rate,
       discountPercentage: detail.discountPercentage || 0,
-      gstPercentage,
+      // Stored on the line. Older bills fall back to the rate implied by the
+      // GST sitting inside the taxable value.
+      gstPercentage:
+        detail.gstPercentage ??
+        (detail.grossAmount > 0
+          ? (detail.gstAmount / detail.grossAmount) * 100
+          : 0),
       availableQuantity: 0,
     };
   });
 
 /**
- * A saved bill does not always carry the batch expiry, so any line missing one
- * has it read back off its batch. Best effort and batched by batch id — a
- * lookup that fails leaves the cell empty rather than holding up the invoice.
+ * Fills in the batch expiry, the one field a saved bill does not store — every
+ * other value on the line comes straight from billing/{id}. One request per
+ * distinct batch, and only for lines actually missing an expiry, so a bill of
+ * five lines over two batches costs two calls. Best effort: a lookup that fails
+ * leaves the cell empty rather than holding up the invoice.
+ *
+ * Add expiryDate to billingDetails and this whole step goes away — delete it
+ * and pass toBillLines(bill) straight through.
  */
 const withBatchExpiry = async (lines: BillLine[]): Promise<BillLine[]> => {
   const missing = Array.from(
-    new Set(lines.filter((l) => !l.expiryDate && l.batchId).map((l) => l.batchId))
+    new Set(lines.filter((l) => l.batchId && !l.expiryDate).map((l) => l.batchId))
   );
   if (missing.length === 0) return lines;
 
@@ -139,8 +155,8 @@ const withBatchExpiry = async (lines: BillLine[]): Promise<BillLine[]> => {
   await Promise.all(
     missing.map(async (batchId) => {
       try {
-        const res = await ProductService.getBatchById(batchId);
-        const expiry = res?.data?.expiryDate;
+        const expiry = (await ProductService.getBatchById(batchId))?.data
+          ?.expiryDate;
         if (expiry) expiries.set(batchId, expiry);
       } catch (err) {
         console.error(`Failed to read the expiry for batch ${batchId}`, err);
@@ -155,6 +171,35 @@ const withBatchExpiry = async (lines: BillLine[]): Promise<BillLine[]> => {
   );
 };
 
+/**
+ * The totals exactly as the bill was saved. billing/{id} returns every one of
+ * them, so a bill that is being viewed shows the figures it was created with
+ * rather than a fresh recompute — nothing drifts if the pricing rules change
+ * later, and no arithmetic is repeated here.
+ */
+const savedTotals = (bill: BillingRecord, lines: BillLine[]): BillTotals => ({
+  totalItems: lines.length,
+  totalQuantity: lines.reduce(
+    (sum, line) => sum + line.quantity + (line.freeQuantity || 0),
+    0
+  ),
+  // Bills saved before the column reach the same figure either way, since the
+  // MRP total is only ever net plus the discount.
+  grossAmount:
+    bill.totalMrpAmount ??
+    (bill.totalNetAmount || 0) + (bill.totalDiscountAmount || 0),
+  // One stored figure already covers the per-line and bill level discounts
+  // together, and each saved line carries its own share — so it goes here whole
+  // and billDiscount stays zero rather than being counted twice.
+  itemDiscount: bill.totalDiscountAmount || 0,
+  billDiscount: 0,
+  billDiscountPercentage: 0,
+  taxableAmount: bill.totalGrossAmount || 0,
+  gstAmount: bill.totalGstAmount || 0,
+  roundOff: 0,
+  netAmount: bill.totalNetAmount || 0,
+});
+
 /** What the POS flow has collected so far. */
 interface BillDraft {
   customer?: CustomerInfo;
@@ -167,6 +212,9 @@ interface BillDraft {
   prescriptionFile?: File | null;
   invoiceNo?: string;
   billDate?: string;
+  /** Set only for a saved bill: the totals it was stored with, used as they are
+   *  instead of recomputing them from the lines. */
+  savedTotals?: BillTotals;
 }
 
 const EMPTY_DRAFT: BillDraft = {
@@ -252,6 +300,7 @@ const Page = () => {
     try {
       const bill = await getBillingById(billingId);
       const payment = bill.billingPayments?.[0];
+      const lines = await withBatchExpiry(toBillLines(bill));
 
       setDraft({
         customer: {
@@ -266,7 +315,10 @@ const Page = () => {
           doctorId: bill.doctorId,
           address: bill.customerAddress || "",
         },
-        lines: await withBatchExpiry(toBillLines(bill)),
+        lines,
+        // The response carries every total, so the invoice shows what was
+        // stored rather than a recompute of it.
+        savedTotals: savedTotals(bill, lines),
         payment: {
           paymentMode: payment?.paymentMode ?? "CASH",
           amountReceived: payment?.receivedAmount ?? bill.totalNetAmount,
@@ -289,14 +341,17 @@ const Page = () => {
     }
   };
 
+  // A saved bill shows the totals it was stored with; a bill being built is
+  // costed from its lines.
   const totals = useMemo(
     () =>
+      draft.savedTotals ??
       calculateBillTotals(
         draft.lines,
         draft.billDiscountValue,
         draft.discountType
       ),
-    [draft.lines, draft.billDiscountValue, draft.discountType]
+    [draft.savedTotals, draft.lines, draft.billDiscountValue, draft.discountType]
   );
 
   const filteredBills = useMemo(() => {
@@ -464,6 +519,8 @@ const Page = () => {
 
   if (step === "settle" && settling) {
     const bill = settling.bill;
+    // Same as the invoice: the saved bill's own totals, not a recompute.
+    const settleLines = toBillLines(bill);
     return (
       <BillingPayment
         mode="settle"
@@ -481,8 +538,8 @@ const Page = () => {
           doctorId: bill.doctorId,
           address: bill.customerAddress || "",
         }}
-        lines={toBillLines(bill)}
-        totals={calculateBillTotals(toBillLines(bill))}
+        lines={settleLines}
+        totals={savedTotals(bill, settleLines)}
         onBack={() => {
           setSettling(null);
           setStep("list");

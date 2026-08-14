@@ -401,6 +401,13 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         <span className="font-bold text-pneutral-900">Rupees {Math.round(netAmt)} Only</span>
       </div>
 
+      {/* Footer — part of the invoice, so it travels into the PDF capture and
+          the print view. Deliberately plain text with no data-print hook: it
+          reads once at the end of the document rather than on every page. */}
+      <div className="w-full border-t border-pneutral-200 pt-3 text-center text-[13px] text-pneutral-600">
+        Developed by Tiameds
+      </div>
+
       {/* Bottom Actions based on mode */}
       {currentMode !== 'download' && (
         <div className="flex justify-between items-center w-full mt-4 pb-8">

@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { X } from "lucide-react";
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 
@@ -25,6 +26,12 @@ interface DropdownProps {
   readOnly?: boolean;
   isLoading?: boolean;
   allowOther?: boolean;
+  /**
+   * Single-select only. Lets the chosen option be taken back: clicking it a
+   * second time clears the field, and a ✕ appears beside the chevron. Off by
+   * default — on a required field there is nothing sensible to clear back to.
+   */
+  clearable?: boolean;
   menuPlacement?: 'top' | 'bottom';
   /**
    * Rendered at the right of the label row — for a control that swapped in for
@@ -51,6 +58,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   readOnly = false,
   isLoading = false,
   allowOther = false,
+  clearable = false,
   menuPlacement = 'bottom',
   labelAction,
 }) => {
@@ -109,6 +117,10 @@ const Dropdown: React.FC<DropdownProps> = ({
     } else {
       if (option.value === "OTHER") {
         setIsCustomOther(true);
+        onChange("");
+      } else if (clearable && option.value === value) {
+        // Picking the selected option again takes it back.
+        setIsCustomOther(false);
         onChange("");
       } else {
         setIsCustomOther(false);
@@ -250,6 +262,24 @@ const Dropdown: React.FC<DropdownProps> = ({
             {isLoading ? "Loading..." : (displayValue || placeholder)}
           </span>
         )}
+        {clearable && !multiple && !isLocked && !isLoading && displayValue && (
+          <button
+            type="button"
+            aria-label={`Clear ${label ?? "selection"}`}
+            title="Clear"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsCustomOther(false);
+              setSearchQuery("");
+              setIsOpen(false);
+              onChange("");
+            }}
+            className="shrink-0 ml-2 flex h-5 w-5 items-center justify-center rounded text-pneutral-500 hover:text-pneutral-900 hover:bg-pneutral-100 transition-colors cursor-pointer"
+          >
+            <X size={14} />
+          </button>
+        )}
+
         <Image
           src="/ProductManagement/ChevronDouble.svg"
           alt="Dropdown"

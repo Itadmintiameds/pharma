@@ -13,6 +13,8 @@ import {
   registerPharmacy,
   savePharmacyDraft,
   submitPharmacyDraft,
+  resubmitPharmacy,
+  uploadOrganizationLogo,
   uploadPharmacyDocument,
 } from "@/services/SetupBusinessService";
 import { checkDocumentNumber } from "@/services/UserManagementService";
@@ -38,6 +40,7 @@ interface SetupPharmacyProps {
   hasOrganization?: boolean;
   existingOrg?: any;
   prefillData?: any;
+  logo?: File | null;
 }
 
 interface PostOffice {
@@ -62,6 +65,7 @@ const SetupPharmacy = ({
   hasOrganization = false,
   existingOrg = null,
   prefillData = null,
+  logo = null,
 }: SetupPharmacyProps) => {
   const [selected, setSelected] = useState("");
 
@@ -147,7 +151,6 @@ const SetupPharmacy = ({
   const [draftLoading, setDraftLoading] = useState(false);
   const router = useRouter();
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formKey, setFormKey] = useState(0);
   const [checkingDocumentNo, setCheckingDocumentNo] = useState(false);
 
   const issueDateRef = useRef<HTMLInputElement>(null);
@@ -168,28 +171,6 @@ const SetupPharmacy = ({
     } else {
       input.focus();
     }
-  };
-
-  const resetForm = () => {
-    setSelected("");
-    setPharmacyName("");
-    setPharmacyPhone("");
-    setDocumentNo("");
-    setIssueDate("");
-    setIssueAuthority("");
-    setExpiryDate("");
-    setPharmacyPan("");
-    setPharmacyGst("");
-    setPharmacyBuildingNo("");
-    setPharmacyStreet("");
-    setPharmacyLandmark("");
-    setManualFile(null);
-    setExistingManualFile(null);
-    resetAddress("");
-    setErrors({});
-    setShowProductManagement?.(false);
-    setShowWarehouseForm(false);
-    setFormKey(prev => prev + 1);
   };
 
   // New multiple-location org: the primary form is followed by the Product
@@ -468,6 +449,30 @@ const SetupPharmacy = ({
     !!prefillData?.pharmacyRegistrationId &&
     String(prefillData?.registrationStatus || "").toUpperCase() === "DRAFT";
 
+  // The top-level registrationStatus can lag (it may still read "SUBMITTED"
+  // after a reviewer requests changes), so the current state is taken from the
+  // most recent status review. A registration sent back for correction is
+  // resubmitted via PUT /{reqId}/resubmit rather than registered anew.
+  const latestReviewStatus = (() => {
+    const reviews = prefillData?.pharmacyStatusReviews as
+      | { status?: string; statusDate?: string }[]
+      | undefined;
+    if (!Array.isArray(reviews) || reviews.length === 0) return "";
+    const latest = reviews.reduce((a, b) =>
+      new Date(b.statusDate ?? 0).getTime() >= new Date(a.statusDate ?? 0).getTime()
+        ? b
+        : a,
+    );
+    return String(latest?.status || "").toUpperCase();
+  })();
+
+  const isCorrectionResubmit =
+    !!prefillData?.pharmacyRegistrationId && latestReviewStatus === "CORRECTION";
+
+  // Either edit path (draft submit or correction resubmit) reuses the existing
+  // document / warehouse rows so the backend updates them in place.
+  const isExistingEdit = isDraftEdit || isCorrectionResubmit;
+
   const getDocType = () =>
     selected === "doctor"
       ? "MEDICAL_REGISTRATION_CERTIFICATE"
@@ -664,6 +669,18 @@ const SetupPharmacy = ({
 
         orgResponse = await createOrganization(orgPayload);
         console.log("Step 1 Success (Organization):", orgResponse);
+
+        // Upload the org logo once the organization exists. It's optional, so a
+        // failure here shouldn't abort the registration — warn and continue.
+        if (logo) {
+          try {
+            await uploadOrganizationLogo(logo);
+            console.log("Organization logo uploaded");
+          } catch (logoErr) {
+            console.error("Logo upload failed:", logoErr);
+            showToast.error("Organization created, but the logo upload failed.");
+          }
+        }
       } else {
         console.log("Using existing organization details:", orgResponse);
       }
@@ -678,14 +695,15 @@ const SetupPharmacy = ({
       // Map document type
       const docType = getDocType();
 
-      // When submitting an existing draft, reuse its document row so the
-      // backend updates it in place instead of inserting a duplicate
-      const existingDocId = isDraftEdit
+      // When editing an existing registration (draft submit or correction
+      // resubmit), reuse its document row so the backend updates it in place
+      // instead of inserting a duplicate
+      const existingDocId = isExistingEdit
         ? prefillData?.pharmacyRegistrationDocuments?.[0]?.registrationDocumentId
         : undefined;
 
-      // Same for the central warehouse row on draft submit
-      const existingWarehouseId = isDraftEdit
+      // Same for the central warehouse row
+      const existingWarehouseId = isExistingEdit
         ? prefillData?.pharmacyRegistrationWareHouses?.[0]?.pharmacyRegistrationWarehouseId
         : undefined;
 
@@ -738,14 +756,21 @@ const SetupPharmacy = ({
         ],
       };
 
-      // Step 3: Submit draft (PUT) or register a new pharmacy (POST) on Admin Backend
-      const regResponse = isDraftEdit
-        ? await submitPharmacyDraft(
+      // Step 3: On Admin Backend — resubmit a correction (PUT /resubmit),
+      // submit a draft (PUT /submit), or register a new pharmacy (POST)
+      const regResponse = isCorrectionResubmit
+        ? await resubmitPharmacy(
             prefillData.pharmacyRegistrationId,
             registrationPayload,
             accessToken,
           )
-        : await registerPharmacy(registrationPayload, accessToken);
+        : isDraftEdit
+          ? await submitPharmacyDraft(
+              prefillData.pharmacyRegistrationId,
+              registrationPayload,
+              accessToken,
+            )
+          : await registerPharmacy(registrationPayload, accessToken);
 
       console.log("Step 2 Success (Pharmacy Registration):", regResponse);
 
@@ -799,7 +824,10 @@ const SetupPharmacy = ({
         showAddLocation={locationType === "multiple"}
         onAddLocation={() => {
           setOpen(false);
-          resetForm();
+          // Full reload of the setup page so it re-runs getUserOrganization():
+          // the org now exists, so the org + warehouse steps are hidden and
+          // only the pharmacy details are asked for the new location.
+          window.location.href = "/dashboard/setupBusiness";
         }}
       />
       <div className="flex flex-col gap-4">
@@ -814,7 +842,7 @@ const SetupPharmacy = ({
           
         </div>
 
-        <div key={formKey} className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5">
           {showProductManagement ? (
             <SetupWarehouse
               manageCentrally={manageCentrally}
@@ -1204,9 +1232,11 @@ const SetupPharmacy = ({
                 manageCentrally === true &&
                 !showWarehouseForm
                 ? "Continue"
-                : isDraftEdit
-                  ? "Submit Draft"
-                  : "Submit Compliance"}
+                : isCorrectionResubmit
+                  ? "Resubmit"
+                  : isDraftEdit
+                    ? "Submit Draft"
+                    : "Submit Compliance"}
           </Button>
         </div>
       </div>

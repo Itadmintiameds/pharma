@@ -7,12 +7,21 @@
  * dialog and can pick a real printer or "Save as PDF" themselves.
  */
 
-/** Stylesheets are fetched fresh inside the iframe; printing without waiting
- *  for them sends unstyled markup. Past this the dialog opens regardless so a
- *  single dead asset cannot swallow the print. */
-const STYLE_TIMEOUT_MS = 3000;
+/** Stylesheets and images are fetched fresh inside the iframe; printing without
+ *  waiting for them sends unstyled markup and blank logo gaps. Past this the
+ *  dialog opens regardless so a single dead asset cannot swallow the print. */
+const ASSET_TIMEOUT_MS = 3000;
 
-export const printElement = (element: HTMLElement, title = "Invoice") => {
+/**
+ * @param extraCss Stylesheet appended after the page's own, so it wins on
+ *   equal specificity. Use it for print-only layout — the on-screen component
+ *   and any html2canvas capture never see it.
+ */
+export const printElement = (
+    element: HTMLElement,
+    title = "Invoice",
+    extraCss = ""
+) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
     iframe.style.cssText =
@@ -52,7 +61,9 @@ export const printElement = (element: HTMLElement, title = "Invoice") => {
         // browser is told to keep them rather than drop them for ink.
         `*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}` +
         `@page{margin:12mm;}` +
-        `</style></head>` +
+        `</style>` +
+        (extraCss ? `<style>${extraCss}</style>` : "") +
+        `</head>` +
         `<body>${element.outerHTML}</body></html>`
     );
     doc.close();
@@ -69,7 +80,21 @@ export const printElement = (element: HTMLElement, title = "Invoice") => {
     };
 
     const links = Array.from(doc.querySelectorAll("link[rel='stylesheet']"));
-    if (links.length === 0) {
+
+    // Images have to be waited on too, or a logo prints as a blank gap. The
+    // iframe is 0x0 by design, so a lazily-loaded image would never enter a
+    // viewport and never load at all — every clone is forced eager first.
+    const images = Array.from(doc.images);
+    images.forEach((img) => {
+        img.loading = "eager";
+    });
+
+    const pending: Element[] = [
+        ...links.filter((link) => !(link as HTMLLinkElement).sheet),
+        ...images.filter((img) => !img.complete),
+    ];
+
+    if (pending.length === 0) {
         print();
         return;
     }
@@ -77,20 +102,15 @@ export const printElement = (element: HTMLElement, title = "Invoice") => {
     let settled = 0;
     const onSettled = () => {
         settled += 1;
-        if (settled === links.length) print();
+        if (settled === pending.length) print();
     };
 
-    links.forEach((link) => {
-        // A stylesheet already in the browser cache can finish before the
-        // listener is attached, so the loaded state is checked directly.
-        const sheet = (link as HTMLLinkElement).sheet;
-        if (sheet) {
-            onSettled();
-            return;
-        }
-        link.addEventListener("load", onSettled, { once: true });
-        link.addEventListener("error", onSettled, { once: true });
+    // A stylesheet or image already in the browser cache can finish before the
+    // listener is attached, which is why the loaded state was checked above.
+    pending.forEach((node) => {
+        node.addEventListener("load", onSettled, { once: true });
+        node.addEventListener("error", onSettled, { once: true });
     });
 
-    window.setTimeout(print, STYLE_TIMEOUT_MS);
+    window.setTimeout(print, ASSET_TIMEOUT_MS);
 };

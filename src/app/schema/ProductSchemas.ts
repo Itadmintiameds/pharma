@@ -20,11 +20,13 @@ export const MoleculeSchema = z.object({
   name: z.string()
     .min(1, "Molecule is required")
     .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces"),
+  // No character rule: this is never typed freehand. It is the numeric input
+  // and the unit dropdown concatenated ("500" + "mcg/ml"), so the digits are
+  // already checked at the input and the unit text is whatever the master
+  // data says it is — a rule here would only reject the backend's own labels.
   strength: z.string()
     .min(1, "Strength is required")
     .max(30, "Cannot exceed 30 characters")
-    .regex(/^[a-zA-Z0-9\/\s]+$/, "Only alphabets, numbers, spaces, and / are allowed")
-    .refine(val => !/\s{2,}/.test(val), "Cannot contain consecutive spaces")
 });
 
 /**

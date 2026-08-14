@@ -25,6 +25,7 @@ import {
   transactionIdSchema,
 } from "@/app/schema/BillingSchema";
 import { showToast } from "@/app/components/common/Toast";
+import Input from "@/app/components/common/Input";
 import { BACK_BUTTON, PRIMARY_BUTTON } from "./billingButtons";
 
 interface BillingPaymentProps {
@@ -86,6 +87,13 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   // screen whose whole purpose is collecting an outstanding balance.
   const canPayOnCredit = canPayPartially && !isSettling;
 
+  /**
+   * A walk-in, outpatient or daycare bill has to be cleared in full, so there
+   * is nothing for the cashier to decide: the field shows the whole amount and
+   * is locked. Only an admitted patient types a part payment.
+   */
+  const mustPayInFull = !canPayPartially;
+
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("CASH");
   // Left blank on purpose — the cashier types what was handed over.
   const [amountReceived, setAmountReceived] = useState("");
@@ -96,7 +104,16 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   const isCredit = paymentMode === "CREDIT";
   const needsReference = REFERENCE_MODES.includes(paymentMode);
 
-  const received = isCredit ? 0 : Number(amountReceived) || 0;
+  /**
+   * A locked field takes the amount due directly rather than through state:
+   * seeding the input instead would leave a stale figure behind if the amount
+   * changed, and it is the one number that must not be able to drift.
+   */
+  const received = isCredit
+    ? 0
+    : mustPayInFull
+    ? amountDue
+    : Number(amountReceived) || 0;
 
   // Compared in paise throughout: 91.6100 against 91.61 is not a shortfall.
   const changeDue = useMemo(
@@ -107,17 +124,25 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   /** What is still owed after this payment. */
   const shortfall = Math.max(0, toPaise(amountDue) - toPaise(received)) / 100;
 
-  /** The four summary rows. GST is an amount only — lines can sit on
-   *  different slabs — and the sign column stays aligned across all four. */
+  /**
+   * The summary rows above Net Amount. Taxable and GST are the tax split of
+   * what is being paid — MRP is tax-inclusive, so the GST was extracted out of
+   * the net rather than added to it, hence no sign against it. Total is the MRP
+   * value of the lines before any discount, so the card reads as
+   * Total - Discount = Net Amount. GST is an amount only, since lines can sit
+   * on different slabs.
+   */
   const SUMMARY_ROWS = [
-    { label: "Gross Amount", sign: "", value: totals.grossAmount },
+    { label: "Taxable", sign: "", value: totals.taxableAmount },
+    { label: "GST", sign: "", value: totals.gstAmount },
+    // Sum of the lines' totals (MRP x qty), so Total - Discount = Net Amount.
+    // A display row only.
+    { label: "Total", sign: "", value: totals.grossAmount },
     {
       label: "Discount",
       sign: "(-)",
       value: totals.itemDiscount + totals.billDiscount,
     },
-    { label: "Taxable", sign: "", value: totals.taxableAmount },
-    { label: "GST", sign: "(+)", value: totals.gstAmount },
   ];
 
   /**
@@ -127,12 +152,15 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
    */
   const validate = () => {
     const next = {
-      amount: isCredit
-        ? ""
-        : firstError(
-            receivedAmountSchema(amountDue, canPayPartially),
-            amountReceived
-          ),
+      // Nothing to check when the amount is fixed: credit collects zero, and a
+      // locked field is the amount due by construction.
+      amount:
+        isCredit || mustPayInFull
+          ? ""
+          : firstError(
+              receivedAmountSchema(amountDue, canPayPartially),
+              amountReceived
+            ),
       referenceNo: firstError(transactionIdSchema(needsReference), referenceNo),
     };
 
@@ -218,108 +246,66 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
               })}
             </div>
 
-            {/* Input Fields */}
+            {/* Input Fields — the shared Input carries the label, the required
+                asterisk, the error line and the read-only / disabled grounds,
+                so none of that is restated here. */}
             <div className="flex flex-col gap-[16px] pt-2">
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[15px] font-medium text-[#1E1E1D]">
-                    Received Amount
-                  </label>
-                  <span className="text-[13px] font-medium text-[#5A5B57]">
-                    {isSettling ? "Pending" : "Amount due"}: ₹{" "}
-                    {formatAmount(amountDue)}
-                  </span>
-                </div>
-                <div
-                  className={`h-[48px] w-full rounded-[8px] border bg-white px-4 flex items-center shadow-2xs transition-colors ${
-                    errors.amount
-                      ? "border-warning-500"
-                      : "border-[#D5D5D4] focus-within:border-[#7D32FC]"
-                  }`}
-                >
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={amountReceived}
-                    onChange={(e) => {
-                      setAmountReceived(sanitizeNumber(e.target.value));
-                      setErrors((prev) => ({ ...prev, amount: "" }));
-                    }}
-                    placeholder="0.00"
-                    disabled={isCredit}
-                    className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none disabled:text-pneutral-400 disabled:cursor-not-allowed placeholder:text-pneutral-400"
-                  />
-                </div>
-                {errors.amount ? (
-                  <span className="text-p2 text-warning-500">{errors.amount}</span>
-                ) : (
-                  isCredit && (
-                    <span className="text-p2 text-[#5A5B57]">
-                      Nothing is collected on credit — the whole bill stays
-                      pending.
-                    </span>
-                  )
-                )}
-              </div>
+              <Input
+                label="Received Amount"
+                required
+                inputMode="decimal"
+                // Locked, the field shows the amount due itself; `received` is
+                // taken from the same figure rather than from this string.
+                value={mustPayInFull ? formatAmount(amountDue) : amountReceived}
+                onChange={(e) => {
+                  setAmountReceived(sanitizeNumber(e.target.value));
+                  setErrors((prev) => ({ ...prev, amount: "" }));
+                }}
+                placeholder="0.00"
+                readOnly={mustPayInFull}
+                disabled={isCredit}
+                error={errors.amount}
+                hint={
+                  isCredit
+                    ? "Nothing is collected on credit — the whole bill stays pending."
+                    : `${
+                        isSettling ? "Pending" : "Amount due"
+                      }: ₹ ${formatAmount(amountDue)}${
+                        mustPayInFull ? " — collected in full" : ""
+                      }`
+                }
+              />
 
               {/* An in-patient may settle the rest later, so what is left over
                   is captured against the bill. Everyone else pays in full and
                   never sees this. */}
               {canPayPartially && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[15px] font-medium text-[#1E1E1D]">
-                    Pending Amount{" "}
-                    <span className="text-[13px] font-normal text-[#5A5B57]">
-                      (optional)
-                    </span>
-                  </label>
-                  <div className="h-[48px] w-full rounded-[8px] border border-[#D5D5D4] bg-[#F5F5F5] px-4 flex items-center shadow-2xs">
-                    <input
-                      type="text"
-                      value={formatAmount(shortfall)}
-                      readOnly
-                      className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none cursor-default"
-                    />
-                  </div>
-                  <span className="text-p2 text-[#5A5B57]">
-                    {shortfall > 0
+                <Input
+                  label="Pending Amount (optional)"
+                  value={formatAmount(shortfall)}
+                  readOnly
+                  hint={
+                    shortfall > 0
                       ? `₹ ${formatAmount(shortfall)} will remain pending on this bill`
-                      : "Bill is fully paid — nothing pending"}
-                  </span>
-                </div>
+                      : "Bill is fully paid — nothing pending"
+                  }
+                />
               )}
 
               {/* Cash and credit have no reference of their own. */}
               {needsReference && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[15px] font-medium text-[#1E1E1D]">
-                    UPI Reference/Transaction ID
-                  </label>
-                  <div
-                    className={`h-[48px] w-full rounded-[8px] border bg-white px-4 flex items-center shadow-2xs transition-colors ${
-                      errors.referenceNo
-                        ? "border-warning-500"
-                        : "border-[#D5D5D4] focus-within:border-[#7D32FC]"
-                    }`}
-                  >
-                    <input
-                      type="text"
-                      value={referenceNo}
-                      maxLength={TRANSACTION_ID_MAX}
-                      onChange={(e) => {
-                        setReferenceNo(sanitizeTransactionId(e.target.value));
-                        setErrors((prev) => ({ ...prev, referenceNo: "" }));
-                      }}
-                      placeholder="UTR123456789012"
-                      className="w-full font-normal text-[15px] text-[#000000] bg-transparent outline-none placeholder:text-pneutral-400"
-                    />
-                  </div>
-                  {errors.referenceNo && (
-                    <span className="text-p2 text-warning-500">
-                      {errors.referenceNo}
-                    </span>
-                  )}
-                </div>
+                <Input
+                  label="UPI Reference/Transaction ID"
+                  required
+                  value={referenceNo}
+                  maxLength={TRANSACTION_ID_MAX}
+                  onChange={(e) => {
+                    setReferenceNo(sanitizeTransactionId(e.target.value));
+                    setErrors((prev) => ({ ...prev, referenceNo: "" }));
+                  }}
+                  placeholder="UTR123456789012"
+                  error={errors.referenceNo}
+                />
               )}
             </div>
           </div>

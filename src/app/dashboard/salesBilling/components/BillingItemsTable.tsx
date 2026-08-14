@@ -19,6 +19,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import { showToast } from "@/app/components/common/Toast";
 import { sanitizeNumber, sanitizePercentage } from "@/app/schema/BillingSchema";
 import Input from "@/app/components/common/Input";
 import { BillableProduct } from "@/types/BillingData";
@@ -34,6 +35,7 @@ export interface BillingRow {
   batchId: string;
   batchNumber: string;
   unit: string;
+  hsnCode: string;
   expiryDate: string;
   availableQuantity: number;
   quantity: string;
@@ -96,6 +98,7 @@ export const emptyBillingRow = (): BillingRow => ({
   batchId: "",
   batchNumber: "",
   unit: "",
+  hsnCode: "",
   expiryDate: "",
   availableQuantity: 0,
   quantity: "",
@@ -105,13 +108,15 @@ export const emptyBillingRow = (): BillingRow => ({
   gstPercentage: 0,
 });
 
-/** Rate × qty, less the row discount, plus GST. */
+/** MRP × qty — the row before any discount. */
+export const billingRowTotal = (row: BillingRow) =>
+  (Number(row.quantity) || 0) * (row.mrpPerUnit || 0);
+
+/** Total less the row discount. Nothing is added for GST — MRP already
+ *  includes it. */
 export const billingRowNet = (row: BillingRow) => {
-  const quantity = Number(row.quantity) || 0;
-  const discount = Number(row.discountPercentage) || 0;
-  const gross = quantity * (row.sellingPricePerUnit || row.mrpPerUnit || 0);
-  const taxable = gross - (gross * discount) / 100;
-  return taxable + (taxable * (row.gstPercentage || 0)) / 100;
+  const total = billingRowTotal(row);
+  return total - (total * (Number(row.discountPercentage) || 0)) / 100;
 };
 
 /** Per-column overrides for the cell that renders it. */
@@ -152,18 +157,35 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
    * Batches for a product, first-expiry-first and with expired stock left out
    * entirely. A batch with no readable expiry sorts last rather than being
    * hidden — better to offer it than to lose sellable stock.
+   *
+   * Batches already on another row are dropped too: the same product and batch
+   * must not appear twice on one bill, since two rows against one batch could
+   * each pass the stock check on their own and together oversell it. Offering
+   * only what is still free is a quieter way to enforce that than rejecting the
+   * pick afterwards.
    */
-  const batchOptionsFor = (productId: string): DropdownOption[] =>
-    catalog
+  const batchOptionsFor = (
+    productId: string,
+    currentRowId: string
+  ): DropdownOption[] => {
+    const taken = new Set(
+      rowsRef.current
+        .filter((row) => row.rowId !== currentRowId && row.batchId)
+        .map((row) => row.batchId)
+    );
+
+    return catalog
       .filter(
         (batch) =>
           batch.productId === productId &&
+          !taken.has(batch.batchId) &&
           // Nothing expired, and nothing with an empty shelf.
           expiryTime(batch.expiryDate) >= startOfToday() &&
           batch.availableQuantity > 0
       )
       .sort((a, b) => expiryTime(a.expiryDate) - expiryTime(b.expiryDate))
       .map((batch) => ({ label: batch.batchNumber, value: batch.batchId }));
+  };
 
   /**
    * The column defs must keep the same function identities across renders —
@@ -193,6 +215,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
       batchId: "",
       batchNumber: "",
       unit: "",
+      hsnCode: product?.hsnCode || "",
       expiryDate: "",
       availableQuantity: 0,
       mrpPerUnit: 0,
@@ -202,12 +225,32 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
   };
 
   const handleBatchChange = async (row: BillingRow, batchId: string) => {
+    // The dropdown already hides taken batches; this catches the pick arriving
+    // any other way — a reopened bill, or a stale option list.
+    const duplicateAt = rowsRef.current.findIndex(
+      (other) => other.rowId !== row.rowId && other.batchId === batchId
+    );
+    if (duplicateAt >= 0) {
+      showToast.error(
+        `This batch is already on row ${duplicateAt + 1}. Change the quantity there instead.`
+      );
+      return;
+    }
+
     const listed = catalog.find((batch) => batch.batchId === batchId);
-    const applyBatch = (batch: BillableProduct) =>
+
+    // HSN belongs to the product, not the batch, and the batch endpoints do not
+    // all return it. It is therefore carried across both passes below: an empty
+    // one must never wipe the value picking the product already filled in.
+    let hsnCode = row.hsnCode || listed?.hsnCode || "";
+
+    const applyBatch = (batch: BillableProduct) => {
+      hsnCode = batch.hsnCode || hsnCode;
       patchRow(row.rowId, {
         batchId: batch.batchId,
         batchNumber: batch.batchNumber,
         unit: String(batch.unit || ""),
+        hsnCode,
         expiryDate: batch.expiryDate,
         availableQuantity: batch.availableQuantity,
         mrpPerUnit: batch.mrpPerUnit,
@@ -216,6 +259,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         // Carrying a quantity across from a bigger batch could oversell this one.
         quantity: capToStock(row.quantity || "1", batch.availableQuantity),
       });
+    };
 
     if (listed) applyBatch(listed);
 
@@ -267,13 +311,22 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         cell: ({ row }) => (
           <Dropdown
             placeholder="Batch"
-            options={batchOptionsFor(row.original.productId)}
+            options={batchOptionsFor(
+              row.original.productId,
+              row.original.rowId
+            )}
             value={row.original.batchId}
             onChange={(value: string) => handleBatchChange(row.original, value)}
             disabled={!row.original.productId}
             searchable
           />
         ),
+      },
+      {
+        id: "hsn",
+        header: "HSN",
+        // Sits on the product, so it fills in with the product, not the batch.
+        cell: ({ row }) => row.original.hsnCode || "—",
       },
       {
         id: "available",
@@ -356,13 +409,13 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
         ),
       },
       {
-        id: "rate",
-        header: "Rate (₹)",
+        id: "mrp",
+        // The bill is raised at MRP, which is tax-inclusive — never the
+        // selling price.
+        header: "MRP (₹)",
         cell: ({ row }) =>
           row.original.batchId
-            ? formatAmount(
-                row.original.sellingPricePerUnit || row.original.mrpPerUnit
-              )
+            ? formatAmount(row.original.mrpPerUnit)
             : "\u2014",
       },
       {
@@ -372,6 +425,16 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
           row.original.batchId
             ? Number(row.original.gstPercentage || 0).toFixed(2)
             : "\u2014",
+      },
+      {
+        id: "total",
+        // MRP x qty, before the discount — so the row reads as
+        // Total - Discount = Net Amount.
+        header: "Total (₹)",
+        cell: ({ row }) =>
+          row.original.batchId
+            ? formatAmount(billingRowTotal(row.original))
+            : "—",
       },
       {
         id: "netAmount",

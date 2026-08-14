@@ -10,6 +10,7 @@ import {
 } from '@/types/BillingData';
 import {
   billDiscountBothWays,
+  gstWithin,
   lineBreakdown,
   type DiscountType,
 } from '@/utils/billingTotals';
@@ -38,36 +39,68 @@ export const buildBillingPayload = ({
   billDiscountValue,
   discountType,
 }: BuildPayloadArgs): CreateBillingPayload => {
-  // An amount is converted against the cart's gross, then every line carries
-  // that same percentage on top of its own discount.
-  const cartGross = lines.reduce(
-    (sum, line) => sum + line.quantity * (line.sellingPricePerUnit ?? line.mrpPerUnit ?? 0),
+  // An amount is converted against the cart's MRP total, then every line
+  // carries that same percentage on top of its own discount.
+  const cartMrpTotal = lines.reduce(
+    (sum, line) => sum + line.quantity * (line.mrpPerUnit ?? 0),
     0
   );
   const billDiscount = billDiscountBothWays(
-    cartGross,
+    cartMrpTotal,
     billDiscountValue,
     discountType
   );
 
   const billingDetails = lines.map((line) => {
     const row = lineBreakdown(line, billDiscount.percentage);
+
+    // Each figure is derived from the ones already rounded, rather than rounded
+    // independently off the exact arithmetic. Rounding them all separately left
+    // mrp - discount a paisa off net, and gross + gst a paisa off net again.
+    const totalMrpAmountPerUnit = money(row.grossAmount);
+    const discountAmount = money(row.discountAmount);
+    // What the customer pays for the line.
+    const netAmount = money(totalMrpAmountPerUnit - discountAmount);
+    // The GST inside that net — extracted, never added to it.
+    const gstAmount = money(gstWithin(netAmount, line.gstPercentage || 0));
+
     return {
       productId: line.productId,
       batchId: line.batchId,
       unit: String(line.unit || ''),
       billQuantity: line.quantity,
-      grossAmount: money(row.grossAmount),
+      // The line total: MRP x qty, before the discount. Named "PerUnit" by the
+      // API, but it is the whole line.
+      totalMrpAmountPerUnit,
+      // grossAmount carries the *taxable* value, not MRP x qty: MRP is
+      // tax-inclusive, so the pre-tax figure is what is worth storing.
+      grossAmount: money(netAmount - gstAmount),
       discountPercentage: money(row.discountPercentage),
-      discountAmount: money(row.discountAmount),
-      gstAmount: money(row.gstAmount),
-      netAmount: money(row.netAmount),
+      discountAmount,
+      gstAmount,
+      netAmount,
     };
   });
 
+  // Every total is a straight sum of the lines, so the header always reconciles
+  // with the rows it was built from — and inherits their invariants:
+  // totalMrpAmount - totalDiscountAmount = totalNetAmount, and
+  // totalGrossAmount + totalGstAmount = totalNetAmount.
+  const totalMrpAmount = billingDetails.reduce(
+    (sum, d) => sum + d.totalMrpAmountPerUnit,
+    0
+  );
   const totalGrossAmount = billingDetails.reduce((sum, d) => sum + d.grossAmount, 0);
   const totalGstAmount = billingDetails.reduce((sum, d) => sum + d.gstAmount, 0);
-  const totalNetAmount = billingDetails.reduce((sum, d) => sum + d.netAmount, 0);
+  const totalDiscountAmount = billingDetails.reduce(
+    (sum, d) => sum + d.discountAmount,
+    0
+  );
+  // Taxable + GST. Identical to the sum of the line nets, by construction.
+  const totalNetAmount = totalGrossAmount + totalGstAmount;
+  // The discount as a share of what it was actually taken off: the MRP total.
+  const totalDiscountPercentage =
+    totalMrpAmount > 0 ? (totalDiscountAmount / totalMrpAmount) * 100 : 0;
   const pendingAmount = Math.max(0, totalNetAmount - (payment.amountReceived || 0));
 
   return {
@@ -94,9 +127,10 @@ export const buildBillingPayload = ({
           ? 'PARTIAL'
           : 'UNPAID',
 
+    totalMrpAmount: money(totalMrpAmount),
     totalGrossAmount: money(totalGrossAmount),
-    totalDiscountPercentage: money(billDiscount.percentage),
-    totalDiscountAmount: money(billDiscount.amount),
+    totalDiscountPercentage: money(totalDiscountPercentage),
+    totalDiscountAmount: money(totalDiscountAmount),
     totalGstAmount: money(totalGstAmount),
     totalNetAmount: money(totalNetAmount),
 
