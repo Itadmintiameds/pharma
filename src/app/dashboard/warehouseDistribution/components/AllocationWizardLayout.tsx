@@ -13,7 +13,7 @@ const STEP_DEFS = [
 
 type AllocationWizardLayoutProps = {
   onCancel?: () => void
-  children: (step: number) => ReactNode
+  children: (step: number, goToStep: (step: number) => void) => ReactNode
 }
 
 const AllocationWizardLayout = ({ onCancel, children }: AllocationWizardLayoutProps) => {
@@ -84,7 +84,7 @@ const AllocationWizardLayout = ({ onCancel, children }: AllocationWizardLayoutPr
         })}
       </div>
 
-      {children(currentStep)}
+      {children(currentStep, setCurrentStep)}
 
       <div className="flex w-full items-center justify-between">
         <button
@@ -100,10 +100,21 @@ const AllocationWizardLayout = ({ onCancel, children }: AllocationWizardLayoutPr
         <button
           type="button"
           onClick={() => setCurrentStep((step) => Math.min(step + 1, STEP_DEFS.length))}
-          className="flex h-12 w-35.25 items-center justify-center gap-2 rounded-lg bg-primary-800 px-4"
+          className={`flex h-12 items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 ${
+            currentStep === STEP_DEFS.length ? '' : 'w-35.25'
+          }`}
         >
-          <span className="text-label-l4 font-medium text-pneutral-50">Continue</span>
-          <Image src="/warehouseDistribution/arrow-forward.svg" alt="" width={14} height={14} />
+          <span className="text-label-l4 font-medium text-pneutral-50">
+            {currentStep === STEP_DEFS.length ? 'Confirm Allocation' : 'Continue'}
+          </span>
+          <Image
+            src={`/warehouseDistribution/${
+              currentStep === STEP_DEFS.length ? 'check-circle-outline-white' : 'arrow-forward'
+            }.svg`}
+            alt=""
+            width={14}
+            height={14}
+          />
         </button>
       </div>
     </div>

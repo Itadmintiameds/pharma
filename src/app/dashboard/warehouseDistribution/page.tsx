@@ -4,6 +4,9 @@ import { useState } from 'react'
 import AllocationWizardLayout from './components/AllocationWizardLayout'
 import CreateAllocation from './components/CreateAllocation'
 import DistributionType from './components/DistributionType'
+import AllocationDetails from './components/AllocationDetails'
+import AddProducts from './components/AddProducts'
+import ReviewConfirm from './components/ReviewConfirm'
 
 const page = () => {
   const [showCreateAllocation, setShowCreateAllocation] = useState(false)
@@ -11,9 +14,12 @@ const page = () => {
   if (showCreateAllocation) {
     return (
       <AllocationWizardLayout onCancel={() => setShowCreateAllocation(false)}>
-        {(step) => {
+        {(step, goToStep) => {
           if (step === 1) return <CreateAllocation />
           if (step === 2) return <DistributionType />
+          if (step === 3) return <AllocationDetails />
+          if (step === 4) return <AddProducts />
+          if (step === 5) return <ReviewConfirm onEditAllocationDetails={() => goToStep(3)} />
 
           return (
             <div className="flex w-full items-center justify-center rounded-2xl border border-pneutral-200 bg-white p-8 text-p3 text-pneutral-500">
