@@ -12,6 +12,8 @@ import {
   getCurrentPharmacy,
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
+// Shared with the bill, so both invoices spell an amount the same way.
+import { amountInWords } from "@/utils/billingTotals";
 
 interface InvoiceSummaryProps {
   onCancel?: () => void;
@@ -212,7 +214,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   }, [data, savedLines, store.purchaseDetails]);
 
   const columns = useMemo<ColumnDef<any, any>[]>(() => [
-    { accessorKey: 'id', header: '#' },
+    { accessorKey: 'id', header: 'Sl. No.' },
     { accessorKey: 'brand', header: 'Brand Name' },
     { accessorKey: 'qty', header: 'QTY' },
     { accessorKey: 'free', header: 'Free' },
@@ -395,10 +397,11 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
       </div>
 
-      {/* Amount in words */}
+      {/* Amount in words — spelled out, paise included, in Indian grouping. It
+          read "Rupees 302.4 Only" before, which is the figure, not the words. */}
       <div className="w-full bg-white border border-pneutral-200 rounded-xl p-4 flex items-center text-[14px]">
         <span className="text-pneutral-600 mr-2">Amount in words</span><span className="mr-2">:</span>
-        <span className="font-bold text-pneutral-900">Rupees {Math.round(netAmt)} Only</span>
+        <span className="font-bold text-pneutral-900 capitalize">{amountInWords(netAmt)}</span>
       </div>
 
       {/* Footer — part of the invoice, so it travels into the PDF capture and

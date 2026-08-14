@@ -366,7 +366,7 @@ const Page = () => {
   }, [bills, search]);
 
   const columns: ColumnDef<BillRecord>[] = [
-    { header: "#", cell: ({ row }) => row.index + 1 },
+    { header: "Sl. No.", cell: ({ row }) => row.index + 1 },
     {
       accessorKey: "billDate",
       header: "Bill Date",

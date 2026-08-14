@@ -12,7 +12,7 @@ interface ProductSearchTableProps {
   onAddStock: (row: ProductStockRow) => void;
 }
 
-const COLUMNS = ["#", "Product Name", "Stock (Units)", "Shelf Life", "Status", "Action"];
+const COLUMNS = ["Sl. No.", "Product Name", "Stock (Units)", "Shelf Life", "Status", "Action"];
 
 const HEADER_CELL =
   "h-[72px] px-[8px] py-[16px] border-b border-r border-[#E1E1E1]/20 text-[14px] font-medium last:border-r-0";

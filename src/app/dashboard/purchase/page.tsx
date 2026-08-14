@@ -114,7 +114,7 @@ export const buildColumns = (
   busy = false
 ): ColumnDef<PurchaseData>[] => [
   {
-    header: "#",
+    header: "Sl. No.",
     cell: ({ row }) => row.index + 1,
   },
 

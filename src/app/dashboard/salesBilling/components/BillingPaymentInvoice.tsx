@@ -208,7 +208,7 @@ const BillingPaymentInvoice: React.FC<BillingPaymentInvoiceProps> = ({
           <table className="w-full border-collapse">
             <thead>
               <tr className="h-14 bg-secondary-600 text-p3 font-bold text-pneutral-50 font-noto-sans">
-                <th className="border border-pneutral-200 px-3">#</th>
+                <th className="border border-pneutral-200 px-3">Sl. No.</th>
                 <th className="border border-pneutral-200 px-3 text-left">
                   Product
                 </th>

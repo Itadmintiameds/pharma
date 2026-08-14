@@ -101,7 +101,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   // Mirrors the tax invoice grid, so the line reads the same here as it does on
   // the summary the user saves.
   const tableColumns = useMemo<ColumnDef<any, any>[]>(() => [
-    { accessorKey: 'id', header: '#', cell: (info) => info.row.index + 1 },
+    { accessorKey: 'id', header: 'Sl. No.', cell: (info) => info.row.index + 1 },
     { accessorKey: 'brandName', header: 'Brand Name', cell: (info) => info.getValue() || '-' },
     { accessorKey: 'purchaseQuantity', header: 'QTY', cell: (info) => Number(info.getValue() || 0) },
     { accessorKey: 'freeQty', header: 'Free', cell: (info) => Number(info.getValue() || 0) },
