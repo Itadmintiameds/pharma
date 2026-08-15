@@ -288,7 +288,7 @@ const BillingItemsTable: React.FC<BillingItemsTableProps> = ({
     () => [
       {
         id: "slNo",
-        header: "SL.NO",
+        header: "Sl. No.",
         cell: ({ row }) => <span className="font-medium">{row.index + 1}</span>,
       },
       {

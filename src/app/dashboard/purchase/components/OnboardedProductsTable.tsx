@@ -28,7 +28,7 @@ const OnboardedProductsTable = () => {
         <thead>
           <tr className="bg-[#9851f5] text-white">
             {[
-              '#', 'Brand Name', 'QTY', 'Free', 'Variant', 'Product Name', 
+              'Sl. No.', 'Brand Name', 'QTY', 'Free', 'Variant', 'Product Name',
               'HSN', 'Batch', 'Expiry', 'MRP', 'VALUE', 'DIS%', 'GST%', 'Amount (₹)'
             ].map((col, idx) => (
               <th 
