@@ -7,13 +7,20 @@ import DistributionType from './components/DistributionType'
 import AllocationDetails from './components/AllocationDetails'
 import AddProducts from './components/AddProducts'
 import ReviewConfirm from './components/ReviewConfirm'
+import DistributionSummary from './components/DistributionSummary'
+import DispatchProducts from './components/StockMovementDetails'
+
+type View = 'list' | 'wizard' | 'summary' | 'dispatch'
 
 const page = () => {
-  const [showCreateAllocation, setShowCreateAllocation] = useState(false)
+  const [view, setView] = useState<View>('list')
 
-  if (showCreateAllocation) {
+  if (view === 'wizard') {
     return (
-      <AllocationWizardLayout onCancel={() => setShowCreateAllocation(false)}>
+      <AllocationWizardLayout
+        onCancel={() => setView('list')}
+        onConfirm={() => setView('summary')}
+      >
         {(step, goToStep) => {
           if (step === 1) return <CreateAllocation />
           if (step === 2) return <DistributionType />
@@ -31,6 +38,21 @@ const page = () => {
     )
   }
 
+  if (view === 'summary') {
+    return (
+      <div className="flex w-full flex-col items-start gap-4">
+        <DistributionSummary
+          onBack={() => setView('list')}
+          onDispatchProducts={() => setView('dispatch')}
+        />
+      </div>
+    )
+  }
+
+  if (view === 'dispatch') {
+    return <DispatchProducts />
+  }
+
   return (
     <div className="flex w-full items-center justify-between">
       <h1 className="text-h4 font-semibold text-pneutral-900">
@@ -39,7 +61,7 @@ const page = () => {
 
       <button
         type="button"
-        onClick={() => setShowCreateAllocation(true)}
+        onClick={() => setView('wizard')}
         className="flex h-12 items-center justify-center rounded-lg bg-secondary-700 px-5"
       >
         <span className="text-label-l5 font-medium text-pneutral-50">

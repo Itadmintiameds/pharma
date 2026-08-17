@@ -13,10 +13,11 @@ const STEP_DEFS = [
 
 type AllocationWizardLayoutProps = {
   onCancel?: () => void
+  onConfirm?: () => void
   children: (step: number, goToStep: (step: number) => void) => ReactNode
 }
 
-const AllocationWizardLayout = ({ onCancel, children }: AllocationWizardLayoutProps) => {
+const AllocationWizardLayout = ({ onCancel, onConfirm, children }: AllocationWizardLayoutProps) => {
   const [currentStep, setCurrentStep] = useState(1)
 
   return (
@@ -99,7 +100,11 @@ const AllocationWizardLayout = ({ onCancel, children }: AllocationWizardLayoutPr
 
         <button
           type="button"
-          onClick={() => setCurrentStep((step) => Math.min(step + 1, STEP_DEFS.length))}
+          onClick={
+            currentStep === STEP_DEFS.length
+              ? onConfirm
+              : () => setCurrentStep((step) => Math.min(step + 1, STEP_DEFS.length))
+          }
           className={`flex h-12 items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 ${
             currentStep === STEP_DEFS.length ? '' : 'w-35.25'
           }`}
