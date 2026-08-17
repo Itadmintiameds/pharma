@@ -90,8 +90,14 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   };
 
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    if (field === 'netQuantity' && value !== '' && !/^\d*\.?\d*$/.test(value)) {
+  // A multi-select hands over a string[], the rest a string.
+  const handleChange = (field: keyof typeof formData, value: string | string[]) => {
+    if (
+      field === 'netQuantity' &&
+      typeof value === 'string' &&
+      value !== '' &&
+      !/^\d*\.?\d*$/.test(value)
+    ) {
       return;
     }
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -229,6 +235,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
         multiple
+        error={errors.ageGroup}
       />
       
       <Dropdown

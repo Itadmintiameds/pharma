@@ -23,7 +23,8 @@ export interface SupplementProductData {
   strength: string;
   netQuantity: string;
   netQuantityUnit: string;
-  ageGroup: string;
+  /** Multi-select; sent as `ageGroupIds`. */
+  ageGroup: string[];
   gender: string;
   manufacturerName: string;
   fssaiLicense: string;
@@ -38,7 +39,8 @@ export interface FoodInfantProductData {
   productSubCategory: string;
   variantName: string;
   productForm: string;
-  ageGroup: string;
+  /** Multi-select; sent as `ageGroupIds`. */
+  ageGroup: string[];
   netQuantity: string;
   netQuantityUnit: string;
   manufacturerName: string;
@@ -53,10 +55,12 @@ export interface CosmeticProductData {
   productSubType: string;
   productForm: string;
   variant: string;
-  intendedUseArea: string;
+  /** Multi-select; sent as `intendedUseAreaIds`. */
+  intendedUseArea: string[];
   skinType: string;
   hairType: string;
-  ageGroup: string;
+  /** Multi-select; sent as `ageGroupIds`. */
+  ageGroup: string[];
   gender: string;
   fragrance: string;
   netQuantity: string;
