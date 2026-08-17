@@ -40,15 +40,27 @@ export const checkEmployeeId = async (employeeId: string) => {
   return response.data;
 };
 
-export const uploadUserImage = async (userId: string | number, image: File) => {
+/**
+ * @param partOfCreate Set only by the create wizard. The photo it uploads is
+ *   part of the account being created, so the server folds it into the single
+ *   USER_CREATED audit row instead of logging a separate "Profile image
+ *   updated". Every later change is a real update and leaves its own row.
+ */
+export const uploadUserImage = async (
+  userId: string | number,
+  image: File,
+  partOfCreate = false
+) => {
   const formData = new FormData();
   formData.append('image', image);
   formData.append('userId', String(userId));
-  
+
   const response = await api.post(`/user/${userId}/image`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data'
-    }
+    },
+    // Omitted unless it is set, so nothing else changes shape.
+    ...(partOfCreate ? { params: { partOfCreate: true } } : {}),
   });
   return response.data;
 };
@@ -85,3 +97,96 @@ export const updateUserStatus = async (userId: string | number, userStatus: stri
   const response = await api.patch(`/user/${userId}/status`, { userStatus });
   return response.data;
 }
+
+/** One row of /audit/user-logs, as the API returns it. */
+export interface AuditLogRecord {
+  auditId: number;
+  action: string;
+  /** Who did it. */
+  actorUserId: string | null;
+  actorName: string | null;
+  /** Who it was done to — the same person for a login. */
+  targetUserId: string | null;
+  targetName: string | null;
+  details: string | null;
+  ipAddress: string | null;
+  pharmacyId: string | null;
+  createdAt: string;
+}
+
+/**
+ * A page of the audit trail. It is cursor-paginated, not offset-paginated:
+ * there is no total count, and the next page is fetched by handing `nextCursor`
+ * straight back.
+ */
+export interface AuditLogPage {
+  data: AuditLogRecord[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface AuditLogQuery {
+  /** e.g. LOGIN, USER_CREATED, USER_UPDATED. Omit for everything. */
+  action?: string;
+  /** Inclusive, as yyyy-mm-dd. */
+  fromDate?: string;
+  toDate?: string;
+  size?: number;
+  /** The previous page's `nextCursor`. */
+  cursor?: string;
+}
+
+/**
+ * Whose side of an entry to match on:
+ *
+ * - `ACTOR`  — only what this user did.
+ * - `TARGET` — only what was done to them.
+ * - `ALL`    — both, which is the server's default.
+ *
+ * A login has the same user on both sides, so it appears once under `ALL`.
+ */
+export type AuditScope = "ALL" | "ACTOR" | "TARGET";
+
+export const getUserAuditLogs = async (
+  query: AuditLogQuery = {}
+): Promise<AuditLogPage> => {
+  // Only the keys that carry a value travel, so an empty filter is not sent as
+  // `action=` and read as "match nothing".
+  const params = Object.fromEntries(
+    Object.entries(query).filter(([, value]) => value !== undefined && value !== "")
+  );
+
+  const response = await api.get("/audit/user-logs", { params });
+  return {
+    data: response.data?.data ?? [],
+    nextCursor: response.data?.nextCursor ?? null,
+    hasMore: !!response.data?.hasMore,
+  };
+};
+
+/**
+ * One user's slice of the audit trail. Same shape, filters and cursor paging as
+ * the full listing, so the server does the filtering that the screen used to do
+ * by reading the whole stream.
+ *
+ * The endpoint refuses a user outside the caller's organization, so a failure
+ * here is a real error rather than an empty page.
+ */
+export const getAuditLogsForUser = async (
+  userId: string,
+  query: AuditLogQuery & { scope?: AuditScope } = {}
+): Promise<AuditLogPage> => {
+  const params = Object.fromEntries(
+    Object.entries(query).filter(([, value]) => value !== undefined && value !== "")
+  );
+
+  const response = await api.get(
+    `/audit/user-logs/user/${encodeURIComponent(userId)}`,
+    { params }
+  );
+  return {
+    data: response.data?.data ?? [],
+    nextCursor: response.data?.nextCursor ?? null,
+    hasMore: !!response.data?.hasMore,
+  };
+};

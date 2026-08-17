@@ -113,7 +113,9 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       }
 
       if (newUserId && imageFile) {
-        await uploadUserImage(newUserId, imageFile);
+        // Part of creating the account, so it does not log its own
+        // "Profile image updated" row on top of USER_CREATED.
+        await uploadUserImage(newUserId, imageFile, true);
       }
 
       setStep(3); // Advance to preview step on success instead of closing

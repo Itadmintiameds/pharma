@@ -15,6 +15,73 @@ interface UserDetailsProps {
   onBack?: () => void;
 }
 
+/** The shape of a backend user code: USR-2026-00003. */
+const AUDIT_CODE = /^USR-\d{4}-\d+$/;
+
+/**
+ * Fields that hold *somebody else's* code. A user record carries the id of
+ * whoever created or last touched it, so a blind search for a value shaped like
+ * a user code finds the admin who set the account up, not the account holder —
+ * which is how this tab came to show one user's profile with another's activity.
+ */
+const NOT_THE_SUBJECT = new Set([
+  "createdBy",
+  "modifiedBy",
+  "updatedBy",
+  "deletedBy",
+  "approvedBy",
+  "pharmacyId",
+]);
+
+/**
+ * The audit trail ids people by their user code, not by the numeric id this
+ * screen is routed with, so the code has to be found some other way. In order
+ * of trust:
+ *
+ *  1. the signed-in user's own token, when this is their own profile;
+ *  2. a field on the record that names it outright;
+ *  3. a value on the record shaped like a code — ignoring the fields above,
+ *     which belong to other people.
+ *
+ * When none of them yields anything the tab shows nothing. It must never fall
+ * back to the organization-wide trail: that answers "what has this user done?"
+ * with somebody else's activity, in practice whoever is busiest.
+ */
+const auditUserIdOf = (
+  user: UserData | null,
+  currentUser: { code: string | null; email: string | null }
+): string | undefined => {
+  if (!user) return undefined;
+
+  const isOwnProfile =
+    !!currentUser.email &&
+    !!user.userEmail &&
+    currentUser.email.toLowerCase() === user.userEmail.toLowerCase();
+  if (isOwnProfile && currentUser.code) return currentUser.code;
+
+  const record = user as unknown as Record<string, unknown>;
+  const named = [record.userCode, record.auditUserId, record.userStringId].find(
+    (value): value is string => typeof value === "string" && value.length > 0
+  );
+  if (named) return named;
+
+  const shaped = Object.entries(record).find(
+    ([key, value]) =>
+      !NOT_THE_SUBJECT.has(key) &&
+      typeof value === "string" &&
+      AUDIT_CODE.test(value)
+  );
+
+  if (!shaped) {
+    console.warn(
+      "No audit user code on the user record — the audit trail cannot be scoped to this user.",
+      user
+    );
+    return undefined;
+  }
+  return shaped[1] as string;
+};
+
 const tabs = ["Assigned Location", "Roles & Permissions", "Audit Logs"];
 
 const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
@@ -27,6 +94,10 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
   const [deactivateModalOpen, setDeactivateModalOpen] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState("");
   const [currentUserId, setCurrentUserId] = useState<number | null>(null);
+  // The signed-in user's own identity, from their token — the one audit code
+  // the frontend can be certain of.
+  const [currentUserCode, setCurrentUserCode] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
 
   const normalizeRole = (role?: string) => (role || "").toLowerCase().replace(/[^a-z]/g, "");
@@ -49,9 +120,16 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
       try {
         const response = await fetch("/api/user-info");
         if (!response.ok) return;
-        const { role, userId: loggedInUserId } = await response.json();
+        const { role, userId: loggedInUserId, email } = await response.json();
         setCurrentUserRole(role || "");
         setCurrentUserId(loggedInUserId ?? null);
+        setCurrentUserEmail(email || null);
+        // The token's user claim is the audit code when it is shaped like one.
+        setCurrentUserCode(
+          typeof loggedInUserId === "string" && AUDIT_CODE.test(loggedInUserId)
+            ? loggedInUserId
+            : null
+        );
       } catch (error) {
         console.error("Failed to fetch current user role:", error);
       }
@@ -106,8 +184,24 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
         
         return <RolesPermissions mode="view" assignedPermissions={mappedPermissions} />;
 
-      case "Audit Logs":
-        return <AuditLogs />;
+      case "Audit Logs": {
+        // Scoped to this user — see auditUserIdOf. Keyed on it too, so viewing
+        // another user starts a clean trail rather than showing the last one's
+        // rows until the fetch lands.
+        const auditUserId = auditUserIdOf(user, {
+          code: currentUserCode,
+          email: currentUserEmail,
+        });
+        if (!auditUserId) {
+          return (
+            <div className="py-20 text-center text-p3 text-pneutral-600">
+              Activity for this user is unavailable — their audit id was not
+              returned by the user API.
+            </div>
+          );
+        }
+        return <AuditLogs key={auditUserId} userId={auditUserId} />;
+      }
 
       default:
         return null;
