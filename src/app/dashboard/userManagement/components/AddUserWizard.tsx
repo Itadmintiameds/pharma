@@ -7,6 +7,8 @@ import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail, checkEmployeeId } from '@/services/UserManagementService';
+import { getUserOrganization } from '@/services/SetupBusinessService';
+import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService';
 import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
 import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
@@ -36,6 +38,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   const [rolePermissions, setRolePermissions] = useState<Record<number, Record<number, boolean>>>({});
   
   const [cities, setCities] = useState<{pharmacyId: string, pharmacyName: string, pharmacyCity: string}[]>([]);
+  const [warehouses, setWarehouses] = useState<{warehouseId: string, warehouseName: string, warehouseAddress: string}[]>([]);
   const [roles, setRoles] = useState<{roleId: number, roleName: string}[]>([]);
   
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -61,12 +64,36 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         ]);
         setCities(citiesData || []);
         setRoles(rolesData || []);
+
+        // Warehouse Managers are assigned warehouse locations instead of
+        // pharmacies, so fetch the org's central warehouse(s) up front.
+        const org = await getUserOrganization();
+        if (org && org.organizationId) {
+          const orgWarehouses = await getWarehousesByOrganizationId(org.organizationId);
+          setWarehouses((orgWarehouses as { warehouseId: string, warehouseName: string, warehouseAddress: string }[]) || []);
+        }
       } catch (err) {
         console.error("Failed to fetch role management data", err);
       }
     };
     fetchInitialData();
   }, []);
+
+  // When a Warehouse Manager is selected and the org has exactly one
+  // warehouse, auto-assign it (the Location Assigned field becomes view-only).
+  useEffect(() => {
+    if (warehouses.length !== 1) return;
+    const role = roles.find(r => String(r.roleId) === String(formData.designation));
+    const isWM = role?.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
+    if (!isWM) return;
+    const onlyId = warehouses[0].warehouseId;
+    setFormData(prev =>
+      prev.location.length === 1 && prev.location[0] === onlyId
+        ? prev
+        : { ...prev, location: [onlyId] }
+    );
+    setErrors(prev => (prev.location ? { ...prev, location: '' } : prev));
+  }, [formData.designation, roles, warehouses]);
 
   const handleSave = async () => {
     try {
@@ -83,7 +110,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         }
       });
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         user: {
           userEmail: formData.emailId || null,
           password: formData.password,
@@ -100,9 +127,16 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
                       : 2
           }
         },
-        pharmacyIds: formData.location,
         permissions: permissionsPayload
       };
+
+      // A Warehouse Manager is assigned a single warehouse (warehouseId);
+      // every other role is assigned one or more pharmacies (pharmacyIds).
+      if (isWarehouseManager) {
+        payload.warehouseId = formData.location[0] ?? null;
+      } else {
+        payload.pharmacyIds = formData.location;
+      }
 
       const response = await createUser(payload);
       const newUserId = response.user?.userId || response.userId || response.id; // Correct extraction from CreateUserResponseDto
@@ -412,6 +446,12 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     );
   };
 
+  const isWarehouseManagerRole = (designation: string | number) => {
+    const role = roles.find(r => String(r.roleId) === String(designation));
+    return role?.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
+  };
+  const isWarehouseManager = isWarehouseManagerRole(formData.designation);
+
   const renderStep1 = () => (
     <div className="w-full flex-1 p-[14px] gap-[24px] rounded-[12px] border-[0.89px] border-pneutral-100 bg-white flex flex-col shadow-sm">
       <h3 className="text-lg font-semibold text-gray-900 shrink-">Personal Information</h3>
@@ -705,7 +745,10 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           options={roles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
           onChange={(val) => {
-            setFormData({ ...formData, designation: val });
+            // Switching into/out of Warehouse Manager changes the location
+            // list (warehouses vs pharmacies), so clear any prior selection.
+            const flips = isWarehouseManagerRole(formData.designation) !== isWarehouseManagerRole(val);
+            setFormData(prev => ({ ...prev, designation: val, location: flips ? [] : prev.location }));
             if (errors.designation) setErrors({ ...errors, designation: '' });
           }}
           error={errors.designation}
@@ -716,11 +759,17 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           required
           searchable
           multiple
+          readOnly={isWarehouseManager && warehouses.length === 1}
           placeholder="Search Location...."
-          options={cities.map(c => ({
-            label: `${c.pharmacyName} - ${c.pharmacyCity}`,
-            value: c.pharmacyId
-          }))}
+          options={isWarehouseManager
+            ? warehouses.map(w => ({
+                label: `${w.warehouseName} - ${w.warehouseAddress}`,
+                value: w.warehouseId
+              }))
+            : cities.map(c => ({
+                label: `${c.pharmacyName} - ${c.pharmacyCity}`,
+                value: c.pharmacyId
+              }))}
           value={formData.location}
           onChange={(val) => {
             setFormData({ ...formData, location: val });

@@ -1,20 +1,29 @@
 import React from "react";
+import { UserWarehouse } from "@/types/UserData";
 
 interface AssignedLocationProps {
   pharmacyCities: string[];
+  warehouse?: UserWarehouse | null;
 }
 
 const AssignedLocation = ({
   pharmacyCities,
+  warehouse,
 }: AssignedLocationProps) => {
   return (
     <div className="flex flex-col gap-2 text-pneutral-900">
       <div className="text-p5 font-semibold font-noto-sans">
-        Assigned Location
+        {warehouse ? "Assigned Warehouse" : "Assigned Location"}
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {pharmacyCities.length > 0 ? (
+        {warehouse ? (
+          <div className="inline-flex w-fit items-center justify-center px-4 h-8 bg-pneutral-300 rounded-full text-p4 font-medium font-noto-sans">
+            {warehouse.warehouseCode
+              ? `${warehouse.warehouseName} (${warehouse.warehouseCode})`
+              : warehouse.warehouseName}
+          </div>
+        ) : pharmacyCities.length > 0 ? (
           pharmacyCities.map((city, index) => (
             <div
               key={`${city}-${index}`}

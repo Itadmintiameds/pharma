@@ -99,15 +99,20 @@ const page = () => {
   const handleExport = () => {
     if (sortedUsers.length === 0) return;
 
-    const headers = ["Name", "Email", "Employee ID", "Role", "Location", "Status"];
-    const rows = sortedUsers.map(u => [
-      `"${u.fullName || ''}"`,
-      `"${u.userEmail || ''}"`,
-      `"${u.employeeId || ''}"`,
-      `"${u.roleName || ''}"`,
-      `"${u.pharmacyCities?.join(', ') || ''}"`,
-      `"${u.userStatus || 'Inactive'}"`
-    ]);
+    const headers = ["Name", "Email", "Employee ID", "Role", "Location/Warehouse", "Status"];
+    const rows = sortedUsers.map(u => {
+      const locationOrWarehouse = u.warehouse
+        ? (u.warehouse.warehouseCode ? `${u.warehouse.warehouseName} (${u.warehouse.warehouseCode})` : u.warehouse.warehouseName)
+        : (u.pharmacyCities?.join(', ') || '');
+      return [
+        `"${u.fullName || ''}"`,
+        `"${u.userEmail || ''}"`,
+        `"${u.employeeId || ''}"`,
+        `"${u.roleName || ''}"`,
+        `"${locationOrWarehouse}"`,
+        `"${u.userStatus || 'Inactive'}"`
+      ];
+    });
 
     const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -145,11 +150,17 @@ const page = () => {
     },
     {
       key: "pharmacyCities",
-      header: "Location",
-      render: (row: UserData) =>
-        row.pharmacyCities && row.pharmacyCities.length > 0
+      header: "Location/Warehouse",
+      render: (row: UserData) => {
+        if (row.warehouse) {
+          return row.warehouse.warehouseCode
+            ? `${row.warehouse.warehouseName} (${row.warehouse.warehouseCode})`
+            : row.warehouse.warehouseName;
+        }
+        return row.pharmacyCities && row.pharmacyCities.length > 0
           ? row.pharmacyCities.join(", ")
-          : "-",
+          : "-";
+      },
     },
     {
       key: "userStatus",

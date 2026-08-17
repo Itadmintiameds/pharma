@@ -16,6 +16,11 @@ export interface UserData {
     isRejected?: boolean;
     userStatus?: string;
     pharmacyCities?: string[];
+    // GET /user/all returns a nested `warehouse` object; GET /user/{id}
+    // returns the same info as flat `warehouseId` / `warehouseName` fields.
+    warehouse?: UserWarehouse | null;
+    warehouseId?: string;
+    warehouseName?: string;
     createdAt?: string | Date;
 
     roleId?: number;
@@ -27,5 +32,13 @@ export interface UserData {
 export interface PharmaRolesDto {
     roleId: number;
     roleName: string;
+}
+
+// Warehouse assigned to a user, as returned by GET /user/all for
+// Warehouse Manager roles (null for non-warehouse roles).
+export interface UserWarehouse {
+    warehouseId: string;
+    warehouseCode?: string;
+    warehouseName: string;
 }
 

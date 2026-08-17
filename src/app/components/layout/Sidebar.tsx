@@ -52,10 +52,15 @@ const Sidebar = () => {
         // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
         // OR a Super Admin already assigned it to an existing (already-approved) pharmacy
         // via User Management — that user never goes through Setup Business/compliance.
+        // A Warehouse Manager is assigned a warehouse instead of a pharmacy, so an
+        // assigned warehouse unlocks the modules just like an assigned pharmacy does.
         const hasOwnApprovedPharmacy = (kpiResponse?.data?.approved ?? 0) > 0;
         const hasAssignedPharmacy = (userDetails?.pharmacies?.length ?? 0) > 0;
+        const hasAssignedWarehouse = Boolean(
+          userDetails?.warehouse || userDetails?.warehouseId || userDetails?.warehouseName
+        );
 
-        if (hasOwnApprovedPharmacy || hasAssignedPharmacy) {
+        if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
           setHasApprovedPharmacy(true);
         }
       } catch (err) {

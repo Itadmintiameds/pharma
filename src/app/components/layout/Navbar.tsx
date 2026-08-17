@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
-import { getById } from "@/services/UserManagementService";
+import { getById, getUserById } from "@/services/UserManagementService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 
@@ -13,6 +13,10 @@ interface NavbarProps {
 const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [fullName, setFullName] = useState("");
+  // A Warehouse Manager operates on a fixed warehouse, not a selectable
+  // pharmacy — the top-right control shows the warehouse name for them.
+  const [isWarehouseUser, setIsWarehouseUser] = useState(false);
+  const [warehouseName, setWarehouseName] = useState<string | null>(null);
 
   const { pharmacies, selectedPharmacy, selectPharmacy, loading } =
     usePharmacyStore();
@@ -38,6 +42,21 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
         const user = await getById(userId);
         if (user?.fullName) {
           setFullName(user.fullName);
+        }
+
+        // Resolve the warehouse (if any) from the fuller user record so the
+        // control can swap the pharmacy dropdown for the warehouse name.
+        const details = await getUserById(userId).catch(() => null);
+        const normalize = (r?: string) =>
+          (r || "").toLowerCase().replace(/[^a-z]/g, "");
+        const wName =
+          details?.warehouse?.warehouseName ?? details?.warehouseName ?? null;
+        if (
+          wName ||
+          normalize(details?.pharmaRolesDto?.roleName) === "warehousemanager"
+        ) {
+          setIsWarehouseUser(true);
+          setWarehouseName(wName);
         }
       } catch (error) {
         console.error("Failed to fetch user for Navbar", error);
@@ -81,24 +100,35 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
 
       <div className="flex items-center gap-4">
         <div className="w-[220px] flex items-center justify-center overflow-visible">
-          <div
-            className="w-full origin-center scale-[0.82]"
-            style={{ marginTop: "-8px", marginBottom: "-8px" }}
-          >
-            <Dropdown
-              options={pharmacyOptions}
-              value={selectedPharmacy?.pharmacyId}
-              onChange={(value) => {
-                const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
+          {isWarehouseUser ? (
+            <div
+              className="w-full origin-center scale-[0.82]"
+              style={{ marginTop: "-8px", marginBottom: "-8px" }}
+            >
+              <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
+                <span className="truncate">{warehouseName || "Warehouse"}</span>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="w-full origin-center scale-[0.82]"
+              style={{ marginTop: "-8px", marginBottom: "-8px" }}
+            >
+              <Dropdown
+                options={pharmacyOptions}
+                value={selectedPharmacy?.pharmacyId}
+                onChange={(value) => {
+                  const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
 
-                if (pharmacy) {
-                  selectPharmacy(pharmacy);
-                }
-              }}
-              placeholder="Select Pharmacy"
-              isLoading={loading}
-            />
-          </div>
+                  if (pharmacy) {
+                    selectPharmacy(pharmacy);
+                  }
+                }}
+                placeholder="Select Pharmacy"
+                isLoading={loading}
+              />
+            </div>
+          )}
         </div>
 
         <button className="relative w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity">
