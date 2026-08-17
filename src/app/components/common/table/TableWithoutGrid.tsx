@@ -78,10 +78,10 @@ export default function TableWithoutGrid<T>({
 
     const containerClass =
         container === "card"
-            ? "overflow-hidden rounded-xl border border-pneutral-100 bg-white"
+            ? "w-full overflow-hidden rounded-xl border border-pneutral-100 bg-white"
             : container === "box"
-                ? "overflow-hidden rounded-lg border border-pneutral-100 bg-white"
-                : "";
+                ? "w-full overflow-hidden rounded-lg border border-pneutral-100 bg-white"
+                : "w-full";
 
     const headerClass =
         headerVariant === "primary"
@@ -182,14 +182,24 @@ function Pagination({
     onPageChange,
 }: TablePagination) {
     const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+
+    // Show a 4-page window around the current page rather than one button
+    // per page, so a large totalItems (e.g. 128) doesn't blow out the row.
+    const visiblePages = 4;
+    const currentGroup = Math.floor((page - 1) / visiblePages);
+    const startPage = currentGroup * visiblePages + 1;
+    const endPage = Math.min(startPage + visiblePages - 1, totalPages);
+    const pageNumbers = Array.from(
+        { length: endPage - startPage + 1 },
+        (_, i) => startPage + i
+    );
 
     return (
         <div className="flex items-center gap-3">
             <button
                 disabled={page === 1}
                 onClick={() => onPageChange(page - 1)}
-                className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11.25 w-11.25 items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <Image
                     src="/UserManagement/PreviousIcon.svg"
@@ -203,7 +213,7 @@ function Pagination({
                 <button
                     key={n}
                     onClick={() => onPageChange(n)}
-                    className={`flex h-11.25 w-11.25 items-center justify-center rounded-xl border text-label-l5 transition-all ${page === n
+                    className={`flex h-11.25 w-11.25 items-center justify-center rounded-lg border text-label-l5 transition-all ${page === n
                         ? "border-secondary-700 bg-secondary-500 text-primary-900 font-semibold"
                         : "border-pneutral-200 bg-white text-pneutral-900 font-normal"
                         }`}
@@ -215,7 +225,7 @@ function Pagination({
             <button
                 disabled={page === totalPages}
                 onClick={() => onPageChange(page + 1)}
-                className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex h-11.25 w-11.25 items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
                 <Image
                     src="/UserManagement/NextIcon.svg"
