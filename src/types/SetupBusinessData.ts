@@ -100,6 +100,8 @@ export interface PharmacyRegistrationResponse {
 }
 
 export interface PharmacyWarehouseRequest {
+  // The existing warehouse's backend code, when the org already owns one.
+  warehouseId?: string;
   warehouseName: string;
   warehouseCode: string;
   warehouseAddress: string;
@@ -109,6 +111,7 @@ export interface PharmacyWarehouseRequest {
 
 export interface PharmacyWarehouseResponse {
   pharmacyRegistrationWarehouseId: number;
+  warehouseId?: string;
   warehouseName: string;
   warehouseCode: string;
   warehouseAddress: string;

@@ -65,6 +65,8 @@ function SetupBusinessContent() {
             const wh = orgWarehouses[0];
             setManageCentrally(true);
             setWarehouse({
+              // Kept so the pharmacy registration references this warehouse.
+              ...(wh.warehouseId ? { warehouseId: String(wh.warehouseId) } : {}),
               warehouseName: wh.warehouseName || "",
               warehouseCode: wh.warehouseCode || "",
               warehouseAddress: wh.warehouseAddress || "",
@@ -115,6 +117,7 @@ function SetupBusinessContent() {
           const wh = d.pharmacyRegistrationWareHouses?.[0];
           if (wh) {
             setWarehouse({
+              ...(wh.warehouseId ? { warehouseId: String(wh.warehouseId) } : {}),
               warehouseName: wh.warehouseName || "",
               warehouseCode: wh.warehouseCode || "",
               warehouseAddress: wh.warehouseAddress || "",
