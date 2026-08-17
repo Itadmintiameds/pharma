@@ -30,6 +30,35 @@ export const createUser = async (data: any) => {
   return response.data;
 };
 
+/**
+ * What PUT /user/{userId} accepts. Deliberately narrower than the create
+ * payload: the email, password and profile image are not part of an update —
+ * the email is the account's identity and the image has its own endpoint.
+ */
+export interface UpdateUserPayload {
+  user: {
+    fullName: string | null;
+    userPhone: string | null;
+    employeeId: string | null;
+    department: string | null;
+    gender: string | null;
+    dob: string | null;
+    pharmaRolesDto: { roleId: number };
+  };
+  /** Pharmacy codes, e.g. ["SUDOC0001"]. Replaces the current assignment. */
+  pharmacyIds: string[];
+  /** Replaces the current grants; a feature left out loses all of its. */
+  permissions: { featureId: number; permissionIds: number[] }[];
+}
+
+export const updateUser = async (
+  userId: string | number,
+  data: UpdateUserPayload
+) => {
+  const response = await api.put(`/user/${userId}`, data);
+  return response.data;
+};
+
 export const checkUserEmail = async (email: string) => {
   const response = await api.get(`/user/check-email?email=${encodeURIComponent(email)}`);
   return response.data;

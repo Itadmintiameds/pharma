@@ -6,16 +6,26 @@ import { Eye, EyeOff } from 'lucide-react';
 import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
-import { getCities, getAllRoles, createUser, uploadUserImage, checkUserEmail, checkEmployeeId } from '@/services/UserManagementService';
+import { getCities, getAllRoles, createUser, updateUser, uploadUserImage, checkUserEmail, checkEmployeeId, getUserById } from '@/services/UserManagementService';
 import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
 import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
 
 interface AddUserWizardProps {
   onBack: () => void;
+  /**
+   * Editing an existing user rather than adding one: their user code, e.g.
+   * "USR-2026-00003". The same three steps run, prefilled from the account, with
+   * everything the update endpoint does not accept — email, password, photo —
+   * locked.
+   */
+  editUserId?: string | number;
+  /** Called after a successful update, so the caller can re-read the account. */
+  onSaved?: () => void;
 }
 
-export default function AddUserWizard({ onBack }: AddUserWizardProps) {
+export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWizardProps) {
+  const isEdit = editUserId !== undefined && editUserId !== null && editUserId !== '';
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     employeeId: '',
@@ -27,7 +37,8 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     dob: '',
     gender: '',
     department: '',
-    designation: '',
+    // Holds a roleId, which the dropdown carries as a number.
+    designation: '' as string | number,
     location: [] as string[]
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -42,6 +53,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [createdUserId, setCreatedUserId] = useState<number | null>(null);
+  // The employee id the account already had. An unchanged one must not be
+  // reported as "already exists" against itself.
+  const [originalEmployeeId, setOriginalEmployeeId] = useState('');
+  const [isLoadingUser, setIsLoadingUser] = useState(isEdit);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -68,20 +84,121 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
     fetchInitialData();
   }, []);
 
+  // Editing: fill the form from the account itself, so the wizard opens showing
+  // what the user is today rather than an empty form.
+  useEffect(() => {
+    if (!isEdit) return;
+
+    let active = true;
+    const fetchUser = async () => {
+      try {
+        const data = await getUserById(editUserId as string);
+        if (!active || !data) return;
+
+        setFormData({
+          employeeId: data.employeeId || '',
+          fullName: data.fullName || '',
+          mobileNumber: data.userPhone ? String(data.userPhone) : '',
+          emailId: data.userEmail || '',
+          // Neither is ever sent on an update, so they stay empty and locked.
+          password: '',
+          confirmPassword: '',
+          // The API returns a date-only string; an input[type=date] needs it bare.
+          dob: data.dob ? String(data.dob).split('T')[0] : '',
+          gender: data.gender || '',
+          department: data.department || '',
+          designation: data.pharmaRolesDto?.roleId ?? '',
+          location: (data.pharmacies || [])
+            .map((pharmacy: { pharmacyId?: string }) => pharmacy.pharmacyId)
+            .filter((pharmacyId: string | undefined): pharmacyId is string => !!pharmacyId),
+        });
+        setOriginalEmployeeId(data.employeeId || '');
+
+        // The grants arrive one row per feature+permission pair; the matrix
+        // wants them keyed feature -> permission.
+        const granted: Record<number, Record<number, boolean>> = {};
+        (data.permissions || []).forEach(
+          (permission: { featureId: number; permissionId: number }) => {
+            if (!granted[permission.featureId]) granted[permission.featureId] = {};
+            granted[permission.featureId][permission.permissionId] = true;
+          }
+        );
+        setRolePermissions(granted);
+
+        // Their address is already the account's, so there is nothing to verify.
+        setIsEmailVerified(true);
+      } catch (err) {
+        console.error('Failed to load the user for editing', err);
+        showToast.error('Could not load this user.');
+      } finally {
+        if (active) setIsLoadingUser(false);
+      }
+    };
+
+    fetchUser();
+    return () => {
+      active = false;
+    };
+  }, [isEdit, editUserId]);
+
+  /** The permission matrix as the API takes it: one row per feature. */
+  const buildPermissionsPayload = () => {
+    const permissionsPayload: { featureId: number; permissionIds: number[] }[] = [];
+    Object.keys(rolePermissions).forEach(featureIdStr => {
+      const featureId = parseInt(featureIdStr);
+      const permMap = rolePermissions[featureId];
+      const permissionIds = Object.keys(permMap)
+        .filter(permIdStr => permMap[parseInt(permIdStr)])
+        .map(permIdStr => parseInt(permIdStr));
+
+      if (permissionIds.length > 0) {
+        permissionsPayload.push({ featureId, permissionIds });
+      }
+    });
+    return permissionsPayload;
+  };
+
+  const roleIdOf = () =>
+    formData.designation && !isNaN(parseInt(String(formData.designation)))
+      ? parseInt(String(formData.designation))
+      : 2;
+
+  /**
+   * Saves the changes to an existing account. Email, password and photo are
+   * left out: the endpoint does not accept them, and the form keeps them locked.
+   */
+  const handleUpdate = async () => {
+    setIsSaving(true);
+    try {
+      await updateUser(editUserId as string, {
+        user: {
+          fullName: formData.fullName || null,
+          userPhone: formData.mobileNumber || null,
+          employeeId: formData.employeeId || null,
+          department: formData.department || null,
+          gender: formData.gender || null,
+          dob: formData.dob || null,
+          pharmaRolesDto: { roleId: roleIdOf() },
+        },
+        pharmacyIds: formData.location,
+        permissions: buildPermissionsPayload(),
+      });
+
+      showToast.success('User updated successfully');
+      // Lets the caller re-read the account before the preview step renders it.
+      if (onSaved) onSaved();
+      setStep(3);
+    } catch (err) {
+      console.error('Failed to update user', err);
+      showToast.error(err instanceof Error ? err.message : 'Failed to update the user.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSave = async () => {
     try {
-      const permissionsPayload: any[] = [];
-      Object.keys(rolePermissions).forEach(featureIdStr => {
-        const featureId = parseInt(featureIdStr);
-        const permMap = rolePermissions[featureId];
-        const permissionIds = Object.keys(permMap)
-          .filter(permIdStr => permMap[parseInt(permIdStr)])
-          .map(permIdStr => parseInt(permIdStr));
-        
-        if (permissionIds.length > 0) {
-          permissionsPayload.push({ featureId, permissionIds });
-        }
-      });
+      const permissionsPayload = buildPermissionsPayload();
 
       const payload = {
         user: {
@@ -94,11 +211,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           gender: formData.gender || null,
           department: formData.department || null,
           imageUrl: null,
-          pharmaRolesDto: {
-            roleId: (formData.designation && !isNaN(parseInt(String(formData.designation))))
-                      ? parseInt(String(formData.designation))
-                      : 2
-          }
+          pharmaRolesDto: { roleId: roleIdOf() }
         },
         pharmacyIds: formData.location,
         permissions: permissionsPayload
@@ -309,8 +422,9 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       }
     }
     
-    // Check if employee ID already exists
-    if (formData.employeeId.trim()) {
+    // Check if employee ID already exists. On an edit the account's own id is
+    // already taken — by itself — so only a changed one is checked.
+    if (formData.employeeId.trim() && formData.employeeId.trim() !== originalEmployeeId.trim()) {
       if (!/[a-zA-Z0-9]/.test(formData.employeeId)) {
         newErrors.employeeId = 'Employee ID cannot contain only special characters';
       } else {
@@ -325,30 +439,34 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       }
     }
 
-    // Check if email is provided, valid and verified
-    if (!formData.emailId.trim()) {
-      newErrors.emailId = 'Email ID is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
-      newErrors.emailId = 'Invalid email format';
-    } else if (!isEmailVerified) {
-      newErrors.emailId = 'Please verify your Email ID';
-    }
-
-    // Password validation
-    if (!formData.password.trim()) {
-      newErrors.password = 'Password is required.';
-    } else {
-      const passwordValidation = validatePassword(formData.password);
-      if (passwordValidation) {
-        newErrors.password = passwordValidation;
+    // The email and password belong to the account, not to this form: an update
+    // sends neither, so there is nothing to validate or verify on an edit.
+    if (!isEdit) {
+      // Check if email is provided, valid and verified
+      if (!formData.emailId.trim()) {
+        newErrors.emailId = 'Email ID is required';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.emailId)) {
+        newErrors.emailId = 'Invalid email format';
+      } else if (!isEmailVerified) {
+        newErrors.emailId = 'Please verify your Email ID';
       }
-    }
 
-    // Confirm password validation
-    if (!formData.confirmPassword.trim()) {
-      newErrors.confirmPassword = 'Confirm Password is required.';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords did not match.';
+      // Password validation
+      if (!formData.password.trim()) {
+        newErrors.password = 'Password is required.';
+      } else {
+        const passwordValidation = validatePassword(formData.password);
+        if (passwordValidation) {
+          newErrors.password = passwordValidation;
+        }
+      }
+
+      // Confirm password validation
+      if (!formData.confirmPassword.trim()) {
+        newErrors.confirmPassword = 'Confirm Password is required.';
+      } else if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = 'Passwords did not match.';
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {
@@ -366,7 +484,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         {/* Title */}
         <div className="flex justify-between items-center w-full h-[30px]">
           <h2 className="font-semibold text-[32px] leading-[38px] text-[#1E1E1D]">
-            Add Users
+            {isEdit ? 'Edit User' : 'Add Users'}
           </h2>
           <span className="text-sm text-gray-500 font-medium">Step {step} of {totalSteps}</span>
         </div>
@@ -501,10 +619,13 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
         </div>
 
         <div className="space-y-2">
+          {/* The email is the account's identity: an update cannot change it,
+              so on an edit it is shown as it stands and locked. */}
           <Input
             label="Email ID"
             type="email"
             required
+            disabled={isEdit}
             placeholder="johndoe@gmail.com"
             value={formData.emailId}
             onChange={(e) => {
@@ -520,7 +641,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
                 <polyline points="22,6 12,13 2,6"></polyline>
               </svg>
             }
-            rightIcon={
+            rightIcon={isEdit ? undefined : (
               <button
                 type="button"
                 onClick={handleSendOtp}
@@ -539,9 +660,9 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
                     ? "Sending..."
                     : "Send OTP"}
               </button>
-            }
+            )}
           />
-          {isEmailVerified && (
+          {isEmailVerified && !isEdit && (
             <div className="w-full h-8 border-2 border-success-900 rounded-lg bg-success-50 flex items-center gap-2 px-3 text-p4 font-medium text-success-900">
               <Image
                 src="/Login&RegistrationIcons/VerifyIcon.svg"
@@ -553,7 +674,7 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             </div>
           )}
 
-          {showOtp && (
+          {showOtp && !isEdit && (
             <div className="flex flex-col gap-2.5 h-[78px] w-[348px]">
               <label className="text-p3 font-normal text-[#4B5563] font-body leading-none">
                 Enter OTP
@@ -579,9 +700,11 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           )}
         </div>
 
+        {/* Password is not part of an update — it has its own reset flow. */}
         <Input
           label="Password"
-          placeholder="Enter password"
+          placeholder={isEdit ? "Unchanged" : "Enter password"}
+          disabled={isEdit}
           type={showPassword ? "text" : "password"}
           value={formData.password}
           onChange={handlePasswordChange}
@@ -603,7 +726,8 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
 
         <Input
           label="Confirm Password"
-          placeholder="Re-enter password"
+          placeholder={isEdit ? "Unchanged" : "Re-enter password"}
+          disabled={isEdit}
           type={showConfirmPassword ? "text" : "password"}
           value={formData.confirmPassword}
           onChange={handleConfirmPasswordChange}
@@ -729,12 +853,15 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
           error={errors.location}
         />
 
+        {/* The photo is not part of an update payload — it is replaced through
+            its own endpoint — so on an edit the field is locked. */}
         <div className="w-full">
           <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">Upload Photo</label>
-          <input 
-            type="file" 
-            accept="image/jpeg, image/png" 
-            className="hidden" 
+          <input
+            type="file"
+            accept="image/jpeg, image/png"
+            className="hidden"
+            disabled={isEdit}
             ref={fileInputRef}
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
@@ -749,12 +876,18 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
               }
             }}
           />
-          <div 
-            onClick={() => fileInputRef.current?.click()}
-            className={`flex h-12 w-full items-center justify-between rounded-md border border-dashed ${errors.image ? 'border-warning-500' : 'border-pneutral-300'} bg-gray-50 transition-all px-3 cursor-pointer hover:bg-gray-100`}
+          <div
+            onClick={() => {
+              if (!isEdit) fileInputRef.current?.click();
+            }}
+            className={`flex h-12 w-full items-center justify-between rounded-md border border-dashed ${errors.image ? 'border-warning-500' : 'border-pneutral-300'} bg-gray-50 transition-all px-3 ${isEdit ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-100'}`}
           >
             <span className="text-p4 text-pneutral-500 truncate">
-              {imageFile ? imageFile.name : "click to browse JPEG or PNG"}
+              {isEdit
+                ? "Photo is changed from the user's profile"
+                : imageFile
+                  ? imageFile.name
+                  : "click to browse JPEG or PNG"}
             </span>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
           </div>
@@ -767,14 +900,19 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
   const renderStep2 = () => {
     return (
       <div className="w-full flex-1 flex gap-[10px] items-stretch min-h-0">
-        <RolesPermissions mode="assign" onPermissionsChange={setRolePermissions} />
+        {/* On an edit the matrix opens with what the account already has. */}
+        <RolesPermissions
+          mode="assign"
+          assignedPermissions={isEdit ? rolePermissions : undefined}
+          onPermissionsChange={setRolePermissions}
+        />
       </div>
     );
   };
 
   const renderStep3 = () => (
     <div className="w-full h-full overflow-auto -m-4 p-4">
-      <UserDetails userId={createdUserId || 1} />
+      <UserDetails userId={(isEdit ? editUserId : createdUserId) || 1} />
     </div>
   );
 
@@ -785,9 +923,19 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
       </div>
 
       <div className="flex-1 flex flex-col w-full min-h-0">
-        {step === 1 && renderStep1()}
-        {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
+        {/* An edit must not show an empty form first and fill in underneath the
+            person typing, so step 1 waits for the account. */}
+        {isLoadingUser ? (
+          <div className="w-full flex-1 flex items-center justify-center py-20 text-p3 text-pneutral-600">
+            Loading user…
+          </div>
+        ) : (
+          <>
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+          </>
+        )}
       </div>
 
       <div className="w-full flex justify-end gap-4 mt-1 shrink-0">
@@ -813,11 +961,12 @@ export default function AddUserWizard({ onBack }: AddUserWizardProps) {
             >
               Back to Step 1
             </button>
-            <button 
-              onClick={handleSave}
-              className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
+            <button
+              onClick={isEdit ? handleUpdate : handleSave}
+              disabled={isSaving}
+              className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9] disabled:opacity-60"
             >
-              Save Changes
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </>
         )}

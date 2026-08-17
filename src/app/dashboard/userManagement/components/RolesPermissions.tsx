@@ -54,12 +54,15 @@ const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange }: Ro
     }
   }, [rolePermissions, mode, onPermissionsChange]);
 
-  // Sync from props when in view mode
+  // Sync from props. Also applies in assign mode, where an edit hands over the
+  // grants the user already has: the matrix opens on what is currently granted
+  // and stays editable. In that mode the parent holds the very object it was
+  // given back, so this settles rather than ping-ponging.
   useEffect(() => {
-    if (mode === 'view' && assignedPermissions) {
+    if (assignedPermissions) {
       setRolePermissions(assignedPermissions);
     }
-  }, [assignedPermissions, mode]);
+  }, [assignedPermissions]);
 
   return (
     <div className="w-full flex-1 flex gap-[10px] items-stretch min-h-[440px]">
