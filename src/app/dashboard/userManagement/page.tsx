@@ -14,6 +14,8 @@ import { getAllUsers } from "@/services/UserManagementService";
 const page = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
+  /** The user code being edited, e.g. "USR-2026-00003". */
+  const [editUserId, setEditUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
@@ -69,18 +71,19 @@ const page = () => {
     return 0;
   });
 
+  /** Re-reads the listing; also used after a user is edited. */
+  const fetchUsers = async () => {
+    setLoading(true);
+
+    const data = await getAllUsers();
+    if (data) {
+      setUsers(data);
+    }
+
+    setLoading(false);
+  };
+
   useEffect(() => {
-    const fetchUsers = async () => {
-      setLoading(true);
-
-      const data = await getAllUsers();
-      if (data) {
-        setUsers(data);
-      }
-
-      setLoading(false);
-    };
-
     const fetchCurrentUserRole = async () => {
       try {
         const response = await fetch("/api/user-info");
@@ -185,11 +188,26 @@ const page = () => {
     },
   ];
 
+  // Editing runs through the same wizard the account was created with, so it
+  // takes over the page ahead of the details view it was opened from.
+  if (editUserId) {
+    return (
+      <AddUserWizard
+        editUserId={editUserId}
+        // The listing is re-read straight away; the details view refetches by
+        // itself when it comes back on screen below.
+        onSaved={fetchUsers}
+        onBack={() => setEditUserId(null)}
+      />
+    );
+  }
+
   if (selectedUserId) {
     return (
       <UserDetails
         userId={selectedUserId}
         onBack={() => setSelectedUserId(null)}
+        onEdit={(userCode) => setEditUserId(userCode)}
       />
     );
   }
