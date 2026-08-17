@@ -26,6 +26,7 @@ import { buildProductAttributes } from "@/utils/productOnboardPayload";
 import { formatMonthYear } from "@/utils/formatDate";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
+import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
 import toast from "react-hot-toast";
 
 const PRODUCT_CATEGORIES = [
@@ -415,10 +416,12 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         formattedInvoiceDate = `${formattedInvoiceDate}T00:00:00`;
       }
 
-      const totalGross = storeState.purchaseDetails.reduce((sum, item) => sum + item.grossAmount, 0);
-      const totalGst = storeState.purchaseDetails.reduce((sum, item) => sum + item.gst, 0);
-      const totalNet = (totalGross - discount) + totalGst;
-      
+      // Same costing the summary screen showed: the discount is shared out
+      // across the lines, so each line's GST is charged on its discounted value
+      // and the line amounts add back up to the net payable.
+      const totals = calculatePurchaseTotals(storeState.purchaseDetails, discount);
+
+
       if (storeState.purchaseDetails.some(item => !item.batchId || !item.productId)) {
         toast.error("Error: An item is missing its Batch ID or Product ID! Please refresh and re-add the product.");
         return false;
@@ -434,11 +437,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         paymentType: storeState.paymentType,
         creditDays: storeState.creditDays,
         supplierPaymentStatus: "PENDING",
-        totalGrossAmount: totalGross,
-        totalDiscount: discount,
-        totalGst: totalGst,
-        totalNetAmount: totalNet,
-        purchaseDetails: storeState.purchaseDetails.map(item => ({
+        totalGrossAmount: totals.grossAmount,
+        totalDiscount: totals.discountAmount,
+        totalGst: totals.gstAmount,
+        totalNetAmount: totals.netAmount,
+        purchaseDetails: storeState.purchaseDetails.map((item, idx) => ({
           productId: item.productId,
           productName: item.productName || item.productId,
           batchId: item.batchId,
@@ -447,9 +450,12 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
           freeQuantity: Number(item.freeQty || 0),
           freeUnit: item.freeQtyUnit || "",
           purchaseQuantity: Number(item.purchaseQuantity || 0),
-          grossAmount: item.grossAmount,
-          gst: item.gst,
-          netAmount: item.netAmount
+          // The line's own gross stays undiscounted — there is no per-line
+          // discount field, so the discount only surfaces in the header total
+          // and in the GST and amount below.
+          grossAmount: totals.lines[idx].grossAmount,
+          gst: totals.lines[idx].gstAmount,
+          netAmount: totals.lines[idx].netAmount
         }))
       };
 

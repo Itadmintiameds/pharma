@@ -14,6 +14,8 @@ import {
 } from "@/services/PharmacyService";
 // Shared with the bill, so both invoices spell an amount the same way.
 import { amountInWords } from "@/utils/billingTotals";
+// One costing for the screen and the payload, so what is shown is what is saved.
+import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
 
 /**
  * One 24px-tall key : value line. The key column is fixed so every value in a
@@ -75,12 +77,27 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
   // A saved purchase is read-only: its own stored totals and discount win.
   const isSaved = !!purchase;
-  const grossAmt = Number(purchase?.totalGrossAmount ?? store.totalGrossAmount) || 0;
-  const gstAmt = Number(purchase?.totalGst ?? store.totalGst) || 0;
-  const appliedDiscount = isSaved ? Number(purchase?.totalDiscount || 0) : discount;
+
+  // While the purchase is unsaved, every figure is costed from the lines at the
+  // discount currently typed — the discount reaches each line as a share of its
+  // gross, so GST is charged on the discounted value rather than the full one.
+  // Recomputed here (not read off the store) because the discount arrives after
+  // the lines were added.
+  const live = useMemo(
+    () => calculatePurchaseTotals(store.purchaseDetails, discount),
+    [store.purchaseDetails, discount],
+  );
+
+  const grossAmt = isSaved
+    ? Number(purchase?.totalGrossAmount || 0)
+    : live.grossAmount;
+  const gstAmt = isSaved ? Number(purchase?.totalGst || 0) : live.gstAmount;
+  const appliedDiscount = isSaved
+    ? Number(purchase?.totalDiscount || 0)
+    : live.discountAmount;
   const netAmt = isSaved
     ? Number(purchase?.totalNetAmount || 0)
-    : (grossAmt - discount) + gstAmt;
+    : live.netAmount;
   const taxableAmt = grossAmt - appliedDiscount;
   // The strip shows a rate, but only amounts are stored — back it out of the
   // taxable value and halve it, since CGST and SGST split the total GST.
@@ -206,10 +223,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   // Memoised so the `?? []` fallback doesn't hand useMemo a new array each render.
   const savedLines = useMemo(() => purchase?.purchaseDetails ?? [], [purchase]);
 
-  const totalItemsCount = isSaved ? savedLines.length : store.purchaseDetails.length || 0;
+  const totalItemsCount = isSaved ? savedLines.length : live.totalItems;
   const totalQtyCount = isSaved
     ? savedLines.reduce((acc, i) => acc + Number(i.purchaseQuantity || 0), 0)
-    : store.purchaseDetails.reduce((acc, i) => acc + i.purchaseQuantity, 0);
+    : live.totalQuantity;
 
   const tableData = useMemo(() => {
     if (data && Array.isArray(data) && data.length > 0) return data;
@@ -236,26 +253,31 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       }));
     }
     if (store.purchaseDetails && store.purchaseDetails.length > 0) {
-      return store.purchaseDetails.map((item, idx) => ({
-        id: idx + 1,
-        brand: item.brandName || '-',
-        qty: item.purchaseQuantity,
-        free: Number(item.freeQty || 0),
-        variant: item.variant || '-',
-        name: item.productName || item.productId,
-        hsn: item.hsnCode || '-',
-        batch: item.batchNumber || item.batchId,
-        expiry: item.expiryDate || '-',
-        // Priced per purchase unit, so it multiplies straight by the quantity.
-        purchaseAmt: Number(item.purchasePrice || 0),
-        value: Number(item.purchasePrice || 0) * Number(item.purchaseQuantity || 0),
-        dis: 0,
-        gst: item.gst,
-        amount: item.netAmount
-      }));
+      return store.purchaseDetails.map((item, idx) => {
+        const row = live.lines[idx];
+        return {
+          id: idx + 1,
+          brand: item.brandName || '-',
+          qty: item.purchaseQuantity,
+          free: Number(item.freeQty || 0),
+          variant: item.variant || '-',
+          name: item.productName || item.productId,
+          hsn: item.hsnCode || '-',
+          batch: item.batchNumber || item.batchId,
+          expiry: item.expiryDate || '-',
+          // Priced per purchase unit, so it multiplies straight by the quantity.
+          purchaseAmt: Number(item.purchasePrice || 0),
+          // The full gross — the line never shows its discounted value, only
+          // the GST and amount below carry the invoice discount.
+          value: row?.grossAmount ?? 0,
+          dis: 0,
+          gst: row?.gstAmount ?? 0,
+          amount: row?.netAmount ?? 0
+        };
+      });
     }
     return [];
-  }, [data, savedLines, store.purchaseDetails]);
+  }, [data, savedLines, store.purchaseDetails, live]);
 
   const columns = useMemo<ColumnDef<any, any>[]>(() => [
     { accessorKey: 'id', header: 'Sl. No.' },
