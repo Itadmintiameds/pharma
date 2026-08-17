@@ -189,15 +189,7 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
             pharmacyCities={
               user?.pharmacies?.map((pharmacy) => pharmacy.pharmacyCity) ?? []
             }
-            warehouse={
-              user?.warehouse ??
-              (user?.warehouseName
-                ? {
-                    warehouseId: user.warehouseId ?? "",
-                    warehouseName: user.warehouseName,
-                  }
-                : null)
-            }
+            warehouses={user?.warehouses ?? []}
           />
         );
 

@@ -19,11 +19,13 @@ import {
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
   const { clearPharmacy } = usePharmacyStore.getState();
+  const { clearWarehouse } = useWarehouseStore.getState();
 
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
@@ -56,9 +58,7 @@ const Sidebar = () => {
         // assigned warehouse unlocks the modules just like an assigned pharmacy does.
         const hasOwnApprovedPharmacy = (kpiResponse?.data?.approved ?? 0) > 0;
         const hasAssignedPharmacy = (userDetails?.pharmacies?.length ?? 0) > 0;
-        const hasAssignedWarehouse = Boolean(
-          userDetails?.warehouse || userDetails?.warehouseId || userDetails?.warehouseName
-        );
+        const hasAssignedWarehouse = (userDetails?.warehouses?.length ?? 0) > 0;
 
         if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
           setHasApprovedPharmacy(true);
@@ -78,8 +78,9 @@ const Sidebar = () => {
       console.error("Logout failed:", err);
     } finally {
       // Clear regardless of whether the API call succeeded — a failed logout
-      // request shouldn't leave the previous session's pharmacy selection behind.
+      // request shouldn't leave the previous session's location selection behind.
       clearPharmacy();
+      clearWarehouse();
     }
     router.replace("/login");
   };

@@ -83,26 +83,25 @@ const warehouseToBillTo = (warehouse: {
 
 /**
  * The "Bill To" entity for the signed-in user. A Warehouse Manager operates
- * under an assigned warehouse rather than a pharmacy, so for them this resolves
- * that warehouse (GET /warehouse/{id}) and maps it onto the CurrentPharmacy
- * shape the invoice renders. Everyone else bills to their current pharmacy.
+ * under a warehouse rather than a pharmacy, so for them this resolves the
+ * warehouse they are currently acting as (GET /warehouse/{id}) and maps it onto
+ * the CurrentPharmacy shape the invoice renders. Everyone else bills to their
+ * current pharmacy.
+ *
+ * The warehouse comes from the store rather than the user record: a manager may
+ * hold several, and the invoice has to name the one the purchase was made under
+ * — the same one the request carried in `X-Warehouse-Id`.
  */
 export const getCurrentBillTo = async (): Promise<CurrentPharmacy> => {
   try {
-    const userRes = await fetch("/api/user-info");
-    if (userRes.ok) {
-      const { userId } = await userRes.json();
-      if (userId) {
-        const { getUserById } = await import("./UserManagementService");
-        const user = await getUserById(userId).catch(() => null);
-        const warehouseId: string | undefined =
-          user?.warehouse?.warehouseId ?? user?.warehouseId;
-        if (warehouseId) {
-          const { getWarehouseById } = await import("./SetupWarehouseService");
-          const warehouse = await getWarehouseById(warehouseId);
-          if (warehouse) return warehouseToBillTo(warehouse);
-        }
-      }
+    const { useWarehouseStore } = await import("@/store/warehouseStore");
+    const warehouseId =
+      useWarehouseStore.getState().selectedWarehouse?.warehouseId;
+
+    if (warehouseId) {
+      const { getWarehouseById } = await import("./SetupWarehouseService");
+      const warehouse = await getWarehouseById(warehouseId);
+      if (warehouse) return warehouseToBillTo(warehouse);
     }
   } catch (err) {
     console.error("Failed to resolve warehouse bill-to; using pharmacy", err);

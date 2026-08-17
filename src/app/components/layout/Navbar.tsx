@@ -4,6 +4,8 @@ import React, { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { getById, getUserById } from "@/services/UserManagementService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
+import { warehouseLabel } from "@/types/UserData";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 
 interface NavbarProps {
@@ -13,13 +15,19 @@ interface NavbarProps {
 const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [fullName, setFullName] = useState("");
-  // A Warehouse Manager operates on a fixed warehouse, not a selectable
-  // pharmacy — the top-right control shows the warehouse name for them.
+  // A Warehouse Manager operates on warehouses, not pharmacies — the top-right
+  // control switches warehouse for them instead of pharmacy.
   const [isWarehouseUser, setIsWarehouseUser] = useState(false);
-  const [warehouseName, setWarehouseName] = useState<string | null>(null);
 
   const { pharmacies, selectedPharmacy, selectPharmacy, loading } =
     usePharmacyStore();
+
+  const {
+    warehouses,
+    selectedWarehouse,
+    selectWarehouse,
+    loading: warehousesLoading,
+  } = useWarehouseStore();
 
   const pharmacyOptions: DropdownOption[] = useMemo(
     () =>
@@ -28,6 +36,15 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
         value: p.pharmacyId,
       })),
     [pharmacies],
+  );
+
+  const warehouseOptions: DropdownOption[] = useMemo(
+    () =>
+      warehouses.map((w) => ({
+        label: warehouseLabel(w),
+        value: w.warehouseId,
+      })),
+    [warehouses],
   );
 
   useEffect(() => {
@@ -44,19 +61,17 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
           setFullName(user.fullName);
         }
 
-        // Resolve the warehouse (if any) from the fuller user record so the
-        // control can swap the pharmacy dropdown for the warehouse name.
+        // Whether to show the warehouse switcher instead of the pharmacy one.
+        // The warehouses themselves come from the store (useInitializeWarehouse),
+        // so this only has to settle which control belongs here.
         const details = await getUserById(userId).catch(() => null);
         const normalize = (r?: string) =>
           (r || "").toLowerCase().replace(/[^a-z]/g, "");
-        const wName =
-          details?.warehouse?.warehouseName ?? details?.warehouseName ?? null;
         if (
-          wName ||
+          (details?.warehouses?.length ?? 0) > 0 ||
           normalize(details?.pharmaRolesDto?.roleName) === "warehousemanager"
         ) {
           setIsWarehouseUser(true);
-          setWarehouseName(wName);
         }
       } catch (error) {
         console.error("Failed to fetch user for Navbar", error);
@@ -105,9 +120,33 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
               className="w-full origin-center scale-[0.82]"
               style={{ marginTop: "-8px", marginBottom: "-8px" }}
             >
-              <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
-                <span className="truncate">{warehouseName || "Warehouse"}</span>
-              </div>
+              {warehouses.length > 1 ? (
+                <Dropdown
+                  options={warehouseOptions}
+                  value={selectedWarehouse?.warehouseId}
+                  onChange={(value) => {
+                    const warehouse = warehouses.find(
+                      (w) => w.warehouseId === value,
+                    );
+
+                    if (warehouse) {
+                      selectWarehouse(warehouse);
+                    }
+                  }}
+                  placeholder="Select Warehouse"
+                  isLoading={warehousesLoading}
+                />
+              ) : (
+                // One warehouse (or none yet): nothing to choose between, so it
+                // reads as a label rather than a dropdown that cannot be used.
+                <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
+                  <span className="truncate">
+                    {selectedWarehouse
+                      ? warehouseLabel(selectedWarehouse)
+                      : "Warehouse"}
+                  </span>
+                </div>
+              )}
             </div>
           ) : (
             <div

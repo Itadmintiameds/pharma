@@ -124,7 +124,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
           const user = await getUserById(userId).catch(() => null);
           const isWM =
             normalize(user?.pharmaRolesDto?.roleName) === "warehousemanager" ||
-            Boolean(user?.warehouse?.warehouseId || user?.warehouseId);
+            (user?.warehouses?.length ?? 0) > 0;
           if (active) setIsWarehouseManager(isWM);
         }
       } catch (err) {

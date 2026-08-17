@@ -8,7 +8,7 @@ import { EyeIcon } from "lucide-react";
 import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
 import AddUserWizard from "./components/AddUserWizard";
-import { UserData } from "@/types/UserData";
+import { UserData, warehouseLabel } from "@/types/UserData";
 import { getAllUsers } from "@/services/UserManagementService";
 
 const page = () => {
@@ -104,8 +104,10 @@ const page = () => {
 
     const headers = ["Name", "Email", "Employee ID", "Role", "Location/Warehouse", "Status"];
     const rows = sortedUsers.map(u => {
-      const locationOrWarehouse = u.warehouse
-        ? (u.warehouse.warehouseCode ? `${u.warehouse.warehouseName} (${u.warehouse.warehouseCode})` : u.warehouse.warehouseName)
+      // Semicolons between warehouses: the cell is already comma-quoted for CSV,
+      // and a warehouse name may itself contain a comma.
+      const locationOrWarehouse = u.warehouses && u.warehouses.length > 0
+        ? u.warehouses.map(warehouseLabel).join('; ')
         : (u.pharmacyCities?.join(', ') || '');
       return [
         `"${u.fullName || ''}"`,
@@ -155,10 +157,8 @@ const page = () => {
       key: "pharmacyCities",
       header: "Location/Warehouse",
       render: (row: UserData) => {
-        if (row.warehouse) {
-          return row.warehouse.warehouseCode
-            ? `${row.warehouse.warehouseName} (${row.warehouse.warehouseCode})`
-            : row.warehouse.warehouseName;
+        if (row.warehouses && row.warehouses.length > 0) {
+          return row.warehouses.map(warehouseLabel).join(", ");
         }
         return row.pharmacyCities && row.pharmacyCities.length > 0
           ? row.pharmacyCities.join(", ")

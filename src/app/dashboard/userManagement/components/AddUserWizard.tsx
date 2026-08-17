@@ -95,8 +95,9 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     fetchInitialData();
   }, []);
 
-  // When a Warehouse Manager is selected and the org has exactly one
-  // warehouse, auto-assign it (the Location Assigned field becomes view-only).
+  // With only one warehouse in the org there is nothing for a Warehouse Manager
+  // to choose, so pre-select it. Unlike before it stays editable: the field is a
+  // genuine multi-select now, and a second warehouse may be added later.
   useEffect(() => {
     if (warehouses.length !== 1) return;
     const role = roles.find(r => String(r.roleId) === String(formData.designation));
@@ -104,9 +105,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     if (!isWM) return;
     const onlyId = warehouses[0].warehouseId;
     setFormData(prev =>
-      prev.location.length === 1 && prev.location[0] === onlyId
-        ? prev
-        : { ...prev, location: [onlyId] }
+      prev.location.length > 0 ? prev : { ...prev, location: [onlyId] }
     );
     setErrors(prev => (prev.location ? { ...prev, location: '' } : prev));
   }, [formData.designation, roles, warehouses]);
@@ -243,10 +242,11 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
         permissions: permissionsPayload
       };
 
-      // A Warehouse Manager is assigned a single warehouse (warehouseId);
-      // every other role is assigned one or more pharmacies (pharmacyIds).
+      // A Warehouse Manager is assigned warehouses (warehouseIds); every other
+      // role is assigned pharmacies (pharmacyIds). Both are lists — the two
+      // mappings are many-to-many alike.
       if (isWarehouseManager) {
-        payload.warehouseId = formData.location[0] ?? null;
+        payload.warehouseIds = formData.location;
       } else {
         payload.pharmacyIds = formData.location;
       }
@@ -883,7 +883,6 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           required
           searchable
           multiple
-          readOnly={isWarehouseManager && warehouses.length === 1}
           placeholder="Search Location...."
           options={isWarehouseManager
             ? warehouses.map(w => ({
