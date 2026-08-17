@@ -243,6 +243,12 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     useState<CurrentPharmacy | null>(null);
   const pharmacy = pharmacyProp ?? pharmacyFetched;
 
+  // Whether the header pharmacy has been settled either way. A download starts
+  // capturing on its own, so it has to wait for this rather than rasterise a
+  // header that is still loading — but a failed fetch must not stall it either.
+  const [isFetchSettled, setIsFetchSettled] = useState(false);
+  const isPharmacySettled = !!pharmacyProp || isFetchSettled;
+
   useEffect(() => {
     if (pharmacyProp) return;
     let active = true;
@@ -252,6 +258,9 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       })
       .catch((err) => {
         console.error("Unable to fetch current pharmacy", err);
+      })
+      .finally(() => {
+        if (active) setIsFetchSettled(true);
       });
     return () => {
       active = false;
@@ -260,11 +269,6 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
 
   /** Saves through the page, then opens the success popup. */
   const handleSave = async () => {
-    if (currentMode === "download") {
-      handleDownloadPdf();
-      return;
-    }
-
     if (!onSave) {
       if (onDone) onDone();
       return;
@@ -298,12 +302,17 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     }
   };
 
-  /** Mounts the off-screen copy; the capture itself runs in onReady below. */
-  const handleDownloadPdf = () => {
-    if (isCapturing) return;
-    setIsSubmitting(true);
+  /**
+   * "download" is not a screen: the caller wants the PDF, not a preview of it.
+   * So the off-screen copy mounts on its own as soon as the header pharmacy has
+   * settled — the capture itself runs in onReady below — and nothing of this
+   * component is rendered on screen (see the early return further down).
+   */
+  useEffect(() => {
+    if (currentMode !== "download" || !isPharmacySettled) return;
+    if (isCapturingRef.current) return;
     setIsCapturing(true);
-  };
+  }, [currentMode, isPharmacySettled]);
 
   /**
    * Fired by OffscreenPortal once the copy is laid out and painted. The ref
@@ -329,9 +338,13 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
         isCapturingRef.current = false;
         setIsCapturing(false);
         setIsSubmitting(false);
+        // A download-only render has nothing left to do once the file is
+        // written, so it tells the caller to tear it down — including after a
+        // failure, or the invisible copy would linger.
+        if (currentMode === "download" && onDone) onDone();
       }
     },
-    [invoiceNo]
+    [invoiceNo, currentMode, onDone]
   );
 
   /**
@@ -487,11 +500,9 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
         className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600"
       >
         <h1 className="font-heading text-h4 font-semibold text-secondary-50">
-          {currentMode === "view"
-            ? "View Payment Invoice"
-            : currentMode === "download"
-            ? "Download Payment Invoice"
-            : "Payment Invoice"}
+          {/* A downloaded copy is just the invoice — "Download ..." would print
+              a screen's label onto the document. */}
+          {currentMode === "view" ? "View Payment Invoice" : "Payment Invoice"}
         </h1>
       </div>
 
@@ -578,6 +589,24 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     </div>
   );
 
+  // Download mode is headless: the caller stays on its own screen (the bill
+  // list) while the copy below is rasterised, so there is no preview and no
+  // Back / Download button to press.
+  //
+  // The PDF is rasterised from this copy rather than from a node on screen.
+  // On screen the bill inherits whatever width the dashboard shell gives it —
+  // and that shell nests pages in overflow-hidden containers, which clip a
+  // capture. Rendered here at a fixed width, just over A4 landscape's 1123px at
+  // 96dpi, it always carries the full desktop design and scales down to the
+  // page nearly 1:1. A WhatsApp send would go through this same path.
+  if (currentMode === "download") {
+    return isCapturing ? (
+      <OffscreenPortal width={1240} onReady={handleCaptureReady}>
+        {renderBill()}
+      </OffscreenPortal>
+    ) : null;
+  }
+
   return (
     <div className="flex flex-col gap-4 w-full bg-transparent pb-12">
       {renderBill(printRef)}
@@ -610,30 +639,9 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
             currentMode === "view" ? "w-[128px]" : "w-[108px]"
           } shrink-0`}
         >
-          {currentMode === "view"
-            ? "Print"
-            : isSubmitting
-            ? currentMode === "download"
-              ? "Preparing..."
-              : "Saving..."
-            : currentMode === "download"
-            ? "Download"
-            : "Save"}
+          {currentMode === "view" ? "Print" : isSubmitting ? "Saving..." : "Save"}
         </button>
       </div>
-
-      {/* The PDF is rasterised from this copy, not from the node on screen.
-          On screen the bill inherits whatever width the dashboard shell gives
-          it — and that shell nests pages in overflow-hidden containers, which
-          clip a capture. Rendered here at a fixed width, just over A4
-          landscape's 1123px at 96dpi, it always carries the full desktop design
-          and scales down to the page nearly 1:1. A WhatsApp send would go
-          through this same path. */}
-      {isCapturing && (
-        <OffscreenPortal width={1240} onReady={handleCaptureReady}>
-          {renderBill()}
-        </OffscreenPortal>
-      )}
 
       <BillingSuccessModal
         isOpen={!!savedBillNo}
