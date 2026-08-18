@@ -35,8 +35,41 @@ export interface CurrentPharmacy {
   pharmacyPincode: number | string | null;
   pharmacyLandmark: string;
   pharmacyLogo: string | null;
+  /**
+   * The organization's logo. Branding is held at the organization, not per
+   * branch, so this is what a bill or an invoice prints — `pharmacyLogo` above
+   * is per-branch and is usually null.
+   */
+  organizationLogoUrl?: string | null;
+  /** Present on responses that nest the organization rather than flattening it. */
+  pharmacyOrganization?: {
+    organizationId?: number;
+    organizationName?: string;
+    organizationLogoUrl?: string | null;
+  } | null;
   documents: PharmacyDocument[];
 }
+
+/**
+ * The logo to print for a pharmacy: the organization's mark, wherever the
+ * response happens to carry it, falling back to a branch logo if one is set.
+ * Returns null when there is none — callers show their own mark rather than a
+ * stand-in logo belonging to somebody else.
+ */
+export const pharmacyLogoUrl = (
+  pharmacy: CurrentPharmacy | null | undefined
+): string | null => {
+  const candidates = [
+    pharmacy?.organizationLogoUrl,
+    pharmacy?.pharmacyOrganization?.organizationLogoUrl,
+    pharmacy?.pharmacyLogo,
+  ];
+  return (
+    candidates.find(
+      (url): url is string => typeof url === "string" && url.trim() !== ""
+    ) ?? null
+  );
+};
 
 export const getUserPharmacies = async (): Promise<Pharmacy[]> => {
 
