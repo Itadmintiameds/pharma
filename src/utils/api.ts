@@ -1,4 +1,5 @@
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 import axios from "axios";
 
 const api = axios.create({
@@ -75,6 +76,7 @@ api.interceptors.response.use(
         // Refresh token is expired or invalid -> force redirect to login
         if (typeof window !== "undefined") {
           usePharmacyStore.getState().clearPharmacy();
+          useWarehouseStore.getState().clearWarehouse();
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);
@@ -95,6 +97,18 @@ api.interceptors.request.use(
     if (pharmacy?.pharmacyId) {
       config.headers["X-Pharmacy-Id"] =
         pharmacy.pharmacyId;
+    }
+
+    // A Warehouse Manager is scoped by warehouse rather than pharmacy, and may
+    // be mapped to several — the backend refuses to guess between them, so the
+    // one they picked has to travel with every request. Only ever set for users
+    // who have warehouses at all; the server ignores it for everyone else.
+    const warehouse =
+      useWarehouseStore.getState().selectedWarehouse;
+
+    if (warehouse?.warehouseId) {
+      config.headers["X-Warehouse-Id"] =
+        warehouse.warehouseId;
     }
 
     return config;
@@ -158,6 +172,7 @@ adminApi.interceptors.response.use(
         processQueue(refreshError);
         if (typeof window !== "undefined") {
           usePharmacyStore.getState().clearPharmacy();
+          useWarehouseStore.getState().clearWarehouse();
           window.location.href = "/login";
         }
         return Promise.reject(refreshError);

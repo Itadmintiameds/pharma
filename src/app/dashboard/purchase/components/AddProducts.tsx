@@ -99,6 +99,43 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const { selectedPharmacy } = usePharmacyStore();
   const store = usePurchaseStore();
 
+  // A Warehouse Manager operates on a warehouse, not a pharmacy — they have no
+  // selected pharmacy. The backend resolves their warehouse from the auth token
+  // (LocationContextResolver), so the client just needs to know not to demand a
+  // pharmacy for them.
+  const [isWarehouseManager, setIsWarehouseManager] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const normalize = (r?: string) => (r || "").toLowerCase().replace(/[^a-z]/g, "");
+    (async () => {
+      try {
+        const res = await fetch("/api/user-info");
+        if (!res.ok) return;
+        const { userId, role } = await res.json();
+        if (normalize(role) === "warehousemanager") {
+          if (active) setIsWarehouseManager(true);
+          return;
+        }
+        // The token's role claim isn't always the role name, so confirm against
+        // the user record (a warehouse assignment is the decisive signal).
+        if (userId) {
+          const { getUserById } = await import("@/services/UserManagementService");
+          const user = await getUserById(userId).catch(() => null);
+          const isWM =
+            normalize(user?.pharmaRolesDto?.roleName) === "warehousemanager" ||
+            (user?.warehouses?.length ?? 0) > 0;
+          if (active) setIsWarehouseManager(isWM);
+        }
+      } catch (err) {
+        console.error("Failed to resolve current user role", err);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   // Mirrors the tax invoice grid, so the line reads the same here as it does on
   // the summary the user saves.
   const tableColumns = useMemo<ColumnDef<any, any>[]>(() => [
@@ -299,7 +336,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         return;
       }
 
-      if (!selectedPharmacy?.pharmacyId) {
+      // Warehouse Managers have no pharmacy; the backend derives their
+      // warehouse from the token, so only require a pharmacy for everyone else.
+      if (!isWarehouseManager && !selectedPharmacy?.pharmacyId) {
         toast.error("Pharmacy ID is required");
         return;
       }
@@ -317,7 +356,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
 
       // Construct Payload for /product/onboard
       const payload = {
-        pharmacyId: selectedPharmacy.pharmacyId,
+        pharmacyId: selectedPharmacy?.pharmacyId || "",
         productCategoryId,
         productName: productData?.productName || "",
         brandName: productData?.brandName || "",

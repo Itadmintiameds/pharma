@@ -16,7 +16,7 @@ import { getProductDetails } from "@/services/InventoryService";
 import type { ProductDetails } from "@/types/ProductData";
 import InvoiceSummary from "./components/InvoiceSummary";
 import {
-  getCurrentPharmacy,
+  getCurrentBillTo,
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
@@ -256,12 +256,13 @@ const PurchaseContent = () => {
     isBusyRef.current = true;
     setIsPreparing(true);
     try {
-      // Fetch the "Bill To" pharmacy alongside the lines so a PDF download
-      // has it in hand before the off-screen copy is captured.
+      // Fetch the "Bill To" entity (pharmacy, or warehouse for a Warehouse
+      // Manager) alongside the lines so a PDF download has it in hand before
+      // the off-screen copy is captured.
       const [lines, pharmacy] = await Promise.all([
         buildInvoiceLines(purchase),
-        getCurrentPharmacy().catch((err) => {
-          console.error("Unable to fetch current pharmacy for the invoice", err);
+        getCurrentBillTo().catch((err) => {
+          console.error("Unable to fetch current bill-to for the invoice", err);
           return null;
         }),
       ]);
