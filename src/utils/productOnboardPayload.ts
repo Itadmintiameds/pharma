@@ -13,7 +13,8 @@ const toId = (value: unknown): number | null => {
   return Number.isFinite(num) && num > 0 ? num : null;
 };
 
-// Single-select dropdowns feed backend fields that expect a list of ids.
+// Multi-select dropdowns hand over a string[]; a single-select one value. Both
+// feed backend fields that expect a list of ids.
 const toIdList = (value: unknown): number[] => {
   const raw = Array.isArray(value) ? value : [value];
   return raw
@@ -85,8 +86,9 @@ const buildSupplementAttributes = (data: any) => ({
       therapeuticSubcategoryId: toId(data?.therapeuticSubcategory),
       flavourId: toId(data?.flavor),
       dosageFormId: toId(data?.dosageForm),
-      // Backend takes a single age group here, unlike the other categories.
-      ageGroupId: toIdList(data?.ageGroup)[0] ?? null,
+      // Every age group the form selected, not just the first: the field is a
+      // list here, the same as the other categories.
+      ageGroupIds: toIdList(data?.ageGroup),
       strengthComposition: data?.strength || "",
       netQuantity: toNumber(data?.netQuantity),
       netQuantityUnitId: toId(data?.netQuantityUnit),
