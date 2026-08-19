@@ -2,6 +2,10 @@
 // to manage inventory centrally. Sent nested inside the organization/create
 // payload (see OrganizationCreateRequest.warehouses).
 export interface WarehouseDetails {
+  // Backend-assigned code (e.g. "ACMACWH0001"). Absent while the warehouse is
+  // still being captured; sent back on pharmacy registration so the
+  // registration is tied to the existing warehouse rather than a new one.
+  warehouseId?: string;
   warehouseName: string;
   warehouseCode: string;
   warehouseAddress: string;
@@ -21,7 +25,6 @@ export const EMPTY_WAREHOUSE: WarehouseDetails = {
 // (Pharma Backend). Extends the editable details with backend-managed,
 // read-only fields.
 export interface OrganizationWarehouse extends WarehouseDetails {
-  warehouseId?: number;
   isActive?: boolean;
   organizationId?: number;
 }

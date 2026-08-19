@@ -40,6 +40,12 @@ interface PurchaseState {
   paymentType: "CASH" | "CREDIT" | "";
   creditDays: number;
   supplierPaymentStatus: string;
+  /**
+   * Running sums kept as the lines are added, so they are all *pre-discount*.
+   * The invoice discount is typed after the lines exist and re-bases every
+   * line's GST, so anything shown or saved goes through
+   * `calculatePurchaseTotals` instead of reading these.
+   */
   totalGrossAmount: number;
   totalDiscount: number;
   totalGst: number;

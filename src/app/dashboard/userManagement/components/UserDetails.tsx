@@ -11,8 +11,15 @@ import { getUserById, updateUserStatus } from "@/services/UserManagementService"
 import { showToast } from "@/app/components/common/Toast";
 
 interface UserDetailsProps {
-  userId: number;
+  /** The user's code ("USR-2026-00003"); numbers are accepted for older callers. */
+  userId: string | number;
   onBack?: () => void;
+  /**
+   * Opens the edit wizard for this account, with the user's own code — the id
+   * the update endpoint takes. Omit to hide the Edit button altogether, which
+   * is what the create wizard's final step does.
+   */
+  onEdit?: (userCode: string) => void;
 }
 
 /** The shape of a backend user code: USR-2026-00003. */
@@ -84,7 +91,7 @@ const auditUserIdOf = (
 
 const tabs = ["Assigned Location", "Roles & Permissions", "Audit Logs"];
 
-const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
+const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
   const [activeTab, setActiveTab] = useState("Assigned Location");
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,8 +108,21 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
   const actionsRef = useRef<HTMLDivElement>(null);
 
   const normalizeRole = (role?: string) => (role || "").toLowerCase().replace(/[^a-z]/g, "");
-  const isOwnAccount = currentUserId !== null && Number(currentUserId) === Number(userId);
+  const isSuperAdmin = normalizeRole(currentUserRole) === "superadmin";
+  // Compared as strings, and by email as well: a user id is a code like
+  // USR-2026-00003, and Number() on that is NaN — which never equals anything,
+  // so a numeric comparison silently reported every account as somebody else's.
+  const isOwnAccount =
+    (currentUserId !== null &&
+      !!user?.userId &&
+      String(currentUserId) === String(user.userId)) ||
+    (!!currentUserEmail &&
+      !!user?.userEmail &&
+      currentUserEmail.toLowerCase() === user.userEmail.toLowerCase());
   const canManageActions = ["superadmin", "admin"].includes(normalizeRole(currentUserRole));
+  // Nobody edits their own profile — a user could grant themselves permissions
+  // or move their own role. A super admin is the exception.
+  const canEdit = !isOwnAccount || isSuperAdmin;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -250,15 +270,26 @@ const UserDetails = ({ userId, onBack }: UserDetailsProps) => {
               <span>Back</span>
             </button>
 
-            <button className="w-27 h-9 border-[1.5px] border-secondary-700 rounded-lg flex items-center justify-center gap-2 text-label-l3 font-medium text-secondary-700">
-              <Image
-                src="/UserManagement/EditIcon.svg"
-                alt="Edit"
-                width={16}
-                height={16}
-              />
-              <span>Edit</span>
-            </button>
+            {onEdit && (
+              <button
+                onClick={() => onEdit(String(user?.userId ?? userId))}
+                disabled={!canEdit || !user}
+                title={
+                  canEdit
+                    ? "Edit this user"
+                    : "You cannot edit your own profile"
+                }
+                className="w-27 h-9 border-[1.5px] border-secondary-700 rounded-lg flex items-center justify-center gap-2 text-label-l3 font-medium text-secondary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Image
+                  src="/UserManagement/EditIcon.svg"
+                  alt="Edit"
+                  width={16}
+                  height={16}
+                />
+                <span>Edit</span>
+              </button>
+            )}
             <div className="relative" ref={actionsRef}>
               <button
                 onClick={() => setActionsOpen((prev) => !prev)}

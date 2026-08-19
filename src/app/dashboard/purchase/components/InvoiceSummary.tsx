@@ -14,6 +14,37 @@ import {
 } from "@/services/PharmacyService";
 // Shared with the bill, so both invoices spell an amount the same way.
 import { amountInWords } from "@/utils/billingTotals";
+// One costing for the screen and the payload, so what is shown is what is saved.
+import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
+
+/**
+ * One 24px-tall key : value line. The key column is fixed so every value in a
+ * card starts on the same x, and the colon sits in its own 5px slot.
+ */
+const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="w-full h-6 flex items-center gap-3 text-[16px] leading-6">
+    <span className="w-[100px] shrink-0 truncate font-normal text-pneutral-800" title={label}>{label}</span>
+    <span className="w-[5px] shrink-0 font-normal text-pneutral-800">:</span>
+    <span className="flex-1 truncate font-medium text-pneutral-900">{value}</span>
+  </div>
+);
+
+/** A bank-detail line: label, colon, then the value on the same 20px baseline. */
+const BankRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+  <div className="h-5 flex items-center gap-2 text-[14px] leading-5">
+    <span className="font-normal text-pneutral-800 whitespace-nowrap">{label}</span>
+    <span className="font-normal text-pneutral-800">:</span>
+    <span className="flex-1 min-w-0 truncate font-semibold text-pneutral-900">{value}</span>
+  </div>
+);
+
+/** One 32px total line in the payable card. */
+const TotalRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="w-full h-8 py-1 flex items-center justify-between">
+    <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800">{label}</span>
+    <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900">{value}</span>
+  </div>
+);
 
 interface InvoiceSummaryProps {
   onCancel?: () => void;
@@ -46,12 +77,31 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
   // A saved purchase is read-only: its own stored totals and discount win.
   const isSaved = !!purchase;
-  const grossAmt = Number(purchase?.totalGrossAmount ?? store.totalGrossAmount) || 0;
-  const gstAmt = Number(purchase?.totalGst ?? store.totalGst) || 0;
-  const appliedDiscount = isSaved ? Number(purchase?.totalDiscount || 0) : discount;
+
+  // While the purchase is unsaved, every figure is costed from the lines at the
+  // discount currently typed — the discount reaches each line as a share of its
+  // gross, so GST is charged on the discounted value rather than the full one.
+  // Recomputed here (not read off the store) because the discount arrives after
+  // the lines were added.
+  const live = useMemo(
+    () => calculatePurchaseTotals(store.purchaseDetails, discount),
+    [store.purchaseDetails, discount],
+  );
+
+  const grossAmt = isSaved
+    ? Number(purchase?.totalGrossAmount || 0)
+    : live.grossAmount;
+  const gstAmt = isSaved ? Number(purchase?.totalGst || 0) : live.gstAmount;
+  const appliedDiscount = isSaved
+    ? Number(purchase?.totalDiscount || 0)
+    : live.discountAmount;
   const netAmt = isSaved
     ? Number(purchase?.totalNetAmount || 0)
-    : (grossAmt - discount) + gstAmt;
+    : live.netAmount;
+  const taxableAmt = grossAmt - appliedDiscount;
+  // The strip shows a rate, but only amounts are stored — back it out of the
+  // taxable value and halve it, since CGST and SGST split the total GST.
+  const gstRate = taxableAmt > 0 ? (gstAmt / 2 / taxableAmt) * 100 : 0;
 
   // Header fields: the saved record if we have one, otherwise the live store.
   const header = {
@@ -67,7 +117,18 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     paymentType: purchase?.paymentType ?? store.paymentType,
     creditDays: purchase?.creditDays ?? store.creditDays,
     status: purchase?.supplierPaymentStatus ?? store.supplierPaymentStatus,
+  } as {
+    supplierName: string; supplierId?: number | string; invoiceNo?: string;
+    invoiceDate?: string; grnNo?: string; paymentType?: string;
+    creditDays?: number | string; status?: string; dueDate?: string;
   };
+
+  // Due date isn't stored — it's the invoice date pushed out by the credit days.
+  if (header.invoiceDate && Number(header.creditDays) > 0) {
+    const due = new Date(header.invoiceDate);
+    due.setDate(due.getDate() + Number(header.creditDays));
+    header.dueDate = due.toISOString().split("T")[0];
+  }
 
   // "Bill To" is the pharmacy we're operating under. Use the pre-fetched prop
   // when given (so a PDF download has it before capture); otherwise fetch it.
@@ -162,10 +223,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   // Memoised so the `?? []` fallback doesn't hand useMemo a new array each render.
   const savedLines = useMemo(() => purchase?.purchaseDetails ?? [], [purchase]);
 
-  const totalItemsCount = isSaved ? savedLines.length : store.purchaseDetails.length || 0;
+  const totalItemsCount = isSaved ? savedLines.length : live.totalItems;
   const totalQtyCount = isSaved
     ? savedLines.reduce((acc, i) => acc + Number(i.purchaseQuantity || 0), 0)
-    : store.purchaseDetails.reduce((acc, i) => acc + i.purchaseQuantity, 0);
+    : live.totalQuantity;
 
   const tableData = useMemo(() => {
     if (data && Array.isArray(data) && data.length > 0) return data;
@@ -192,26 +253,31 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       }));
     }
     if (store.purchaseDetails && store.purchaseDetails.length > 0) {
-      return store.purchaseDetails.map((item, idx) => ({
-        id: idx + 1,
-        brand: item.brandName || '-',
-        qty: item.purchaseQuantity,
-        free: Number(item.freeQty || 0),
-        variant: item.variant || '-',
-        name: item.productName || item.productId,
-        hsn: item.hsnCode || '-',
-        batch: item.batchNumber || item.batchId,
-        expiry: item.expiryDate || '-',
-        // Priced per purchase unit, so it multiplies straight by the quantity.
-        purchaseAmt: Number(item.purchasePrice || 0),
-        value: Number(item.purchasePrice || 0) * Number(item.purchaseQuantity || 0),
-        dis: 0,
-        gst: item.gst,
-        amount: item.netAmount
-      }));
+      return store.purchaseDetails.map((item, idx) => {
+        const row = live.lines[idx];
+        return {
+          id: idx + 1,
+          brand: item.brandName || '-',
+          qty: item.purchaseQuantity,
+          free: Number(item.freeQty || 0),
+          variant: item.variant || '-',
+          name: item.productName || item.productId,
+          hsn: item.hsnCode || '-',
+          batch: item.batchNumber || item.batchId,
+          expiry: item.expiryDate || '-',
+          // Priced per purchase unit, so it multiplies straight by the quantity.
+          purchaseAmt: Number(item.purchasePrice || 0),
+          // The full gross — the line never shows its discounted value, only
+          // the GST and amount below carry the invoice discount.
+          value: row?.grossAmount ?? 0,
+          dis: 0,
+          gst: row?.gstAmount ?? 0,
+          amount: row?.netAmount ?? 0
+        };
+      });
     }
     return [];
-  }, [data, savedLines, store.purchaseDetails]);
+  }, [data, savedLines, store.purchaseDetails, live]);
 
   const columns = useMemo<ColumnDef<any, any>[]>(() => [
     { accessorKey: 'id', header: 'Sl. No.' },
@@ -238,116 +304,113 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   return (
     <div className="flex flex-col gap-6 w-full bg-transparent">
       {/* Title Header */}
-      <div className="w-full h-[70px] p-4 flex items-center bg-secondary-600 border-t border-secondary-50 rounded-xl shadow-sm">
-        <h1 className="text-white font-semibold text-[24px] leading-[32px]">
+      <div className="w-full h-[70px] p-4 flex items-center gap-3 bg-secondary-600 border-t border-secondary-50 rounded-xl">
+        <h1 className="h-9 flex items-center text-secondary-50 font-semibold text-[28px] leading-[36px]">
           {currentMode === 'view' ? "View Invoice Summary" : "Invoice Summary"}
         </h1>
       </div>
 
-      {/* Supplier Info Wrapper */}
-      <div className="w-full h-[166px] p-4 bg-white border border-pneutral-200 rounded-xl">
-        {/* Inner Box */}
-        <div className="w-full h-full px-4 py-3 bg-secondary-50 border border-pneutral-200 rounded-lg flex items-start">
-          <div className="flex-1 flex flex-col gap-3 text-[14px]">
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Supplier</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.supplierName || (header.supplierId ? `Supplier #${header.supplierId}` : '-')}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice No</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.invoiceNo || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Invoice Date</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.invoiceDate || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">GRN</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.grnNo || "-"}</span></div>
-          </div>
-          <div className="flex-1 flex flex-col gap-3 text-[14px]">
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Payment Type</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.paymentType || "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Credit Days</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.creditDays ? `${header.creditDays} Days` : "-"}</span></div>
-            <div className="flex items-center"><span className="w-[120px] text-pneutral-600">Status</span><span className="w-4">:</span><span className="font-medium text-pneutral-900">{header.status || "PENDING"}</span></div>
-          </div>
+      {/* Supplier Details */}
+      <div className="w-full h-[150px] px-4 py-3 bg-white border border-pneutral-200 rounded-xl flex gap-[10px]">
+        <div className="flex-1 h-[126px] flex flex-col gap-[10px]">
+          <InfoRow label="Supplier" value={header.supplierName || (header.supplierId ? `Supplier #${header.supplierId}` : '-')} />
+          <InfoRow label="Invoice No" value={header.invoiceNo || "-"} />
+          <InfoRow label="Invoice Date" value={header.invoiceDate || "-"} />
+          <InfoRow label="GRN" value={header.grnNo || "-"} />
+        </div>
+        <div className="flex-1 h-[126px] flex flex-col gap-[10px]">
+          <InfoRow label="Payment Type" value={header.paymentType || "-"} />
+          <InfoRow label="Credit Days" value={header.creditDays ? `${header.creditDays} Days` : "-"} />
+          <InfoRow label="Due Date" value={header.dueDate || "-"} />
         </div>
       </div>
 
-      {/* Bill To Info Wrapper */}
-      <div className="w-full h-[188px] p-4 bg-white border border-pneutral-200 rounded-xl">
-        {/* Inner Box */}
-        <div className="w-full h-full p-4 bg-secondary-50 border border-pneutral-200 rounded-lg flex flex-col gap-3 text-[14px]">
-          <div className="font-bold text-pneutral-900">Bill To</div>
-          <div className="font-bold text-pneutral-900 mt-1">{pharmacy?.pharmacyName || "—"}</div>
-          <div className="text-pneutral-700 mt-1">{billToAddress || "—"}</div>
-          <div className="flex gap-8 text-pneutral-700 mt-2">
-            <div>GSTIN: {pharmacy?.gstNumber || "—"}</div>
-            <div>{billToDocumentLabel}: {billToDocumentNo || "—"}</div>
-          </div>
-        </div>
+      {/* Pharmacy Details */}
+      <div className="w-full h-[156px] p-4 bg-white border border-pneutral-200 rounded-xl flex flex-col gap-3">
+        <InfoRow label="Pharmacy" value={pharmacy?.pharmacyName || "—"} />
+        <InfoRow label="Address" value={billToAddress || "—"} />
+        <InfoRow label="GSTIN" value={pharmacy?.gstNumber || "—"} />
+        <InfoRow label={billToDocumentLabel} value={billToDocumentNo || "—"} />
       </div>
 
       {/* Data Table */}
       <DataTable columns={columns} data={tableData} />
 
       {/* Bottom Section */}
-      <div className={`flex gap-4 w-full items-start ${currentMode === 'create' ? 'bg-white border border-pneutral-200 rounded-xl p-4' : ''}`}>
-        
-        {/* Left Side: Tax and Bank Details */}
-        <div className="flex-[2.5] p-4 flex flex-col justify-between gap-[16px] bg-secondary-50 border border-pneutral-200 rounded-xl">
-          
-          {/* Tax Breakdown */}
-          <div className="w-full bg-white border border-pneutral-200 rounded-lg p-3 flex gap-4 text-[13px] items-center justify-between">
-            <div className="flex flex-col gap-1">
-              <span className="text-pneutral-600">Taxable</span>
-              <span className="font-semibold text-pneutral-900">₹ {(grossAmt - appliedDiscount).toFixed(2)}</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-pneutral-600">CGST Amt</span>
-              <span className="font-semibold text-pneutral-900">₹ {(gstAmt / 2).toFixed(2)}</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-pneutral-600">SGST Amt</span>
-              <span className="font-semibold text-pneutral-900">₹ {(gstAmt / 2).toFixed(2)}</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-pneutral-600">Exempted</span>
-              <span className="font-semibold text-pneutral-900">₹ 0.00</span>
-            </div>
-            {/* Free GST — hidden for now.
-            <div className="flex flex-col gap-1">
-              <span className="text-pneutral-600">Free GST</span>
-              <span className="font-semibold text-pneutral-900">₹ 0.00</span>
-            </div>
-            */}
+      <div className="w-full h-[300px] flex gap-3">
+
+        {/* Left column: tax strip, then bank details beside the count card */}
+        <div className="w-[60%] shrink-0 h-full flex flex-col gap-3">
+
+          {/* Tax Breakdown — seven equal columns, hairline between each */}
+          <div className="w-full h-[144px] bg-white border border-pneutral-200 rounded-lg flex overflow-hidden">
+            {[
+              { label: "Taxable", value: `₹ ${taxableAmt.toFixed(2)}` },
+              { label: "CGST (%)", value: gstRate.toFixed(2) },
+              { label: "CGST Amt", value: `₹ ${(gstAmt / 2).toFixed(2)}` },
+              { label: "SGST (%)", value: gstRate.toFixed(2) },
+              { label: "SGST Amt", value: `₹ ${(gstAmt / 2).toFixed(2)}` },
+              { label: "Exempted", value: "₹ 0.00" },
+              { label: "Free GST", value: "₹ 0.00" },
+            ].map((col, i, all) => (
+              <div
+                key={col.label}
+                className={`flex-1 min-w-0 h-full px-2 py-4 flex flex-col justify-between ${
+                  i < all.length - 1 ? "border-r border-pneutral-200" : ""
+                }`}
+              >
+                <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800 whitespace-nowrap">{col.label}</span>
+                <span className="h-5 text-[14px] leading-5 font-semibold text-pneutral-900 whitespace-nowrap">{col.value}</span>
+              </div>
+            ))}
           </div>
 
-          {/* Bank Details — hidden for now; no data source wired up yet.
-          <div className="w-full bg-white border border-pneutral-200 rounded-lg p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] items-center">
-            <div className="flex items-center"><span className="w-24 text-pneutral-600">Bank Name</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
-            <div className="flex items-center"><span className="w-24 text-pneutral-600">Branch</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
-            <div className="flex items-center"><span className="w-24 text-pneutral-600">A/C No</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
-            <div className="flex items-center"><span className="w-24 text-pneutral-600">IFSC</span><span className="w-2">:</span><span className="font-medium text-pneutral-900"></span></div>
-          </div>
-          */}
+          <div className="w-full h-[144px] flex gap-3">
 
+            {/* Bank Details — two label columns, top and bottom rows */}
+            <div className="flex-[319] min-w-0 h-full p-4 bg-white border border-pneutral-200 rounded-lg flex gap-3">
+              <div className="flex-1 min-w-0 h-[112px] flex flex-col justify-between">
+                <BankRow label="Bank Name" value="" />
+                <BankRow label="A/C No" value="" />
+              </div>
+              <div className="flex-1 min-w-0 h-[112px] flex flex-col justify-between">
+                <BankRow label="Branch" value="" />
+                <BankRow label="IFSC" value="" />
+              </div>
+            </div>
+
+            {/* Items / QTY / Rounding */}
+            <div className="flex-[230] min-w-0 h-full bg-white border border-pneutral-200 rounded-lg flex flex-col justify-between overflow-hidden">
+              {[
+                { label: "Items", value: String(totalItemsCount) },
+                { label: "QTY", value: String(totalQtyCount) },
+                { label: "CR/DB Round", value: "₹ 0.00" },
+              ].map((row, i) => (
+                <div
+                  key={row.label}
+                  className={`w-full h-12 px-3 flex items-center justify-between gap-3 ${
+                    i > 0 ? "border-t border-pneutral-200" : ""
+                  }`}
+                >
+                  <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800 whitespace-nowrap">{row.label}</span>
+                  <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800">:</span>
+                  <span className="h-5 flex-1 text-right text-[14px] leading-5 font-semibold text-pneutral-900 truncate">{row.value}</span>
+                </div>
+              ))}
+            </div>
+
+          </div>
         </div>
 
-        {/* Middle: Items/Qty Summary */}
-        <div className="flex-1 p-4 flex flex-col gap-[16px] bg-secondary-50 border border-pneutral-200 rounded-xl text-[14px]">
-          <div className="w-full h-[40px] bg-white border border-pneutral-200 rounded-lg px-4 flex justify-between items-center">
-            <span className="text-pneutral-600">Items</span><span className="w-2">:</span>
-            <span className="font-bold text-pneutral-900 text-right flex-1">{totalItemsCount}</span>
-          </div>
-          <div className="w-full h-[40px] bg-white border border-pneutral-200 rounded-lg px-4 flex justify-between items-center">
-            <span className="text-pneutral-600">QTY</span><span className="w-2">:</span>
-            <span className="font-bold text-pneutral-900 text-right flex-1">{totalQtyCount}</span>
-          </div>
-          <div className="w-full h-[40px] bg-white border border-pneutral-200 rounded-lg px-4 flex justify-between items-center text-[13px]">
-            <span className="text-pneutral-600 leading-tight">CR/DB<br/>Round</span><span className="w-2 ml-1">:</span>
-            <span className="font-bold text-pneutral-900 text-right flex-1">₹ 0.00</span>
-          </div>
-        </div>
+        {/* Right: Totals */}
+        <div className="flex-1 min-w-0 h-full p-3 flex flex-col gap-2 bg-white border border-pneutral-200 rounded-xl">
+          <TotalRow label="Gross AMT" value={`₹ ${grossAmt.toFixed(2)}`} />
 
-        {/* Right Side: Totals Block */}
-        <div className="flex-[1.5] p-5 flex flex-col justify-between bg-secondary-50 border border-pneutral-200 rounded-xl text-[14px]">
-          <div className="flex justify-between items-center">
-            <span className="text-pneutral-600 text-[14px]">Gross AMT</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ {grossAmt.toFixed(2)}</span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex justify-between items-center">
-              <span className="text-pneutral-600 text-[14px]">DIS.AMT</span>
-              {currentMode === 'create' ? (
+          {/* DIS.AMT is the one editable total while the purchase is unsaved. */}
+          <div className="w-full h-8 py-1 flex items-center justify-between gap-3">
+            <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800">DIS.AMT</span>
+            {currentMode === 'create' ? (
+              <div className="flex flex-col items-end gap-1">
                 <input
                   type="number"
                   min={0}
@@ -358,40 +421,30 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
                   onKeyDown={(e) => {
                     if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault();
                   }}
-                  className={`w-20 h-7 border rounded bg-white text-right px-2 text-pneutral-900 text-[12px] outline-none ${
+                  className={`w-[96px] h-6 border rounded bg-white text-right px-2 text-pneutral-900 text-[14px] leading-5 outline-none ${
                     discountError
                       ? "border-warning-500"
                       : "border-pneutral-200 focus:border-primary-500"
                   }`}
                   placeholder="0.00"
                 />
-              ) : (
-                <span className="font-medium text-[14px] text-pneutral-900">₹ {appliedDiscount.toFixed(2)}</span>
-              )}
-            </div>
-            {discountError && (
-              <span className="self-end text-[11px] text-warning-500">{discountError}</span>
+                {discountError && (
+                  <span className="text-[11px] text-warning-500">{discountError}</span>
+                )}
+              </div>
+            ) : (
+              <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900">₹ {appliedDiscount.toFixed(2)}</span>
             )}
           </div>
-          <div className="flex justify-between items-center">
-            <span className="text-pneutral-600 text-[14px]">Taxable Amt</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ {(grossAmt - appliedDiscount).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-pneutral-600 text-[14px]">SGST AMT</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ {(gstAmt / 2).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span className="text-pneutral-600 text-[14px]">CGST AMT</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ {(gstAmt / 2).toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-pneutral-600 text-[14px]">IGST AMT</span>
-            <span className="font-semibold text-[14px] text-pneutral-900">₹ 0.00</span>
-          </div>
-          <div className="flex justify-between items-center pt-2 border-t border-pneutral-200">
-            <span className="font-semibold text-[18px] text-pneutral-900 leading-[24px]">NET PAYABLE</span>
-            <span className="font-semibold text-[18px] text-pneutral-900 leading-[24px]">₹ {netAmt.toFixed(2)}</span>
+
+          <TotalRow label="Taxable Amt" value={`₹ ${taxableAmt.toFixed(2)}`} />
+          <TotalRow label="SGST AMT" value={`₹ ${(gstAmt / 2).toFixed(2)}`} />
+          <TotalRow label="CGST AMT" value={`₹ ${(gstAmt / 2).toFixed(2)}`} />
+          <TotalRow label="IGST AMT" value="₹ 0.00" />
+
+          <div className="w-full h-8 py-1 flex items-center justify-between border-t border-pneutral-200">
+            <span className="h-6 text-[18px] leading-6 font-semibold text-pneutral-900">NET PAYABLE</span>
+            <span className="h-6 text-[18px] leading-6 font-semibold text-pneutral-900">₹ {netAmt.toFixed(2)}</span>
           </div>
         </div>
 
@@ -399,9 +452,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
       {/* Amount in words — spelled out, paise included, in Indian grouping. It
           read "Rupees 302.4 Only" before, which is the figure, not the words. */}
-      <div className="w-full bg-white border border-pneutral-200 rounded-xl p-4 flex items-center text-[14px]">
-        <span className="text-pneutral-600 mr-2">Amount in words</span><span className="mr-2">:</span>
-        <span className="font-bold text-pneutral-900 capitalize">{amountInWords(netAmt)}</span>
+      <div className="w-full h-[52px] p-4 flex items-center gap-4 bg-white border border-pneutral-200 rounded-lg text-[14px] leading-5">
+        <span className="font-normal text-pneutral-800 whitespace-nowrap">Amount in words</span>
+        <span className="font-normal text-pneutral-800">:</span>
+        <span className="flex-1 min-w-0 truncate font-semibold text-pneutral-900 capitalize">{amountInWords(netAmt)}</span>
       </div>
 
       {/* Footer — part of the invoice, so it travels into the PDF capture and
@@ -413,8 +467,8 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
       {/* Bottom Actions based on mode */}
       {currentMode !== 'download' && (
-        <div className="flex justify-between items-center w-full mt-4 pb-8">
-          <button 
+        <div className="w-full h-9 flex justify-between items-center gap-4 mb-8">
+          <button
             onClick={() => {
               if (currentMode === 'view') {
                 usePurchaseStore.getState().resetPurchase();
@@ -432,7 +486,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
               }
             }} 
             disabled={isSubmitting}
-            className="w-[120px] h-[44px] border border-pneutral-200 bg-white rounded-lg text-[16px] font-medium text-pneutral-900 hover:bg-gray-50 transition-colors disabled:opacity-50"
+            className="w-[120px] h-9 border border-pneutral-200 bg-white rounded-lg text-[16px] leading-6 font-medium text-pneutral-900 hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             {currentMode === 'view' ? "Cancel" : "Back"}
           </button>
@@ -441,7 +495,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
             <button 
               onClick={handleSaveTaxInvoice} 
               disabled={isSubmitting}
-              className="w-[180px] h-[44px] bg-secondary-700 hover:bg-secondary-800 text-white rounded-lg text-[16px] font-medium transition-colors shadow-sm disabled:opacity-50"
+              className="w-[180px] h-9 bg-secondary-700 hover:bg-secondary-800 text-white rounded-lg text-[16px] leading-6 font-medium transition-colors disabled:opacity-50"
             >
               {isSubmitting ? "Saving..." : "Save TAX Invoice"}
             </button>

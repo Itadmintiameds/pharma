@@ -22,7 +22,10 @@ import { showToast } from "@/app/components/common/Toast";
 import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
 import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
 import { WarehouseDetails } from "@/types/SetupWarehouseData";
-import { buildWarehousePayload } from "@/services/SetupWarehouseService";
+import {
+  buildWarehousePayload,
+  getWarehousesByOrganizationId,
+} from "@/services/SetupWarehouseService";
 import SetupWarehouse from "./SetupWarehouse";
 
 interface SetupPharmacyProps {
@@ -707,6 +710,24 @@ const SetupPharmacy = ({
         ? prefillData?.pharmacyRegistrationWareHouses?.[0]?.pharmacyRegistrationWarehouseId
         : undefined;
 
+      // The warehouse's own backend code, so the registration points at the
+      // organization's warehouse instead of describing a new one. Already on
+      // state for an existing org; for one just created above the code is
+      // generated server-side, so read it back.
+      let warehouseCodeId =
+        warehouse?.warehouseId ||
+        prefillData?.pharmacyRegistrationWareHouses?.[0]?.warehouseId;
+      if (
+        manageCentrally === true &&
+        !warehouseCodeId &&
+        orgResponse?.organizationId
+      ) {
+        const orgWarehouses = await getWarehousesByOrganizationId(
+          orgResponse.organizationId,
+        );
+        warehouseCodeId = orgWarehouses[0]?.warehouseId;
+      }
+
       const registrationPayload = {
         userId: String(userId),
         pharmacyName: pharmacyName,
@@ -741,6 +762,7 @@ const SetupPharmacy = ({
                     ? { pharmacyRegistrationWarehouseId: existingWarehouseId }
                     : {}),
                   ...warehouse,
+                  ...(warehouseCodeId ? { warehouseId: warehouseCodeId } : {}),
                 },
               ]
             : [],

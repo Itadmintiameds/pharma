@@ -20,7 +20,9 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     productSubType: "",
     productForm: "",
     variant: "",
-    intendedUseArea: "",
+    // Multi-select: a product can be meant for more than one area, and the
+    // payload field is `intendedUseAreaIds`.
+    intendedUseArea: [] as string[],
     skinType: "",
     hairType: "",
     ageGroup: [] as string[],
@@ -101,8 +103,14 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   };
 
-  const handleChange = (field: keyof typeof formData, value: string) => {
-    if (field === 'netQuantity' && value !== '' && !/^\d*\.?\d*$/.test(value)) {
+  // A multi-select hands over a string[], the rest a string.
+  const handleChange = (field: keyof typeof formData, value: string | string[]) => {
+    if (
+      field === 'netQuantity' &&
+      typeof value === 'string' &&
+      value !== '' &&
+      !/^\d*\.?\d*$/.test(value)
+    ) {
       return;
     }
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -225,6 +233,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={intendedUseAreaOptions}
         value={formData.intendedUseArea}
         onChange={(val) => handleChange('intendedUseArea', val)}
+        multiple
         error={errors.intendedUseArea}
       />
 

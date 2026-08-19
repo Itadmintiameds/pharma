@@ -44,6 +44,10 @@ import {
   uploadPrescription,
 } from "@/services/BillingService";
 import { ProductService } from "@/services/ProductService";
+import {
+  getCurrentPharmacy,
+  type CurrentPharmacy,
+} from "@/services/PharmacyService";
 
 type Step = "list" | "billing" | "payment" | "invoice" | "settle";
 
@@ -235,6 +239,14 @@ const Page = () => {
     pendingAmount: number;
   } | null>(null);
   const [summaryMode, setSummaryMode] = useState<"create" | "view" | "download">("create");
+  /**
+   * A saved bill being written to PDF. It never takes over the page — the copy
+   * it is captured from renders off-screen, so the list stays interactive.
+   */
+  const [downloading, setDownloading] = useState<{
+    draft: BillDraft;
+    pharmacy: CurrentPharmacy | null;
+  } | null>(null);
 
   /** Re-reads the list; also used after a bill is created. */
   const loadBills = async () => {
@@ -292,17 +304,25 @@ const Page = () => {
     }
   };
 
-  /** Pulls a saved bill and hands it to the invoice screen. */
+  /**
+   * Pulls a saved bill and either opens it on the invoice screen, or — for a
+   * download — hands it to a headless copy that writes the PDF while the list
+   * stays where it is. A download is a file, not a screen to look at first.
+   */
   const openSavedBill = async (
     billingId: number,
     mode: "view" | "download"
   ) => {
+    // One at a time: a second click while a PDF is being written would replace
+    // the bill under the copy that is mid-capture.
+    if (mode === "download" && downloading) return;
+
     try {
       const bill = await getBillingById(billingId);
       const payment = bill.billingPayments?.[0];
       const lines = await withBatchExpiry(toBillLines(bill));
 
-      setDraft({
+      const savedDraft: BillDraft = {
         customer: {
           customerType: bill.customerType || "WALK_IN",
           customerId: bill.customerId,
@@ -332,8 +352,21 @@ const Page = () => {
         // Saved lines already carry their share of the bill level discount.
         billDiscountValue: 0,
         discountType: "PERCENTAGE",
-      });
+      };
 
+      if (mode === "download") {
+        // The header pharmacy is fetched here rather than inside the invoice:
+        // the copy is captured as soon as it lays out, so a logo still loading
+        // would simply be missing from the file.
+        const pharmacy = await getCurrentPharmacy().catch((err) => {
+          console.error("Unable to fetch current pharmacy for the invoice", err);
+          return null;
+        });
+        setDownloading({ draft: savedDraft, pharmacy });
+        return;
+      }
+
+      setDraft(savedDraft);
       setSummaryMode(mode);
       setStep("invoice");
     } catch (err) {
@@ -422,11 +455,19 @@ const Page = () => {
     {
       header: "Action",
       cell: ({ row }) => (
-        <div className="flex justify-center gap-5">
+        // Both actions are held while a PDF is being written: navigating to the
+        // view screen would unmount the copy mid-capture, and a second download
+        // would swap the bill under it.
+        <div
+          className={`flex justify-center gap-5 ${
+            downloading ? "pointer-events-none opacity-50" : ""
+          }`}
+        >
           <button
             type="button"
             aria-label={`View invoice ${row.original.invoiceNo}`}
             title="View invoice"
+            disabled={!!downloading}
             onClick={() => openSavedBill(row.original.billId, "view")}
           >
             <Image
@@ -442,6 +483,7 @@ const Page = () => {
             type="button"
             aria-label={`Download invoice ${row.original.invoiceNo}`}
             title="Download invoice"
+            disabled={!!downloading}
             onClick={() => openSavedBill(row.original.billId, "download")}
           >
             <Image
@@ -644,6 +686,25 @@ const Page = () => {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Renders nothing on screen: it mounts an off-screen copy of the
+          invoice, writes the PDF from it, then clears itself. */}
+      {downloading?.draft.customer && downloading.draft.payment && (
+        <PaymentSummary
+          mode="download"
+          invoiceNo={downloading.draft.invoiceNo ?? "—"}
+          billDate={downloading.draft.billDate ?? "—"}
+          customer={downloading.draft.customer}
+          lines={downloading.draft.lines}
+          totals={
+            downloading.draft.savedTotals ??
+            calculateBillTotals(downloading.draft.lines)
+          }
+          payment={downloading.draft.payment}
+          pharmacy={downloading.pharmacy}
+          onDone={() => setDownloading(null)}
+        />
+      )}
+
       <div className="flex flex-col gap-1 text-pneutral-900">
         <div className="text-h4 font-semibold">Sales / Billing</div>
         <div className="text-p3 font-normal font-noto-sans">
