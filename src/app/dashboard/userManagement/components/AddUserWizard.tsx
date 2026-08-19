@@ -61,6 +61,16 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
   const [originalEmployeeId, setOriginalEmployeeId] = useState('');
   const [isLoadingUser, setIsLoadingUser] = useState(isEdit);
   const [isSaving, setIsSaving] = useState(false);
+  /** The photo the account already has, shown beside the picker. */
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(null);
+  /** True when the account being edited is the signed-in user's own. */
+  const [isOwnAccount, setIsOwnAccount] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  /**
+   * A photo is set by whoever administers the account, so nobody replaces their
+   * own — except a super admin, who administers everything including themselves.
+   */
+  const canUploadImage = !isEdit || !isOwnAccount || isSuperAdmin;
 
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -134,11 +144,39 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           gender: data.gender || '',
           department: data.department || '',
           designation: data.pharmaRolesDto?.roleId ?? '',
-          location: (data.pharmacies || [])
-            .map((pharmacy: { pharmacyId?: string }) => pharmacy.pharmacyId)
-            .filter((pharmacyId: string | undefined): pharmacyId is string => !!pharmacyId),
+          // A Warehouse Manager's assignment is warehouses, everyone else's is
+          // pharmacies; the field carries whichever the account holds.
+          location: [
+            ...(data.warehouses || []).map(
+              (warehouse: { warehouseId?: string }) => warehouse.warehouseId
+            ),
+            ...(data.pharmacies || []).map(
+              (pharmacy: { pharmacyId?: string }) => pharmacy.pharmacyId
+            ),
+          ].filter((id: string | undefined): id is string => !!id),
         });
         setOriginalEmployeeId(data.employeeId || '');
+        setCurrentImageUrl(data.imageUrl || null);
+
+        // Whose account this is, so the photo picker knows to stay shut. Both
+        // the code and the email are compared: the token's claim is a code like
+        // USR-2026-00003 on some deployments and an email on others.
+        try {
+          const response = await fetch('/api/user-info');
+          if (response.ok && active) {
+            const { userId: signedInId, email, role } = await response.json();
+            setIsOwnAccount(
+              (!!signedInId && !!data.userId && String(signedInId) === String(data.userId)) ||
+              (!!email && !!data.userEmail &&
+                String(email).toLowerCase() === String(data.userEmail).toLowerCase())
+            );
+            setIsSuperAdmin(
+              String(role || '').toLowerCase().replace(/[^a-z]/g, '') === 'superadmin'
+            );
+          }
+        } catch (err) {
+          console.error('Failed to resolve the signed-in user', err);
+        }
 
         // The grants arrive one row per feature+permission pair; the matrix
         // wants them keyed feature -> permission.
@@ -190,8 +228,9 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
       : 2;
 
   /**
-   * Saves the changes to an existing account. Email, password and photo are
-   * left out: the endpoint does not accept them, and the form keeps them locked.
+   * Saves the changes to an existing account. Email and password are left out —
+   * the endpoint does not accept them, and the form keeps them locked. A new
+   * photo goes up separately, through the same endpoint the create flow uses.
    */
   const handleUpdate = async () => {
     setIsSaving(true);
@@ -206,9 +245,25 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           dob: formData.dob || null,
           pharmaRolesDto: { roleId: roleIdOf() },
         },
-        pharmacyIds: formData.location,
+        // Warehouses for a Warehouse Manager, pharmacies for everyone else —
+        // the same split the create payload makes.
+        ...(isWarehouseManager
+          ? { warehouseIds: formData.location }
+          : { pharmacyIds: formData.location }),
         permissions: buildPermissionsPayload(),
       });
+
+      // The photo has its own endpoint, so it goes up after the details are
+      // saved. Not part of a create here, so it leaves its own audit row. A
+      // failure must not cost the changes that already went through.
+      if (imageFile && canUploadImage) {
+        try {
+          await uploadUserImage(editUserId as string, imageFile);
+        } catch (imageErr) {
+          console.error('Failed to upload the profile image', imageErr);
+          showToast.error('Details saved, but the photo upload failed.');
+        }
+      }
 
       showToast.success('User updated successfully');
       // Lets the caller re-read the account before the preview step renders it.
@@ -901,15 +956,18 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           error={errors.location}
         />
 
-        {/* The photo is not part of an update payload — it is replaced through
-            its own endpoint — so on an edit the field is locked. */}
+        {/* The photo is not part of the update payload; it is replaced through
+            its own endpoint once the details are saved. Locked only on one's own
+            account. */}
         <div className="w-full">
-          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">Upload Photo</label>
+          <label className="mb-1 block text-label-l4 font-medium text-pneutral-900 justify-center">
+            {isEdit ? 'Replace Photo' : 'Upload Photo'}
+          </label>
           <input
             type="file"
             accept="image/jpeg, image/png"
             className="hidden"
-            disabled={isEdit}
+            disabled={!canUploadImage}
             ref={fileInputRef}
             onChange={(e) => {
               if (e.target.files && e.target.files.length > 0) {
@@ -924,20 +982,35 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
               }
             }}
           />
-          <div
-            onClick={() => {
-              if (!isEdit) fileInputRef.current?.click();
-            }}
-            className={`flex h-12 w-full items-center justify-between rounded-md border border-dashed ${errors.image ? 'border-warning-500' : 'border-pneutral-300'} bg-gray-50 transition-all px-3 ${isEdit ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:bg-gray-100'}`}
-          >
-            <span className="text-p4 text-pneutral-500 truncate">
-              {isEdit
-                ? "Photo is changed from the user's profile"
-                : imageFile
-                  ? imageFile.name
-                  : "click to browse JPEG or PNG"}
-            </span>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          <div className="flex items-center gap-3">
+            {/* The photo on the account today, so it is clear what is being
+                replaced. Plain <img>: an S3 URL from the API, outside
+                next/image's configured remote patterns. */}
+            {isEdit && currentImageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={currentImageUrl}
+                alt="Current photo"
+                className="h-12 w-12 shrink-0 rounded-full border border-pneutral-200 object-cover"
+              />
+            )}
+            <div
+              onClick={() => {
+                if (canUploadImage) fileInputRef.current?.click();
+              }}
+              className={`flex h-12 flex-1 min-w-0 items-center justify-between rounded-md border border-dashed ${errors.image ? 'border-warning-500' : 'border-pneutral-300'} bg-gray-50 transition-all px-3 ${canUploadImage ? 'cursor-pointer hover:bg-gray-100' : 'cursor-not-allowed opacity-60'}`}
+            >
+              <span className="text-p4 text-pneutral-500 truncate">
+                {!canUploadImage
+                  ? "You cannot change your own photo"
+                  : imageFile
+                    ? imageFile.name
+                    : isEdit
+                      ? "click to browse a new JPEG or PNG"
+                      : "click to browse JPEG or PNG"}
+              </span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-pneutral-500"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            </div>
           </div>
           {errors.image && <p className="mt-1 text-p2 text-warning-500">{errors.image}</p>}
         </div>

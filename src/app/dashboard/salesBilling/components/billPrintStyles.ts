@@ -93,13 +93,26 @@ body { margin: 0 !important; padding: 0 !important; }
   word-break: break-word !important;
 }
 
-/* The logo is a bare image — no tile, no rule. Just smaller on paper. */
+/* The logo is the bare artwork — no tile, no rule. Just smaller on paper. */
 [data-print="header-logo"] {
-  height: 34px !important;
+  height: 46px !important;
   width: auto !important;
-  max-width: 90px !important;
+  max-width: 130px !important;
   border: 0 !important;
   padding: 0 !important;
+}
+
+/* The initials shown when the organization has no logo. Not an image, so they
+   keep their square box and its rule — the auto width above would otherwise
+   collapse the box onto the two letters. */
+[data-print="header-logo"]:not(img) {
+  width: 46px !important;
+  border: 0.75pt solid #000 !important;
+}
+
+[data-print="header-logo"]:not(img) span {
+  font-size: 14pt !important;
+  color: #000 !important;
 }
 
 /* The plate is the header's anchor on screen; on paper a heavier rule does

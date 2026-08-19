@@ -25,8 +25,10 @@ import {
 } from "@/utils/billingTotals";
 import {
   getCurrentPharmacy,
+  pharmacyLogoUrl,
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
+import { proxiedImageUrl } from "@/utils/imageProxy";
 
 interface PaymentSummaryProps {
   invoiceNo: string;
@@ -65,6 +67,19 @@ const BillHeader: React.FC<{
   pharmacy: CurrentPharmacy | null;
 }> = ({ pharmacy }) => {
   const name = pharmacy?.pharmacyName || "—";
+  // Proxied: the bucket sends no CORS headers, and the PDF capture reads the
+  // canvas back — which a cross-origin image would block.
+  const logoUrl = proxiedImageUrl(pharmacyLogoUrl(pharmacy));
+  // Stands in for a logo the organization has not uploaded: up to two initials
+  // from the pharmacy's own name.
+  const monogram =
+    (pharmacy?.pharmacyName || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0])
+      .join("")
+      .toUpperCase() || "RX";
   // Single line built from whichever address parts the pharmacy has.
   const address =
     (pharmacy
@@ -111,20 +126,42 @@ const BillHeader: React.FC<{
         data-print="header-grid"
         className="grid grid-cols-1 items-center gap-4 md:grid-cols-[auto_minmax(0,1fr)_auto]"
       >
-        {/* Logo — the bare image, no tile or border around it. Height is
-            capped and the width follows, so a square mark and a wide wordmark
-            both sit right. Until /getCurrentPharmacy returns a URL this shows
-            the Tiameds logo as a stand-in.
-            Plain <img>: the URL is whatever the API returns, so it cannot go
-            through next/image's configured remote patterns. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          data-print="header-logo"
-          src={pharmacy?.pharmacyLogo || "/TiamedsLogo.svg"}
-          alt={pharmacy?.pharmacyLogo ? name : "Tiameds"}
-          crossOrigin="anonymous"
-          className="h-[52px] w-auto max-w-[150px] shrink-0 object-contain object-left justify-self-center md:justify-self-start"
-        />
+        {/* Logo — framed rather than dropped in bare. Organizations upload
+            anything from a square mark to a wide wordmark to a photograph, and
+            an unframed image of unknown aspect reads as a stray thumbnail beside
+            the name plate. The tile is a fixed 64px tall and grows in width with
+            the artwork, so every logo lands as a deliberate block; the artwork
+            itself is contained, never cropped or stretched.
+            Initials stand in when the organization has no logo — printing
+            somebody else's mark on a tax document is worse than printing none,
+            and a grey placeholder reads as a broken image. Both share the tile,
+            so the header keeps its shape either way. */}
+        {logoUrl ? (
+          /* Plain <img>: the URL is whatever the API returns, so it cannot go
+             through next/image's configured remote patterns. */
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            data-print="header-logo"
+            src={logoUrl}
+            alt={name}
+            crossOrigin="anonymous"
+            className="h-20 w-auto max-w-[220px] shrink-0 rounded-lg object-contain object-left justify-self-center md:justify-self-start"
+          />
+        ) : (
+          /* Initials, sized like the logo they stand in for. They need a shape
+             of their own — two letters on white would read as a stray label —
+             but a real logo gets no frame: a border and padding around artwork
+             that already has its own margins only crowds it. */
+          <div
+            data-print="header-logo"
+            aria-label={name}
+            className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-secondary-200 bg-secondary-50 justify-self-center md:justify-self-start"
+          >
+            <span className="font-heading text-h4 font-semibold uppercase tracking-wide text-secondary-700">
+              {monogram}
+            </span>
+          </div>
+        )}
 
         {/* Name plate — the purple outline is the header's anchor. */}
         <div

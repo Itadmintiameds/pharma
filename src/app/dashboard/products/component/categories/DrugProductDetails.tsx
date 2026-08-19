@@ -98,6 +98,18 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
   const strengthValueError = (value: string): string =>
     value.trim() !== '' && !NUMERIC_ONLY.test(value.trim()) ? 'Only numbers are allowed' : '';
 
+  /**
+   * The two halves of a strength only mean something together: a bare "500" does
+   * not say 500 of what, and a bare "mg" says nothing at all. So once either is
+   * filled, the other is required.
+   */
+  const strengthPairError = (value: string, unit: string): string => {
+    const hasValue = value.trim() !== '';
+    if (hasValue && !unit) return 'Strength unit is required';
+    if (!hasValue && unit) return 'Strength value is required';
+    return '';
+  };
+
   const validateMoleculeField = (id: number, field: string, value: string) => {
     if (field === 'strength') {
       try {
@@ -137,10 +149,12 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
 
     if (isStrengthPart) {
       // The numeric check on the value takes priority over the combined
-      // schema check, since a letter typed there is the more specific error.
+      // schema check, since a letter typed there is the more specific error;
+      // a missing half of the pair is likewise more specific.
       const numericError = strengthValueError(nextStrengthValue);
-      if (numericError) {
-        setErrors(prev => ({ ...prev, [`mol_${id}_strength`]: numericError }));
+      const pairError = strengthPairError(nextStrengthValue, nextStrengthUnit);
+      if (numericError || pairError) {
+        setErrors(prev => ({ ...prev, [`mol_${id}_strength`]: numericError || pairError }));
       } else {
         validateMoleculeField(id, 'strength', nextStrength);
       }
@@ -190,8 +204,9 @@ const DrugProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         nextErrors[`mol_${mol.id}_name`] = hasName ? '' : 'Molecule is required';
 
         const numericError = strengthValueError(mol.strengthValue);
-        if (numericError) {
-          nextErrors[`mol_${mol.id}_strength`] = numericError;
+        const pairError = strengthPairError(mol.strengthValue, mol.strengthUnit);
+        if (numericError || pairError) {
+          nextErrors[`mol_${mol.id}_strength`] = numericError || pairError;
         } else {
           const strength = MoleculeSchema.pick({ strength: true }).safeParse({ strength: mol.strength });
           nextErrors[`mol_${mol.id}_strength`] = strength.success ? '' : strength.error.issues[0].message;

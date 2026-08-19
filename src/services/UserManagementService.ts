@@ -45,8 +45,13 @@ export interface UpdateUserPayload {
     dob: string | null;
     pharmaRolesDto: { roleId: number };
   };
-  /** Pharmacy codes, e.g. ["SUDOC0001"]. Replaces the current assignment. */
-  pharmacyIds: string[];
+  /**
+   * Pharmacy codes, e.g. ["SUDOC0001"]. Replaces the current assignment.
+   * A Warehouse Manager is assigned warehouses instead, so exactly one of these
+   * two is sent — the same split the create payload makes.
+   */
+  pharmacyIds?: string[];
+  warehouseIds?: string[];
   /** Replaces the current grants; a feature left out loses all of its. */
   permissions: { featureId: number; permissionIds: number[] }[];
 }
