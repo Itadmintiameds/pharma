@@ -86,7 +86,11 @@ export const downloadElementAsPdf = async (
 
   const header = element.querySelector('[data-print="header"]');
   const footer = element.querySelector('[data-print="footer"]');
-  const thead = element.querySelector("thead");
+  // The grid's own headings. `:not([data-print])` skips the scaffolding thead
+  // some documents wrap themselves in to get a running header when the browser
+  // prints them — that one comes first in the document and is already captured
+  // as the header band.
+  const thead = element.querySelector("thead:not([data-print])");
 
   // The header band takes everything above the header's bottom edge, so the
   // capture's own top padding travels with it; the footer band likewise.
@@ -100,7 +104,7 @@ export const downloadElementAsPdf = async (
    */
   const breakpoints = Array.from(
     element.querySelectorAll(
-      'tbody tr, thead, [data-print="title"], [data-print="facts"], [data-print="summary"]'
+      'tbody:not([data-print]) tr, thead:not([data-print]), [data-print="title"], [data-print="facts"], [data-print="summary"]'
     )
   )
     .map((node) => edge(node, "bottom"))

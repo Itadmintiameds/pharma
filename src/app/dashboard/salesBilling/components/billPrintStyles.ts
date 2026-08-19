@@ -131,7 +131,13 @@ body { margin: 0 !important; padding: 0 !important; }
 
 [data-print="header-plate"] p { font-size: 8pt !important; }
 
-[data-print="header-facts"] { gap: 1px !important; }
+/* Two tracks now, so the gaps are set apart: the rows close right up on
+   paper, but the column between a label and its value has to stay wide enough
+   that "GSTIN 29BFTPJ5157A1ZA" does not read as one string. */
+[data-print="header-facts"] {
+  row-gap: 1px !important;
+  column-gap: 10px !important;
+}
 
 /* ---- Title bar --------------------------------------------------------- */
 
@@ -234,14 +240,58 @@ body { margin: 0 !important; padding: 0 !important; }
 }
 [data-print="net"] span { font-size: 10pt !important; font-weight: 700 !important; }
 
+/* ---- Running header / footer ------------------------------------------- */
+
+/* The whole bill sits in one table whose thead is the pharmacy header and
+   whose tfoot is the branding line. Restoring the table display roles here is
+   what makes the browser reprint both on every sheet — a fifty-line bill runs
+   to three pages, and each of them has to identify the pharmacy that issued it
+   and carry the footer. On screen those same elements are display:block and
+   this stylesheet is the only thing that changes that. */
+[data-print="sheet"] {
+  display: table !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+}
+
+[data-print="sheet-head"] { display: table-header-group !important; }
+[data-print="sheet-body"] { display: table-row-group !important; }
+[data-print="sheet-foot"] { display: table-footer-group !important; }
+
+/* The body row holds the entire bill, so it is the one row that MUST be
+   allowed to split — the blanket break-inside:avoid on grid rows above
+   would otherwise force the whole invoice onto a single sheet. */
+[data-print="sheet"] > * > tr {
+  display: table-row !important;
+  height: auto !important;
+  break-inside: auto !important;
+}
+
+/* These cells are scaffolding, not invoice cells: none of the grid's borders,
+   padding or centring belongs on them. */
+[data-print="sheet"] > * > tr > td {
+  display: table-cell !important;
+  border: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+  vertical-align: top !important;
+  break-inside: auto !important;
+}
+
+/* Breathing room around the two repeated bands, applied on the cell so it is
+   reapplied on every sheet rather than only where the markup happens to have
+   a margin. */
+[data-print="sheet-head"] > tr > td { padding-bottom: 5px !important; }
+[data-print="sheet-foot"] > tr > td { padding-top: 5px !important; }
+
 /* ---- Branding footer --------------------------------------------------- */
 
-/* Kept with the totals so the bill never ends on an orphaned footer. */
+/* Repeated at the foot of every sheet by the tfoot above, so it only has to
+   hold itself together. */
 [data-print="footer"] {
   padding-top: 4px !important;
   border-top: 0.5pt solid #000 !important;
   break-inside: avoid;
-  break-before: avoid;
 }
 
 [data-print="footer"] span { font-size: 7.5pt !important; }

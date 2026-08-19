@@ -177,24 +177,27 @@ const BillHeader: React.FC<{
           </p>
         </div>
 
-        {/* Statutory details — label flush left, value flush right, so both
-            edges of the column line up. */}
+        {/* Statutory details. One grid rather than a stack of
+            justify-between rows: those pushed every value hard against the
+            right edge, so a short DL number and a long GSTIN sat at different
+            distances from their labels and the block read as ragged. Two auto
+            tracks give the labels one common left edge and the values another,
+            and the whole block is sized by its content and pushed to the right
+            of the card. Values wrap rather than truncate — a clipped GSTIN on
+            a tax document is worse than a two-line one. */}
         <div
           data-print="header-facts"
-          className="flex flex-col gap-1.5 md:min-w-[196px] md:items-stretch"
+          className="grid w-full grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-4 gap-y-1 md:w-auto md:justify-self-end"
         >
           {IDENTITY_ROWS.map((row) => (
-            <div
-              key={row.label}
-              className="flex items-baseline justify-between gap-3"
-            >
-              <span className="shrink-0 font-body text-p3 font-normal uppercase tracking-wide text-pneutral-600">
+            <React.Fragment key={row.label}>
+              <span className="font-body text-p3 font-normal uppercase tracking-wide text-pneutral-600">
                 {row.label}
               </span>
-              <span className="truncate text-right font-body text-p3 font-semibold text-pneutral-900">
+              <span className="min-w-0 break-words font-body text-p3 font-semibold text-pneutral-900">
                 {row.value}
               </span>
-            </div>
+            </React.Fragment>
           ))}
         </div>
       </div>
@@ -529,100 +532,141 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       // for print from the iframe's own body.
       className="flex flex-col gap-4 w-full bg-transparent"
     >
-      <BillHeader pharmacy={pharmacy} />
+      {/*
+        The bill is one table, not a stack of blocks: a browser repeats a
+        thead and a tfoot on every printed sheet, which is the only thing that
+        makes the pharmacy header and the Tiameds footer land on page 2 and
+        beyond of a fifty-line bill. Nothing else in print CSS does that —
+        position: fixed leaks under the content from the second page on.
 
-      {/* Title bar — 70px tall, 16px padding, with the light rule on top */}
-      <div
-        data-print="title"
-        className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600"
-      >
-        <h1 className="font-heading text-h4 font-semibold text-secondary-50">
-          {/* A downloaded copy is just the invoice — "Download ..." would print
-              a screen's label onto the document. */}
-          {currentMode === "view" ? "View Payment Invoice" : "Payment Invoice"}
-        </h1>
-      </div>
+        On screen the table and every one of its parts is display:block, so it
+        lays out exactly like the flex column it replaced; only the print
+        stylesheet turns it back into a real table. The PDF path never needs
+        it: downloadElementAsPdf redraws the two bands itself, page by page,
+        off the same data-print hooks.
+      */}
+      <table data-print="sheet" className="block w-full">
+        <thead data-print="sheet-head" className="block">
+          <tr className="block">
+            <td className="block p-0">
+              <BillHeader pharmacy={pharmacy} />
+            </td>
+          </tr>
+        </thead>
 
-      {/* Bill details — the invoice facts and the customer, side by side.
-          Each column is a stack of 24px lines at a 10px rhythm. */}
-      <div
-        data-print="facts"
-        className="w-full rounded-xl border border-pneutral-200 bg-white px-4 py-3 flex flex-col md:flex-row items-start gap-6"
-      >
-        <div className="flex-1 w-full flex flex-col gap-2.5">
-          {BILL_FACTS.map((fact) => (
-            <Fact key={fact.label} label={fact.label} value={fact.value} />
-          ))}
-        </div>
+        <tbody data-print="sheet-body" className="block">
+          <tr className="block">
+            <td className="block p-0">
+              {/* The gap that the root flex column used to hand these blocks,
+                  restated here now that they share one cell. */}
+              <div className="flex w-full flex-col gap-4 pt-4">
 
-        <div className="flex-1 w-full flex flex-col gap-2.5">
-          {CUSTOMER_FACTS.map((fact) => (
-            <Fact key={fact.label} label={fact.label} value={fact.value} />
-          ))}
-        </div>
-      </div>
+              {/* Title bar — 70px tall, 16px padding, with the light rule on top */}
+              <div
+                data-print="title"
+                className="w-full h-[70px] p-4 flex items-center rounded-xl border border-secondary-600 border-t-secondary-50 bg-secondary-600"
+              >
+                <h1 className="font-heading text-h4 font-semibold text-secondary-50">
+                  {/* A downloaded copy is just the invoice — "Download ..." would print
+                      a screen's label onto the document. */}
+                  {currentMode === "view" ? "View Payment Invoice" : "Payment Invoice"}
+                </h1>
+              </div>
 
-      {/* Invoice grid — DataTable brings its own rounded border, so it is not
-          boxed a second time. Height follows the number of lines: a fixed
-          minimum would leave dead space under a short bill. */}
-      <div className="w-full">
-        <DataTable columns={columns} data={lines} />
-      </div>
+              {/* Bill details — the invoice facts and the customer, side by side.
+                  Each column is a stack of 24px lines at a 10px rhythm. */}
+              <div
+                data-print="facts"
+                className="w-full rounded-xl border border-pneutral-200 bg-white px-4 py-3 flex flex-col md:flex-row items-start gap-6"
+              >
+                <div className="flex-1 w-full flex flex-col gap-2.5">
+                  {BILL_FACTS.map((fact) => (
+                    <Fact key={fact.label} label={fact.label} value={fact.value} />
+                  ))}
+                </div>
 
-      {/* Amount in words beside the totals — 184px tall, 16px apart */}
-      <div
-        data-print="summary"
-        className="w-full flex flex-col lg:flex-row items-stretch gap-4"
-      >
-        <div
-          data-print="words"
-          className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
-        >
-          <span className="font-body text-p4 font-normal text-pneutral-800">
-            Amount in words
-          </span>
-          <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
-            {amountInWords(Math.round(totals.netAmount || 0))}
-          </span>
-        </div>
+                <div className="flex-1 w-full flex flex-col gap-2.5">
+                  {CUSTOMER_FACTS.map((fact) => (
+                    <Fact key={fact.label} label={fact.label} value={fact.value} />
+                  ))}
+                </div>
+              </div>
 
-        {/* Amount summary — four 24px lines at an 8px rhythm, then NET
-            PAYABLE on its own 32px line above a hairline. */}
-        <div
-          data-print="totals"
-          className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
-        >
-          {AMOUNT_ROWS.map((row) => (
-            <div
-              key={row.label}
-              className="flex h-6 items-center justify-between"
-            >
-              <span className="font-body text-p4 font-normal text-pneutral-800">
-                {row.label}
-              </span>
-              <span className="font-body text-p4 font-semibold text-pneutral-900">
-                ₹ {formatAmount(row.value)}
-              </span>
-            </div>
-          ))}
+              {/* Invoice grid — DataTable brings its own rounded border, so it is not
+                  boxed a second time. Height follows the number of lines: a fixed
+                  minimum would leave dead space under a short bill. */}
+              <div className="w-full">
+                <DataTable columns={columns} data={lines} />
+              </div>
 
-          <div
-            data-print="net"
-            className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2"
-          >
-            {/* Purple: the one figure the customer and the counter both look
-                for. Total less the discount. */}
-            <span className="font-body text-p5 font-semibold text-secondary-700">
-              NET PAYABLE
-            </span>
-            <span className="font-body text-p5 font-bold text-secondary-700">
-              ₹ {formatAmount(totals.netAmount || 0)}
-            </span>
-          </div>
-        </div>
-      </div>
+              {/* Amount in words beside the totals — 184px tall, 16px apart */}
+              <div
+                data-print="summary"
+                className="w-full flex flex-col lg:flex-row items-stretch gap-4"
+              >
+                <div
+                  data-print="words"
+                  className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
+                >
+                  <span className="font-body text-p4 font-normal text-pneutral-800">
+                    Amount in words
+                  </span>
+                  <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
+                    {amountInWords(Math.round(totals.netAmount || 0))}
+                  </span>
+                </div>
 
-      <BillFooter />
+                {/* Amount summary — four 24px lines at an 8px rhythm, then NET
+                    PAYABLE on its own 32px line above a hairline. */}
+                <div
+                  data-print="totals"
+                  className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
+                >
+                  {AMOUNT_ROWS.map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex h-6 items-center justify-between"
+                    >
+                      <span className="font-body text-p4 font-normal text-pneutral-800">
+                        {row.label}
+                      </span>
+                      <span className="font-body text-p4 font-semibold text-pneutral-900">
+                        ₹ {formatAmount(row.value)}
+                      </span>
+                    </div>
+                  ))}
+
+                  <div
+                    data-print="net"
+                    className="flex h-8 items-center justify-between border-t border-pneutral-200 pt-2"
+                  >
+                    {/* Purple: the one figure the customer and the counter both look
+                        for. Total less the discount. */}
+                    <span className="font-body text-p5 font-semibold text-secondary-700">
+                      NET PAYABLE
+                    </span>
+                    <span className="font-body text-p5 font-bold text-secondary-700">
+                      ₹ {formatAmount(totals.netAmount || 0)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              </div>
+            </td>
+          </tr>
+        </tbody>
+
+        <tfoot data-print="sheet-foot" className="block">
+          <tr className="block">
+            <td className="block p-0">
+              <div className="pt-4">
+                <BillFooter />
+              </div>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 
