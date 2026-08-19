@@ -295,5 +295,19 @@ body { margin: 0 !important; padding: 0 !important; }
 }
 
 [data-print="footer"] span { font-size: 7.5pt !important; }
-[data-print="footer"] img { height: 12px !important; width: auto !important; }
+
+/* The mark is a cropping window, so the window and the artwork inside it have
+   to be resized together or the crop lands somewhere else. One scale, 14/42,
+   applied to the same 126x43 / 40x42 geometry the component documents. */
+[data-print="mark"] {
+  height: 14px !important;
+  width: 13.33px !important;
+  overflow: hidden !important;
+}
+
+[data-print="mark"] img {
+  height: 14.33px !important;
+  width: 42px !important;
+  max-width: none !important;
+}
 `;

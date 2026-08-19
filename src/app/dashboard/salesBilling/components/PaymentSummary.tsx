@@ -214,16 +214,35 @@ const BillFooter: React.FC = () => (
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Powered by
     </span>
-    {/* priority, so it is not lazy: the print iframe is 0x0, and a lazy image
-        never enters a viewport there — the mark simply never loaded on paper. */}
-    <Image
-      src="/TiamedsLogo.svg"
-      alt="Tiameds"
-      width={96}
-      height={26}
-      priority
-      className="shrink-0"
-    />
+    {/*
+      Just the mark, not the full lockup: the line already reads "Powered by
+      ... Tiameds Technologies Pvt Ltd.", so the artwork's own "TiaMeds"
+      wordmark said the name a second time, and its tagline a third thing
+      nobody reads on a bill.
+      /TiamedsLogo.svg is the whole lockup and login and registration both want
+      it that way, so it is cropped here rather than edited: the window is a
+      fixed box with overflow hidden, and the artwork is laid over it oversized
+      and anchored top-left. Within the SVG's 126x43 user space the mark
+      occupies x 0-40, y 0-42 — measured off the embedded artwork — which is
+      where every number below comes from. Scale is 26/42, so the mark stands
+      the same 26px tall the lockup used to.
+    */}
+    <span
+      data-print="mark"
+      className="relative block h-[26px] w-[24.76px] shrink-0 overflow-hidden"
+    >
+      {/* priority, so it is not lazy: the print iframe is 0x0, and a lazy image
+          never enters a viewport there — the mark simply never loaded on paper.
+          max-w-none, or the parent's width would squash it back down. */}
+      <Image
+        src="/TiamedsLogo.svg"
+        alt="Tiameds"
+        width={126}
+        height={43}
+        priority
+        className="absolute left-0 top-0 h-[26.62px] w-[78px] max-w-none"
+      />
+    </span>
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Tiameds Technologies Pvt Ltd.
     </span>
