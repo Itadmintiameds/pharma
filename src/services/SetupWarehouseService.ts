@@ -1,6 +1,6 @@
 import api from "@/utils/api";
 import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
-import { OrganizationWarehouse, WarehouseDetails } from "@/types/SetupWarehouseData";
+import { OrganizationWarehouse, WarehouseDetails, WarehouseDto } from "@/types/SetupWarehouseData";
 
 // The warehouse is persisted as part of the organization/create call rather
 // than through its own endpoint. This builds the warehouse-related fragment of
@@ -40,5 +40,19 @@ export const getWarehousesByOrganizationId = async (
       error,
     );
     return [];
+  }
+};
+
+// Fetch a single warehouse by id (Pharma Backend). Returns null on error or
+// when the warehouse does not exist.
+export const getWarehouseById = async (
+  warehouseId: string,
+): Promise<WarehouseDto | null> => {
+  try {
+    const response = await api.get(`/warehouse/${warehouseId}`);
+    return response.data ?? null;
+  } catch (error) {
+    console.error(`Failed to fetch warehouse ${warehouseId}:`, error);
+    return null;
   }
 };

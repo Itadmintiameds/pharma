@@ -9,7 +9,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import type { PurchaseData } from "@/types/PurchaseData";
 import {
-  getCurrentPharmacy,
+  getCurrentBillTo,
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
 // Shared with the bill, so both invoices spell an amount the same way.
@@ -138,12 +138,12 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   useEffect(() => {
     if (pharmacyProp) return;
     let active = true;
-    getCurrentPharmacy()
+    getCurrentBillTo()
       .then((data) => {
         if (active) setPharmacyFetched(data);
       })
       .catch((err) => {
-        console.error("Unable to fetch current pharmacy", err);
+        console.error("Unable to fetch current bill-to", err);
       });
     return () => {
       active = false;

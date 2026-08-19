@@ -7,6 +7,8 @@ import UserDetails from './UserDetails';
 import Input from '@/app/components/common/Input';
 import Dropdown from '@/app/components/common/Dropdown';
 import { getCities, getAllRoles, createUser, updateUser, uploadUserImage, checkUserEmail, checkEmployeeId, getUserById } from '@/services/UserManagementService';
+import { getUserOrganization } from '@/services/SetupBusinessService';
+import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService';
 import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
 import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
@@ -47,6 +49,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
   const [rolePermissions, setRolePermissions] = useState<Record<number, Record<number, boolean>>>({});
   
   const [cities, setCities] = useState<{pharmacyId: string, pharmacyName: string, pharmacyCity: string}[]>([]);
+  const [warehouses, setWarehouses] = useState<{warehouseId: string, warehouseName: string, warehouseAddress: string}[]>([]);
   const [roles, setRoles] = useState<{roleId: number, roleName: string}[]>([]);
   
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -77,12 +80,35 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
         ]);
         setCities(citiesData || []);
         setRoles(rolesData || []);
+
+        // Warehouse Managers are assigned warehouse locations instead of
+        // pharmacies, so fetch the org's central warehouse(s) up front.
+        const org = await getUserOrganization();
+        if (org && org.organizationId) {
+          const orgWarehouses = await getWarehousesByOrganizationId(org.organizationId);
+          setWarehouses((orgWarehouses as { warehouseId: string, warehouseName: string, warehouseAddress: string }[]) || []);
+        }
       } catch (err) {
         console.error("Failed to fetch role management data", err);
       }
     };
     fetchInitialData();
   }, []);
+
+  // With only one warehouse in the org there is nothing for a Warehouse Manager
+  // to choose, so pre-select it. Unlike before it stays editable: the field is a
+  // genuine multi-select now, and a second warehouse may be added later.
+  useEffect(() => {
+    if (warehouses.length !== 1) return;
+    const role = roles.find(r => String(r.roleId) === String(formData.designation));
+    const isWM = role?.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
+    if (!isWM) return;
+    const onlyId = warehouses[0].warehouseId;
+    setFormData(prev =>
+      prev.location.length > 0 ? prev : { ...prev, location: [onlyId] }
+    );
+    setErrors(prev => (prev.location ? { ...prev, location: '' } : prev));
+  }, [formData.designation, roles, warehouses]);
 
   // Editing: fill the form from the account itself, so the wizard opens showing
   // what the user is today rather than an empty form.
@@ -200,7 +226,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     try {
       const permissionsPayload = buildPermissionsPayload();
 
-      const payload = {
+      const payload: Record<string, unknown> = {
         user: {
           userEmail: formData.emailId || null,
           password: formData.password,
@@ -213,9 +239,17 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           imageUrl: null,
           pharmaRolesDto: { roleId: roleIdOf() }
         },
-        pharmacyIds: formData.location,
         permissions: permissionsPayload
       };
+
+      // A Warehouse Manager is assigned warehouses (warehouseIds); every other
+      // role is assigned pharmacies (pharmacyIds). Both are lists — the two
+      // mappings are many-to-many alike.
+      if (isWarehouseManager) {
+        payload.warehouseIds = formData.location;
+      } else {
+        payload.pharmacyIds = formData.location;
+      }
 
       const response = await createUser(payload);
       const newUserId = response.user?.userId || response.userId || response.id; // Correct extraction from CreateUserResponseDto
@@ -530,6 +564,12 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     );
   };
 
+  const isWarehouseManagerRole = (designation: string | number) => {
+    const role = roles.find(r => String(r.roleId) === String(designation));
+    return role?.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
+  };
+  const isWarehouseManager = isWarehouseManagerRole(formData.designation);
+
   const renderStep1 = () => (
     <div className="w-full flex-1 p-[14px] gap-[24px] rounded-[12px] border-[0.89px] border-pneutral-100 bg-white flex flex-col shadow-sm">
       <h3 className="text-lg font-semibold text-gray-900 shrink-">Personal Information</h3>
@@ -829,7 +869,10 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           options={roles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
           onChange={(val) => {
-            setFormData({ ...formData, designation: val });
+            // Switching into/out of Warehouse Manager changes the location
+            // list (warehouses vs pharmacies), so clear any prior selection.
+            const flips = isWarehouseManagerRole(formData.designation) !== isWarehouseManagerRole(val);
+            setFormData(prev => ({ ...prev, designation: val, location: flips ? [] : prev.location }));
             if (errors.designation) setErrors({ ...errors, designation: '' });
           }}
           error={errors.designation}
@@ -841,10 +884,15 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           searchable
           multiple
           placeholder="Search Location...."
-          options={cities.map(c => ({
-            label: `${c.pharmacyName} - ${c.pharmacyCity}`,
-            value: c.pharmacyId
-          }))}
+          options={isWarehouseManager
+            ? warehouses.map(w => ({
+                label: `${w.warehouseName} - ${w.warehouseAddress}`,
+                value: w.warehouseId
+              }))
+            : cities.map(c => ({
+                label: `${c.pharmacyName} - ${c.pharmacyCity}`,
+                value: c.pharmacyId
+              }))}
           value={formData.location}
           onChange={(val) => {
             setFormData({ ...formData, location: val });

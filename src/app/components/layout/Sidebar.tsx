@@ -19,11 +19,13 @@ import {
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 
 const Sidebar = () => {
   const pathname = usePathname();
   const router = useRouter();
   const { clearPharmacy } = usePharmacyStore.getState();
+  const { clearWarehouse } = useWarehouseStore.getState();
 
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
@@ -52,10 +54,13 @@ const Sidebar = () => {
         // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
         // OR a Super Admin already assigned it to an existing (already-approved) pharmacy
         // via User Management — that user never goes through Setup Business/compliance.
+        // A Warehouse Manager is assigned a warehouse instead of a pharmacy, so an
+        // assigned warehouse unlocks the modules just like an assigned pharmacy does.
         const hasOwnApprovedPharmacy = (kpiResponse?.data?.approved ?? 0) > 0;
         const hasAssignedPharmacy = (userDetails?.pharmacies?.length ?? 0) > 0;
+        const hasAssignedWarehouse = (userDetails?.warehouses?.length ?? 0) > 0;
 
-        if (hasOwnApprovedPharmacy || hasAssignedPharmacy) {
+        if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
           setHasApprovedPharmacy(true);
         }
       } catch (err) {
@@ -73,8 +78,9 @@ const Sidebar = () => {
       console.error("Logout failed:", err);
     } finally {
       // Clear regardless of whether the API call succeeded — a failed logout
-      // request shouldn't leave the previous session's pharmacy selection behind.
+      // request shouldn't leave the previous session's location selection behind.
       clearPharmacy();
+      clearWarehouse();
     }
     router.replace("/login");
   };

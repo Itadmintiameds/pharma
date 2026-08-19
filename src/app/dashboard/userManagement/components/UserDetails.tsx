@@ -189,6 +189,7 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
             pharmacyCities={
               user?.pharmacies?.map((pharmacy) => pharmacy.pharmacyCity) ?? []
             }
+            warehouses={user?.warehouses ?? []}
           />
         );
 

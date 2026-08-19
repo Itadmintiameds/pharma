@@ -8,7 +8,7 @@ import { EyeIcon } from "lucide-react";
 import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
 import AddUserWizard from "./components/AddUserWizard";
-import { UserData } from "@/types/UserData";
+import { UserData, warehouseLabel } from "@/types/UserData";
 import { getAllUsers } from "@/services/UserManagementService";
 
 const page = () => {
@@ -102,15 +102,22 @@ const page = () => {
   const handleExport = () => {
     if (sortedUsers.length === 0) return;
 
-    const headers = ["Name", "Email", "Employee ID", "Role", "Location", "Status"];
-    const rows = sortedUsers.map(u => [
-      `"${u.fullName || ''}"`,
-      `"${u.userEmail || ''}"`,
-      `"${u.employeeId || ''}"`,
-      `"${u.roleName || ''}"`,
-      `"${u.pharmacyCities?.join(', ') || ''}"`,
-      `"${u.userStatus || 'Inactive'}"`
-    ]);
+    const headers = ["Name", "Email", "Employee ID", "Role", "Location/Warehouse", "Status"];
+    const rows = sortedUsers.map(u => {
+      // Semicolons between warehouses: the cell is already comma-quoted for CSV,
+      // and a warehouse name may itself contain a comma.
+      const locationOrWarehouse = u.warehouses && u.warehouses.length > 0
+        ? u.warehouses.map(warehouseLabel).join('; ')
+        : (u.pharmacyCities?.join(', ') || '');
+      return [
+        `"${u.fullName || ''}"`,
+        `"${u.userEmail || ''}"`,
+        `"${u.employeeId || ''}"`,
+        `"${u.roleName || ''}"`,
+        `"${locationOrWarehouse}"`,
+        `"${u.userStatus || 'Inactive'}"`
+      ];
+    });
 
     const csvContent = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -148,11 +155,15 @@ const page = () => {
     },
     {
       key: "pharmacyCities",
-      header: "Location",
-      render: (row: UserData) =>
-        row.pharmacyCities && row.pharmacyCities.length > 0
+      header: "Location/Warehouse",
+      render: (row: UserData) => {
+        if (row.warehouses && row.warehouses.length > 0) {
+          return row.warehouses.map(warehouseLabel).join(", ");
+        }
+        return row.pharmacyCities && row.pharmacyCities.length > 0
           ? row.pharmacyCities.join(", ")
-          : "-",
+          : "-";
+      },
     },
     {
       key: "userStatus",
