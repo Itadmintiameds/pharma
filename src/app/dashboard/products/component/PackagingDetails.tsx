@@ -5,7 +5,7 @@ import Dropdown from '@/app/components/common/Dropdown';
 import { PackagingSchema } from '@/app/schema/PackagingSchema';
 import { collectErrors, hasErrors } from '@/utils/formValidation';
 import { usePurchaseSmallestUnits } from '@/hooks/usePurchaseSmallestUnits';
-import { packageSmallestUnitName, type ProductPackageDetails } from '@/types/ProductData';
+import { packageSmallestUnitName, type ProductPackageDetails, type PurchaseSmallestUnit } from '@/types/ProductData';
 import { z } from 'zod';
 
 export interface PackagingDetailsRef {
@@ -46,9 +46,26 @@ export interface PackagingUnits {
   unitContains: string;
 }
 
-/** Dropdown label for an existing package, e.g. "1X10 Box". */
-export const packageLabel = (pkg: ProductPackageDetails) =>
-  `1X${pkg.purchaseUnitContains} ${pkg.purchaseUnit}`;
+/**
+ * Dropdown label for an existing package, e.g. "1X10 Strip : Capsule".
+ *
+ * The smallest unit is part of the label because it is part of what makes a
+ * package distinct: a product can hold 1X10 Strip of capsules and 1X10 Strip of
+ * tablets, and without it both read as "1X10 Strip" and the list looks like the
+ * same entry three times over.
+ *
+ * It needs the unit master because the API does not always send the name — see
+ * packageSmallestUnitName — so a package whose pairing has not resolved yet
+ * falls back to the bare "1X10 Strip" rather than showing a dangling colon.
+ */
+export const packageLabel = (
+  pkg: ProductPackageDetails,
+  unitPairs: PurchaseSmallestUnit[] = []
+) => {
+  const base = `1X${pkg.purchaseUnitContains} ${pkg.purchaseUnit}`;
+  const smallest = packageSmallestUnitName(pkg, unitPairs);
+  return smallest ? `${base} : ${smallest}` : base;
+};
 
 const ADD_NEW_PACKAGE = 'ADD_NEW';
 
@@ -80,7 +97,10 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   const isAddingNewPackage = isExistingMode && selectedPackage === ADD_NEW_PACKAGE;
 
   const packageOptions = [
-    ...packages.map((pkg) => ({ label: packageLabel(pkg), value: pkg.packagingId })),
+    ...packages.map((pkg) => ({
+      label: packageLabel(pkg, unitPairs),
+      value: pkg.packagingId,
+    })),
     { label: '+ Add New Package', value: ADD_NEW_PACKAGE },
   ];
 
@@ -165,6 +185,50 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     : smallestUnit;
 
   /**
+   * The saved package the fields currently spell out, if any.
+   *
+   * A package is identified by all three of purchase unit, pack size and
+   * smallest unit — which is exactly what the dropdown labels now show — so
+   * re-entering "1X10 Strip : Tablet" against a product that already has it
+   * would create a second package the counter cannot tell apart from the first.
+   * Case and surrounding space are ignored: the unit names come from a master
+   * list, but the pack size is typed.
+   *
+   * Only meaningful while adding: picking a saved package fills these fields
+   * from that very package, which would otherwise flag itself.
+   */
+  const duplicatePackage = useMemo(() => {
+    if (!isAddingNewPackage) return undefined;
+    const contains = Number(eachStripContains);
+    // Nothing to compare until all three are set — a half-filled form is
+    // "incomplete", not "duplicate", and the field errors already say so.
+    if (!purchaseUnit || !smallestUnit || !Number.isFinite(contains) || contains <= 0) {
+      return undefined;
+    }
+
+    const same = (a: string, b: string) =>
+      a.trim().toLowerCase() === b.trim().toLowerCase();
+
+    return packages.find(
+      (pkg) =>
+        same(pkg.purchaseUnit, purchaseUnit) &&
+        Number(pkg.purchaseUnitContains) === contains &&
+        same(packageSmallestUnitName(pkg, unitPairs), smallestUnit)
+    );
+  }, [
+    isAddingNewPackage,
+    purchaseUnit,
+    eachStripContains,
+    smallestUnit,
+    packages,
+    unitPairs,
+  ]);
+
+  const duplicateError = duplicatePackage
+    ? `${packageLabel(duplicatePackage, unitPairs)} already exists on this product. Pick it from the Package list instead of adding it again.`
+    : '';
+
+  /**
    * Reported from an effect rather than each handler: the smallest unit is
    * derived (it can resolve late, once the unit master loads) and the pack size
    * has its own input, so there is no single place all three settle.
@@ -212,6 +276,14 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
           purchaseSmallestUnitId: 'Smallest Unit is required',
         }
       );
+
+      // Each field is fine on its own; together they name a package the product
+      // already has. Reported against the smallest unit because that is the
+      // field the pairing is completed in, and the one the user can change to
+      // make it a genuinely new package.
+      if (!hasErrors(nextErrors) && duplicatePackage) {
+        nextErrors.purchaseSmallestUnitId = duplicateError;
+      }
 
       setErrors(nextErrors);
       return !hasErrors(nextErrors);
@@ -317,7 +389,10 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   value={purchaseSmallestUnitId}
                   onChange={handleSmallestUnitChange}
                   menuPlacement="top"
-                  error={errors.purchaseSmallestUnitId}
+                  // Live, not only on submit: the clash is knowable the moment
+                  // the third field is set, and finding out at save time means
+                  // re-deriving which of the three to change.
+                  error={errors.purchaseSmallestUnitId || duplicateError}
                   // Only the units paired with the chosen purchase unit are valid.
                   disabled={awaitingPackageChoice || !purchaseUnit}
                 />
