@@ -78,10 +78,10 @@ export default function TableWithoutGrid<T>({
 
     const containerClass =
         container === "card"
-            ? "overflow-hidden rounded-xl border border-pneutral-100 bg-white"
+            ? "w-full overflow-hidden rounded-xl border border-pneutral-100 bg-white"
             : container === "box"
-                ? "overflow-hidden rounded-lg border border-pneutral-100 bg-white"
-                : "";
+                ? "w-full overflow-hidden rounded-lg border border-pneutral-100 bg-white"
+                : "w-full";
 
     const headerClass =
         headerVariant === "primary"

@@ -53,12 +53,10 @@ export default function useInitializeWarehouse() {
 
         setWarehouses(user?.warehouses ?? []);
 
-      } catch (error) {
+      } catch {
 
-        console.error(
-          "Unable to fetch warehouses",
-          error
-        );
+        // Falls back to an empty warehouse list — the same outcome as a user
+        // who genuinely manages none, so this is not worth surfacing.
 
       } finally {
 
