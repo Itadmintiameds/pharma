@@ -83,6 +83,25 @@ const toBillRecord = (bill: BillingRecord): BillRecord => {
 };
 
 /**
+ * The saved bills as the list shows them: newest first.
+ *
+ * Sorted on the raw record, before the map — BillRecord keeps only the date
+ * half of the timestamp, so sorting after it would shuffle every bill rung up
+ * today into an arbitrary order. billingId breaks the tie for rows sharing a
+ * timestamp, or predating the field, since ids are issued in order.
+ *
+ * Copied first: sort mutates, and the array belongs to the caller.
+ */
+const toBillList = (records: BillingRecord[]): BillRecord[] =>
+  [...records]
+    .sort(
+      (a, b) =>
+        Date.parse(b.createdAt ?? "") - Date.parse(a.createdAt ?? "") ||
+        b.billingId - a.billingId
+    )
+    .map(toBillRecord);
+
+/**
  * The payable on a saved bill: the whole-rupee figure it was settled at.
  *
  * `totalNetAmount` is the exact arithmetic and is never shown — displaying it
@@ -269,7 +288,7 @@ const Page = () => {
   const loadBills = async () => {
     try {
       const data = await getAllBillings();
-      setBills(data.map(toBillRecord));
+      setBills(toBillList(data));
     } catch (err) {
       showToast.error(err instanceof Error ? err.message : "Failed to fetch bills.");
     } finally {
@@ -283,7 +302,7 @@ const Page = () => {
     const load = async () => {
       try {
         const data = await getAllBillings();
-        if (active) setBills(data.map(toBillRecord));
+        if (active) setBills(toBillList(data));
       } catch (err) {
         showToast.error(err instanceof Error ? err.message : "Failed to fetch bills.");
       } finally {
