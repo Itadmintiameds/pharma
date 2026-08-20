@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
+import { AllocationDraft } from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
 const allocationByMyselfUseCases = [
   'Planned replenishment',
@@ -10,10 +10,13 @@ const allocationByMyselfUseCases = [
   'Manual stock movement',
 ]
 
-type AllocationMode = 'myself' | 'requirement'
+type CreateAllocationProps = {
+  draft: AllocationDraft
+  onChange: (patch: Partial<AllocationDraft>) => void
+}
 
-const CreateAllocation = () => {
-  const [selectedMode, setSelectedMode] = useState<AllocationMode>('myself')
+const CreateAllocation = ({ draft, onChange }: CreateAllocationProps) => {
+  const selectedMode = draft.allocationMode
 
   return (
     <div className="grid w-full grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -30,7 +33,7 @@ const CreateAllocation = () => {
             role="radio"
             aria-checked={selectedMode === 'myself'}
             aria-label="Create Allocation By Myself"
-            onClick={() => setSelectedMode('myself')}
+            onClick={() => onChange({ allocationMode: 'myself' })}
           >
             <Image
               src={`/warehouseDistribution/${selectedMode === 'myself' ? 'radio-selected' : 'radio-unselected'}.svg`}
@@ -95,7 +98,7 @@ const CreateAllocation = () => {
             role="radio"
             aria-checked={selectedMode === 'requirement'}
             aria-label="Against Stock Requirement"
-            onClick={() => setSelectedMode('requirement')}
+            onClick={() => onChange({ allocationMode: 'requirement' })}
           >
             <Image
               src={`/warehouseDistribution/${selectedMode === 'requirement' ? 'radio-selected-success' : 'radio-unselected'}.svg`}

@@ -10,6 +10,13 @@ import AddProducts from './components/AddProducts'
 import ReviewConfirm from './components/ReviewConfirm'
 import DistributionSummary from './components/DistributionSummary'
 import DispatchProducts from './components/StockMovementDetails'
+import {
+  AllocationDraft,
+  buildCreateAllocationRequest,
+  createInitialAllocationDraft,
+} from './allocationDraft'
+import { createAllocation } from '@/services/WarehouseDistributionService'
+import { showToast } from '@/app/components/common/Toast'
 
 type View = 'list' | 'wizard' | 'summary' | 'dispatch'
 
@@ -437,19 +444,58 @@ const OutlineActionButton = ({
 
 const page = () => {
   const [view, setView] = useState<View>('list')
+  const [draft, setDraft] = useState<AllocationDraft>(createInitialAllocationDraft())
+  const [isConfirming, setIsConfirming] = useState(false)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+
+  const updateDraft = (patch: Partial<AllocationDraft>) =>
+    setDraft((prev) => ({ ...prev, ...patch }))
+
+  const handleStartWizard = () => {
+    setDraft(createInitialAllocationDraft())
+    setConfirmError(null)
+    setView('wizard')
+  }
+
+  // The wizard's Continue buttons never touch the network — they only move
+  // between steps while each step writes into `draft`. This is the one and
+  // only call to the backend, made once the user reviews and confirms.
+  const handleConfirmAllocation = async () => {
+    setIsConfirming(true)
+    setConfirmError(null)
+    try {
+      await createAllocation(buildCreateAllocationRequest(draft))
+      showToast.success('Allocation created successfully')
+      setView('summary')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create allocation.'
+      setConfirmError(message)
+      showToast.error(message)
+    } finally {
+      setIsConfirming(false)
+    }
+  }
 
   if (view === 'wizard') {
     return (
       <AllocationWizardLayout
         onCancel={() => setView('list')}
-        onConfirm={() => setView('summary')}
+        onConfirm={handleConfirmAllocation}
+        isConfirming={isConfirming}
       >
         {(step, goToStep) => {
-          if (step === 1) return <CreateAllocation />
-          if (step === 2) return <DistributionType />
-          if (step === 3) return <AllocationDetails />
-          if (step === 4) return <AddProducts />
-          if (step === 5) return <ReviewConfirm onEditAllocationDetails={() => goToStep(3)} />
+          if (step === 1) return <CreateAllocation draft={draft} onChange={updateDraft} />
+          if (step === 2) return <DistributionType draft={draft} onChange={updateDraft} />
+          if (step === 3) return <AllocationDetails draft={draft} onChange={updateDraft} />
+          if (step === 4) return <AddProducts draft={draft} onChange={updateDraft} />
+          if (step === 5)
+            return (
+              <ReviewConfirm
+                draft={draft}
+                onEditAllocationDetails={() => goToStep(3)}
+                submitError={confirmError}
+              />
+            )
 
           return (
             <div className="flex w-full items-center justify-center rounded-2xl border border-pneutral-200 bg-white p-8 text-p3 text-pneutral-500">
@@ -500,7 +546,7 @@ const page = () => {
           <OutlineActionButton label="Export Excel" />
           <OutlineActionButton
             label="Create Allocation"
-            onClick={() => setView('wizard')}
+            onClick={handleStartWizard}
           />
 
           <button

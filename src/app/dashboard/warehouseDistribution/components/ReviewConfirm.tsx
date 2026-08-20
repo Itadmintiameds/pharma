@@ -1,4 +1,9 @@
 import Image from 'next/image'
+import {
+  AllocationDraft,
+  distributionTypeLabel,
+  resolveSourceLabel,
+} from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
 type DetailRowProps = {
   label: string
@@ -15,26 +20,26 @@ const DetailRow = ({ label, value }: DetailRowProps) => (
   </div>
 )
 
-type ProductSummaryRow = {
-  product: string
-  batchNo: string
-  purchaseUnit: string
-  availableQty: number
-  issueQty: number
-}
-
-const productSummary: ProductSummaryRow[] = [
-  { product: 'Dolo 650 Tablet', batchNo: 'B24001', purchaseUnit: 'Strip', availableQty: 120, issueQty: 20 },
-  { product: 'Crocin Syrup', batchNo: 'C12001', purchaseUnit: 'Bottle', availableQty: 200, issueQty: 15 },
-]
-
 type ReviewConfirmProps = {
+  draft: AllocationDraft
   onEditAllocationDetails?: () => void
+  /** Set when the final createAllocation call failed — nothing was persisted. */
+  submitError?: string | null
 }
 
-const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
+const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewConfirmProps) => {
+  const distributionType = distributionTypeLabel(draft.distributionMode)
+  const source = resolveSourceLabel(draft)
+  const totalQuantity = draft.lines.reduce((sum, line) => sum + line.issueQuantity, 0)
+
   return (
     <div className="flex w-full flex-col gap-4">
+      {submitError && (
+        <div className="flex w-full items-start gap-3 rounded-lg border border-warning-300 bg-warning-50 p-4">
+          <p className="flex-1 text-p4 font-medium text-warning-600">{submitError}</p>
+        </div>
+      )}
+
       <div className="flex w-full items-start gap-3 rounded-lg
        bg-secondary-100 p-4">
         <Image
@@ -76,21 +81,18 @@ const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
 
         <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex w-full flex-col gap-3">
-            <DetailRow label="Allocation No" value="ALO000124" />
-            <DetailRow label="Allocation Date" value="05-Aug-2026" />
-            <DetailRow label="Distribution Type" value="Warehouse Distribution" />
+            <DetailRow label="Allocation No" value={draft.allocationNo || '—'} />
+            <DetailRow label="Allocation Date" value={draft.allocationDate || '—'} />
+            <DetailRow label="Distribution Type" value={distributionType} />
           </div>
           <div className="flex w-full flex-col gap-3">
-            <DetailRow label="Source Warehouse" value="Central Warehouse" />
-            <DetailRow label="Destination Pharmacy" value="Rajajinagar Medical Store" />
-            <DetailRow label="Reference" value="Monthly Replenishment" />
+            <DetailRow label="Source Warehouse" value={source} />
+            <DetailRow label="Destination Pharmacy" value={draft.destinationLabel || '—'} />
+            <DetailRow label="Reference" value={draft.referenceLabel || 'None'} />
           </div>
         </div>
 
-        <DetailRow
-          label="Remarks"
-          value="Stock allocation for monthly replenishment as per store requirement."
-        />
+        <DetailRow label="Remarks" value={draft.remarks || 'No remarks added.'} />
       </div>
 
       <div className="flex w-full flex-col gap-4 rounded-lg border border-pneutral-200 bg-white p-6">
@@ -123,29 +125,35 @@ const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
               </p>
             </div>
 
-            {productSummary.map((row, index) => (
+            {draft.lines.length === 0 && (
+              <div className="flex w-full items-center justify-center px-3.5 py-6 text-p3 text-pneutral-500">
+                No products added yet.
+              </div>
+            )}
+
+            {draft.lines.map((line, index) => (
               <div
-                key={row.batchNo}
+                key={line.id}
                 className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3.5 py-2.5"
               >
                 <p className="w-6 shrink-0 text-p3 font-normal text-pneutral-800">
                   {index + 1}
                 </p>
                 <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-800">
-                  {row.product}
+                  {line.productName}
                 </p>
                 <p className="w-21.25 shrink-0 text-p3 font-normal text-pneutral-800">
-                  {row.batchNo}
+                  {line.batchNo}
                 </p>
                 <p className="w-21.25 shrink-0 text-p3 font-normal text-pneutral-800">
-                  {row.purchaseUnit}
+                  {line.purchaseUnit}
                 </p>
                 <div className="flex-1" />
                 <p className="w-32.5 shrink-0 text-right text-p3 font-medium text-pneutral-800">
-                  {row.availableQty}
+                  {line.availableQuantity}
                 </p>
                 <p className="w-32.5 shrink-0 text-right text-p3 font-semibold text-pneutral-800">
-                  {row.issueQty}
+                  {line.issueQuantity}
                 </p>
               </div>
             ))}
@@ -167,7 +175,7 @@ const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
                 Total Products
               </p>
               <p className="text-h6 font-semibold text-success-800">
-                {productSummary.length}
+                {draft.lines.length}
               </p>
             </div>
           </div>
@@ -186,7 +194,7 @@ const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
                 Total Quantity
               </p>
               <p className="text-h6 font-semibold text-success-800">
-                {productSummary.reduce((sum, row) => sum + row.issueQty, 0)} Purchase Units
+                {totalQuantity} Purchase Units
               </p>
             </div>
           </div>
@@ -207,14 +215,14 @@ const ReviewConfirm = ({ onEditAllocationDetails }: ReviewConfirmProps) => {
               Total Quantity to be Allocated
             </p>
             <p className="text-h6 font-semibold text-primary-800">
-              {productSummary.reduce((sum, row) => sum + row.issueQty, 0)} Purchase Units
+              {totalQuantity} Purchase Units
             </p>
           </div>
           <div className="flex flex-col gap-1.5">
             <p className="text-label-l4 font-normal text-pneutral-500">
               Stock will be reserved in
             </p>
-            <p className="text-h6 font-semibold text-primary-800">Central Warehouse</p>
+            <p className="text-h6 font-semibold text-primary-800">{source}</p>
           </div>
         </div>
       </div>

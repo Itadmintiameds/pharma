@@ -1,9 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
-
-type DistributionMode = "warehouse" | "pharmacy";
+import { AllocationDraft } from "@/app/dashboard/warehouseDistribution/allocationDraft";
 
 const warehouseTypicalUses = [
   "Daily replenishment",
@@ -34,8 +32,13 @@ const SourceRow = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const DistributionType = () => {
-  const [selectedType, setSelectedType] = useState<DistributionMode>("warehouse");
+type DistributionTypeProps = {
+  draft: AllocationDraft
+  onChange: (patch: Partial<AllocationDraft>) => void
+}
+
+const DistributionType = ({ draft, onChange }: DistributionTypeProps) => {
+  const selectedType = draft.distributionMode;
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -70,7 +73,9 @@ const DistributionType = () => {
               role="radio"
               aria-checked={selectedType === "warehouse"}
               aria-label="Warehouse Distribution"
-              onClick={() => setSelectedType("warehouse")}
+              onClick={() =>
+                onChange({ distributionMode: "warehouse", sourceId: "", sourceLabel: "" })
+              }
             >
               <Image
                 src={`/warehouseDistribution/${
@@ -144,7 +149,9 @@ const DistributionType = () => {
               role="radio"
               aria-checked={selectedType === "pharmacy"}
               aria-label="Pharmacy Transfer"
-              onClick={() => setSelectedType("pharmacy")}
+              onClick={() =>
+                onChange({ distributionMode: "pharmacy", sourceId: "", sourceLabel: "" })
+              }
             >
               <Image
                 src={`/warehouseDistribution/${

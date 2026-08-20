@@ -1,13 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Input from '@/app/components/common/Input'
 import Dropdown, { DropdownOption } from '@/app/components/common/Dropdown'
+import { getCities } from '@/services/UserManagementService'
+import { getUserOrganization } from '@/services/SetupBusinessService'
+import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService'
+import { OrganizationWarehouse } from '@/types/SetupWarehouseData'
+import {
+  AllocationDraft,
+  distributionTypeLabel,
+  resolveSourceLabel,
+} from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
-const destinationPharmacyOptions: DropdownOption[] = [
-  { label: 'Rajnagar Medical Store', value: 'rajnagar-medical-store' },
-]
+type PharmacyOption = {
+  pharmacyId: string
+  pharmacyName: string
+  pharmacyCity: string
+}
 
 const referenceOptions: DropdownOption[] = [
   { label: 'Planned Replenishment', value: 'planned-replenishment' },
@@ -61,16 +72,77 @@ const FlowBadge = ({ label }: { label: string }) => (
   </div>
 )
 
-const AllocationDetails = () => {
-  const [allocationNo, setAllocationNo] = useState('AL000124')
-  const [allocationDate, setAllocationDate] = useState('05-Aug-2026')
-  const [distributionType, setDistributionType] = useState('Warehouse Distribution')
-  const [sourceWarehouse, setSourceWarehouse] = useState('Central Warehouse')
-  const [destinationPharmacy, setDestinationPharmacy] = useState<string>(
-    'rajnagar-medical-store'
-  )
-  const [reference, setReference] = useState<string>('')
-  const [remarks, setRemarks] = useState('')
+type AllocationDetailsProps = {
+  draft: AllocationDraft
+  onChange: (patch: Partial<AllocationDraft>) => void
+}
+
+const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
+  const distributionType = distributionTypeLabel(draft.distributionMode)
+  const sourceWarehouseLabel = resolveSourceLabel(draft)
+
+  const [pharmacies, setPharmacies] = useState<PharmacyOption[]>([])
+  const [isLoadingPharmacies, setIsLoadingPharmacies] = useState(true)
+  const [warehouses, setWarehouses] = useState<OrganizationWarehouse[]>([])
+
+  useEffect(() => {
+    let active = true
+    const fetchPharmacies = async () => {
+      try {
+        const data = await getCities()
+        if (active) setPharmacies(data || [])
+      } catch (err) {
+        console.error('Failed to fetch destination pharmacies', err)
+      } finally {
+        if (active) setIsLoadingPharmacies(false)
+      }
+    }
+    fetchPharmacies()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const fetchSourceWarehouse = async () => {
+      try {
+        const org = await getUserOrganization()
+        if (!org?.organizationId) return
+        const data = await getWarehousesByOrganizationId(org.organizationId)
+        if (active) setWarehouses(data)
+      } catch (err) {
+        console.error('Failed to fetch the source warehouse', err)
+      }
+    }
+    fetchSourceWarehouse()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // No source-warehouse picker exists — a centrally managed org has exactly
+  // one, so it fills the draft in as soon as it loads.
+  useEffect(() => {
+    if (draft.distributionMode !== 'warehouse') return
+    if (draft.sourceId || warehouses.length === 0) return
+    const warehouse = warehouses[0]
+    onChange({ sourceId: warehouse.warehouseId ?? '', sourceLabel: warehouse.warehouseName })
+  }, [draft.distributionMode, draft.sourceId, warehouses])
+
+  // Same pharmacy list backs both fields — a pharmacy transfer's source and
+  // destination are both picked from the org's pharmacies.
+  const pharmacyOptions: DropdownOption[] = pharmacies.map((pharmacy) => ({
+    label: `${pharmacy.pharmacyName} - ${pharmacy.pharmacyCity}`,
+    value: pharmacy.pharmacyId,
+  }))
+
+  // A pharmacy transfer can't move stock to itself, so once a source pharmacy
+  // is picked it drops out of the destination choices.
+  const destinationPharmacyOptions =
+    draft.distributionMode === 'pharmacy'
+      ? pharmacyOptions.filter((option) => option.value !== draft.sourceId)
+      : pharmacyOptions
 
   return (
     <div className="flex w-full flex-col items-start gap-6 lg:flex-row">
@@ -81,46 +153,60 @@ const AllocationDetails = () => {
 
       <FormRow label="Allocation No">
         <Input
-          value={allocationNo}
-          onChange={(e) => setAllocationNo(e.target.value)}
+          value={draft.allocationNo}
+          onChange={(e) => onChange({ allocationNo: e.target.value })}
         />
       </FormRow>
 
       <FormRow label="Allocation Date">
         <Input
-          value={allocationDate}
-          onChange={(e) => setAllocationDate(e.target.value)}
-          leftIcon={
-            <Image
-              src="/ProductManagement/Calendar.svg"
-              alt=""
-              width={20}
-              height={20}
-            />
-          }
+          type="date"
+          value={draft.allocationDate}
+          onChange={(e) => onChange({ allocationDate: e.target.value })}
         />
       </FormRow>
 
       <FormRow label="Distribution Type">
-        <Input
-          value={distributionType}
-          onChange={(e) => setDistributionType(e.target.value)}
-        />
+        <Input value={distributionType} readOnly />
       </FormRow>
 
-      <FormRow label="Source Warehouse">
-        <Input
-          value={sourceWarehouse}
-          onChange={(e) => setSourceWarehouse(e.target.value)}
-        />
-      </FormRow>
+      {draft.distributionMode === 'warehouse' ? (
+        <FormRow label="Source Warehouse">
+          <Input value={sourceWarehouseLabel} readOnly />
+        </FormRow>
+      ) : (
+        <FormRow label="Source Pharmacy" required>
+          <Dropdown
+            options={pharmacyOptions}
+            value={draft.sourceId}
+            onChange={(value) => {
+              const label = pharmacyOptions.find((option) => option.value === value)?.label ?? ''
+              // The pharmacy just picked as source can no longer stand as the
+              // destination too, so drop a now-invalid selection there.
+              const clearsDestination = draft.destinationId === value
+              onChange({
+                sourceId: String(value),
+                sourceLabel: label,
+                ...(clearsDestination ? { destinationId: '', destinationLabel: '' } : {}),
+              })
+            }}
+            placeholder="Select Source Pharmacy"
+            isLoading={isLoadingPharmacies}
+          />
+        </FormRow>
+      )}
 
       <FormRow label="Destination Pharmacy" required>
         <Dropdown
           options={destinationPharmacyOptions}
-          value={destinationPharmacy}
-          onChange={setDestinationPharmacy}
+          value={draft.destinationId}
+          onChange={(value) => {
+            const label =
+              destinationPharmacyOptions.find((option) => option.value === value)?.label ?? ''
+            onChange({ destinationId: String(value), destinationLabel: label })
+          }}
           placeholder="Select Destination Pharmacy"
+          isLoading={isLoadingPharmacies}
         />
       </FormRow>
 
@@ -132,8 +218,12 @@ const AllocationDetails = () => {
           <div className="flex-1">
             <Dropdown
               options={referenceOptions}
-              value={reference}
-              onChange={setReference}
+              value={draft.reference}
+              onChange={(value) => {
+                const label =
+                  referenceOptions.find((option) => option.value === value)?.label ?? ''
+                onChange({ reference: String(value), referenceLabel: label })
+              }}
               placeholder="Select Reference (Optional)"
               clearable
             />
@@ -144,8 +234,8 @@ const AllocationDetails = () => {
 
       <FormRow label="Remarks (Optional)" noBorder>
         <textarea
-          value={remarks}
-          onChange={(e) => setRemarks(e.target.value)}
+          value={draft.remarks}
+          onChange={(e) => onChange({ remarks: e.target.value })}
           placeholder="Enter remarks..."
           className="min-h-25 w-full resize-none rounded-md border border-pneutral-300 bg-white px-3 py-3 text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500 transition-all focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
         />
@@ -163,7 +253,7 @@ const AllocationDetails = () => {
           </div>
 
           <p className="w-full text-center text-h6 font-medium text-secondary-700">
-            Warehouse Distribution
+            {distributionType}
           </p>
 
           <div className="h-px w-full border-t border-pneutral-100" />
@@ -173,7 +263,7 @@ const AllocationDetails = () => {
               Stock will be transferred from
             </p>
 
-            <FlowBadge label="Central Warehouse" />
+            <FlowBadge label={sourceWarehouseLabel} />
 
             <Image
               src="/warehouseDistribution/arrow-down-solid.svg"
@@ -182,7 +272,7 @@ const AllocationDetails = () => {
               height={19}
             />
 
-            <FlowBadge label="Selected Pharmacy" />
+            <FlowBadge label={draft.destinationLabel || 'Selected Pharmacy'} />
           </div>
 
           <div className="h-px w-full border-t border-pneutral-100" />

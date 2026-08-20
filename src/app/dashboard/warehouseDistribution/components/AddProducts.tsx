@@ -4,44 +4,12 @@ import { useState } from 'react'
 import Image from 'next/image'
 import Input from '@/app/components/common/Input'
 import StatusBadge from '@/app/components/common/table/StatusBadge'
-
-const summaryItems = [
-  {
-    icon: 'summary-calendar',
-    iconWidth: 14,
-    iconHeight: 14,
-    label: 'Allocation No',
-    value: 'ALO000124',
-  },
-  {
-    icon: 'summary-truck',
-    iconWidth: 16,
-    iconHeight: 12,
-    label: 'Distribution Type',
-    value: 'Warehouse Distribution',
-  },
-  {
-    icon: 'summary-cube',
-    iconWidth: 14,
-    iconHeight: 16,
-    label: 'Source',
-    value: 'Central Warehouse',
-  },
-  {
-    icon: 'summary-map-pin',
-    iconWidth: 13,
-    iconHeight: 15,
-    label: 'Destination',
-    value: 'Rajajinagar Medical Store',
-  },
-  {
-    icon: 'summary-clipboard',
-    iconWidth: 13,
-    iconHeight: 16,
-    label: 'Reference',
-    value: 'Monthly Replenishment',
-  },
-] as const
+import {
+  AllocationDraft,
+  AllocationDraftLine,
+  distributionTypeLabel,
+  resolveSourceLabel,
+} from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
 type Batch = {
   batchNo: string
@@ -69,30 +37,60 @@ const products: Product[] = [
   
 ]
 
-type CartItem = {
-  id: string
-  product: string
-  batchNo: string
-  purchaseUnit: string
-  issueQty: number
-}
-
 const batchKey = (productId: string, batchNo: string) => `${productId}-${batchNo}`
 
-const AddProducts = () => {
+type AddProductsProps = {
+  draft: AllocationDraft
+  onChange: (patch: Partial<AllocationDraft>) => void
+}
+
+const AddProducts = ({ draft, onChange }: AddProductsProps) => {
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
-  const [issueQtyByBatch, setIssueQtyByBatch] = useState<Record<string, string>>({
-    [batchKey('dolo-650', 'B24001')]: '20',
-    [batchKey('dolo-650', 'B24008')]: '0',
-    [batchKey('crocin-syrup', 'C12001')]: '15',
-  })
+  // Quantities typed in the batch rows before "Add" commits them into the
+  // shared draft — transient per-row input, not part of the allocation yet.
+  const [issueQtyByBatch, setIssueQtyByBatch] = useState<Record<string, string>>({})
 
-  const [cart, setCart] = useState<CartItem[]>([
-    { id: '1', product: 'Dolo 650 Tablet', batchNo: 'B24001', purchaseUnit: 'Strip', issueQty: 20 },
-    
-  ])
+  const cart = draft.lines
+
+  const summaryItems = [
+    {
+      icon: 'summary-calendar',
+      iconWidth: 14,
+      iconHeight: 14,
+      label: 'Allocation No',
+      value: draft.allocationNo || '—',
+    },
+    {
+      icon: 'summary-truck',
+      iconWidth: 16,
+      iconHeight: 12,
+      label: 'Distribution Type',
+      value: distributionTypeLabel(draft.distributionMode),
+    },
+    {
+      icon: 'summary-cube',
+      iconWidth: 14,
+      iconHeight: 16,
+      label: 'Source',
+      value: resolveSourceLabel(draft),
+    },
+    {
+      icon: 'summary-map-pin',
+      iconWidth: 13,
+      iconHeight: 15,
+      label: 'Destination',
+      value: draft.destinationLabel || '—',
+    },
+    {
+      icon: 'summary-clipboard',
+      iconWidth: 13,
+      iconHeight: 16,
+      label: 'Reference',
+      value: draft.referenceLabel || 'None',
+    },
+  ]
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
@@ -102,23 +100,27 @@ const AddProducts = () => {
     const qty = Number(issueQtyByBatch[batchKey(product.id, batch.batchNo)] || 0)
     if (!qty) return
 
-    setCart((prev) => [
-      ...prev,
-      {
-        id: `${product.id}-${batch.batchNo}-${prev.length}`,
-        product: product.name,
-        batchNo: batch.batchNo,
-        purchaseUnit: product.purchaseUnit,
-        issueQty: qty,
-      },
-    ])
+    const line: AllocationDraftLine = {
+      id: batchKey(product.id, batch.batchNo),
+      productId: product.id,
+      productName: product.name,
+      batchId: batch.batchNo,
+      batchNo: batch.batchNo,
+      purchaseUnit: product.purchaseUnit,
+      availableQuantity: batch.available,
+      issueQuantity: qty,
+    }
+
+    onChange({
+      lines: [...draft.lines.filter((existing) => existing.id !== line.id), line],
+    })
   }
 
   const handleRemoveFromCart = (id: string) => {
-    setCart((prev) => prev.filter((item) => item.id !== id))
+    onChange({ lines: draft.lines.filter((line) => line.id !== id) })
   }
 
-  const totalQuantity = cart.reduce((sum, item) => sum + item.issueQty, 0)
+  const totalQuantity = cart.reduce((sum, line) => sum + line.issueQuantity, 0)
 
   return (
     <div className="flex w-full flex-col items-start gap-6 lg:flex-row">
@@ -305,31 +307,31 @@ const AddProducts = () => {
               <p className="w-15 shrink-0 text-p4 font-semibold text-pneutral-500">Action</p>
             </div>
 
-            {cart.map((item, index) => (
+            {cart.map((line, index) => (
               <div
-                key={item.id}
+                key={line.id}
                 className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2"
               >
                 <p className="w-8 shrink-0 text-p3 font-normal text-pneutral-900">
                   {index + 1}
                 </p>
                 <p className="w-55 shrink-0 text-label-l4 font-medium text-pneutral-900">
-                  {item.product}
+                  {line.productName}
                 </p>
                 <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
-                  {item.batchNo}
+                  {line.batchNo}
                 </p>
                 <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
-                  {item.purchaseUnit}
+                  {line.purchaseUnit}
                 </p>
                 <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-900">
-                  {item.issueQty}
+                  {line.issueQuantity}
                 </p>
                 <div className="flex-1" />
                 <button
                   type="button"
-                  onClick={() => handleRemoveFromCart(item.id)}
-                  aria-label={`Remove ${item.product} from cart`}
+                  onClick={() => handleRemoveFromCart(line.id)}
+                  aria-label={`Remove ${line.productName} from cart`}
                   className="flex w-15 shrink-0 items-center"
                 >
                   <Image
@@ -364,25 +366,29 @@ const AddProducts = () => {
 
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Allocation No</p>
-            <p className="text-label-l4 font-semibold text-pneutral-900">ALO000124</p>
+            <p className="text-label-l4 font-semibold text-pneutral-900">
+              {draft.allocationNo || '—'}
+            </p>
           </div>
 
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Distribution Type</p>
             <p className="text-label-l4 font-semibold text-pneutral-900">
-              Warehouse Distribution
+              {distributionTypeLabel(draft.distributionMode)}
             </p>
           </div>
 
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Source</p>
-            <p className="text-label-l4 font-semibold text-pneutral-900">Central Warehouse</p>
+            <p className="text-label-l4 font-semibold text-pneutral-900">
+              {resolveSourceLabel(draft)}
+            </p>
           </div>
 
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Destination</p>
             <p className="text-label-l4 font-semibold text-pneutral-900">
-              Rajajinagar Medical Store
+              {draft.destinationLabel || '—'}
             </p>
           </div>
 
@@ -390,7 +396,7 @@ const AddProducts = () => {
 
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Products</p>
-            <p className="text-p3 font-semibold text-primary-800">{products.length}</p>
+            <p className="text-p3 font-semibold text-primary-800">{cart.length}</p>
           </div>
 
           <div className="h-px w-full bg-pneutral-200" />

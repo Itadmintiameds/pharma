@@ -14,10 +14,17 @@ const STEP_DEFS = [
 type AllocationWizardLayoutProps = {
   onCancel?: () => void
   onConfirm?: () => void
+  /** True while the final Confirm Allocation call is in flight. */
+  isConfirming?: boolean
   children: (step: number, goToStep: (step: number) => void) => ReactNode
 }
 
-const AllocationWizardLayout = ({ onCancel, onConfirm, children }: AllocationWizardLayoutProps) => {
+const AllocationWizardLayout = ({
+  onCancel,
+  onConfirm,
+  isConfirming,
+  children,
+}: AllocationWizardLayoutProps) => {
   const [currentStep, setCurrentStep] = useState(1)
 
   return (
@@ -100,6 +107,7 @@ const AllocationWizardLayout = ({ onCancel, onConfirm, children }: AllocationWiz
 
         <button
           type="button"
+          disabled={currentStep === STEP_DEFS.length && isConfirming}
           onClick={
             currentStep === STEP_DEFS.length
               ? onConfirm
@@ -107,10 +115,14 @@ const AllocationWizardLayout = ({ onCancel, onConfirm, children }: AllocationWiz
           }
           className={`flex h-12 items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 ${
             currentStep === STEP_DEFS.length ? '' : 'w-35.25'
-          }`}
+          } ${currentStep === STEP_DEFS.length && isConfirming ? 'cursor-not-allowed opacity-60' : ''}`}
         >
           <span className="text-label-l4 font-medium text-pneutral-50">
-            {currentStep === STEP_DEFS.length ? 'Confirm Allocation' : 'Continue'}
+            {currentStep === STEP_DEFS.length
+              ? isConfirming
+                ? 'Confirming...'
+                : 'Confirm Allocation'
+              : 'Continue'}
           </span>
           <Image
             src={`/warehouseDistribution/${
