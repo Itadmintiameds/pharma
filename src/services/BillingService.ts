@@ -12,6 +12,7 @@ import {
   billDiscountBothWays,
   gstWithin,
   lineBreakdown,
+  roundToRupee,
   type DiscountType,
 } from '@/utils/billingTotals';
 
@@ -96,12 +97,25 @@ export const buildBillingPayload = ({
     (sum, d) => sum + d.discountAmount,
     0
   );
-  // Taxable + GST. Identical to the sum of the line nets, by construction.
-  const totalNetAmount = totalGrossAmount + totalGstAmount;
+  // Taxable + GST. Identical to the sum of the line nets, by construction, and
+  // sent as-is: totalNetAmount is the arithmetic, to the paisa.
+  const totalNetAmount = money(totalGrossAmount + totalGstAmount);
+  // What the customer actually hands over — the bill settled in whole rupees.
+  const totalNetAmountAfterRoundOff = roundToRupee(totalNetAmount);
+  // Signed, and 0 when the net was already whole: negative where the bill
+  // rounds down (302.40 -> 302 gives -0.40), positive where it rounds up.
+  const roundOffAmount = money(totalNetAmountAfterRoundOff - totalNetAmount);
+
   // The discount as a share of what it was actually taken off: the MRP total.
   const totalDiscountPercentage =
     totalMrpAmount > 0 ? (totalDiscountAmount / totalMrpAmount) * 100 : 0;
-  const pendingAmount = Math.max(0, totalNetAmount - (payment.amountReceived || 0));
+  // Against the rounded figure, not the exact one. Taking ₹302 for a ₹302.40
+  // bill is settled in full, and measuring the balance against 302.40 would
+  // leave 40 paise outstanding and file the bill as PARTIAL.
+  const pendingAmount = Math.max(
+    0,
+    totalNetAmountAfterRoundOff - (payment.amountReceived || 0)
+  );
 
   return {
     // An existing customer is referenced by id alone; a new one is created from
@@ -132,7 +146,9 @@ export const buildBillingPayload = ({
     totalDiscountPercentage: money(totalDiscountPercentage),
     totalDiscountAmount: money(totalDiscountAmount),
     totalGstAmount: money(totalGstAmount),
-    totalNetAmount: money(totalNetAmount),
+    totalNetAmount,
+    roundOffAmount,
+    totalNetAmountAfterRoundOff,
 
     billingDetails,
     billingPayments: [

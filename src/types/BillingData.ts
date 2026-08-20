@@ -136,8 +136,19 @@ export interface CreateBillingPayload {
   totalDiscountPercentage: number;
   totalDiscountAmount: number;
   totalGstAmount: number;
-  /** totalGrossAmount + totalGstAmount. */
+  /**
+   * totalGrossAmount + totalGstAmount — the arithmetic result, to the paisa,
+   * before the bill is rounded. This is what the lines add up to.
+   */
   totalNetAmount: number;
+  /**
+   * The paise the rounding gives up or takes: negative when the bill rounds
+   * down, positive when it rounds up, and 0 when the net is already whole.
+   * Always totalNetAmountAfterRoundOff - totalNetAmount.
+   */
+  roundOffAmount: number;
+  /** What the customer actually pays — totalNetAmount to the whole rupee. */
+  totalNetAmountAfterRoundOff: number;
   billingDetails: BillingDetailPayload[];
   billingPayments: BillingPaymentPayload[];
 }
@@ -276,6 +287,9 @@ export interface BillingRecord {
   totalDiscountAmount: number;
   totalGstAmount: number;
   totalNetAmount: number;
+  /** Absent on bills saved before the round-off columns existed. */
+  roundOffAmount?: number;
+  totalNetAmountAfterRoundOff?: number;
   billingDetails: BillingDetailRecord[];
   billingPayments: BillingPaymentRecord[];
 }

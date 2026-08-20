@@ -34,6 +34,21 @@ export const lineGst = (line: BillLine) =>
 /** Net less the GST inside it. */
 export const lineTaxable = (line: BillLine) => lineNet(line) - lineGst(line);
 
+/**
+ * Half up to the whole rupee — 45.78 becomes 46, 50.50 becomes 51, 37.30 stays
+ * 37, and a figure already whole is returned unchanged.
+ *
+ * The two-decimal pass first is not decorative: the net is a sum of products of
+ * floats, so an amount that reads 50.50 on screen can hold 50.49999999999999,
+ * which Math.round would send down to 50. Rounding what is displayed is the
+ * only behaviour a cashier can predict.
+ *
+ * Math.round is already half *up* rather than half to even, and a bill total is
+ * never negative, so it needs no help beyond that.
+ */
+export const roundToRupee = (amount: number) =>
+  Math.round(Number((amount || 0).toFixed(2)));
+
 export type DiscountType = "PERCENTAGE" | "AMOUNT";
 
 /**
@@ -133,7 +148,11 @@ export const calculateBillTotals = (
   const rows = lines.map((line) => lineBreakdown(line, billDiscount.percentage));
   const taxableAmount = rows.reduce((sum, row) => sum + row.taxableAmount, 0);
   const gstAmount = rows.reduce((sum, row) => sum + row.gstAmount, 0);
-  const netAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
+  // What the lines add up to, to the paisa. Taxable + GST reconciles against
+  // this, and it is what the payload sends as totalNetAmount — but it is never
+  // the figure on screen.
+  const exactNetAmount = rows.reduce((sum, row) => sum + row.netAmount, 0);
+  const netAmount = roundToRupee(exactNetAmount);
 
   return {
     totalItems: lines.length,
@@ -147,8 +166,18 @@ export const calculateBillTotals = (
     billDiscountPercentage: billDiscount.percentage,
     taxableAmount,
     gstAmount,
-    // Paise are kept — rounding to whole rupees turned 24.05 into 24.00.
-    roundOff: 0,
+    /**
+     * The paise the rounding gave up (negative) or took (positive) — the
+     * payload's roundOffAmount.
+     */
+    roundOff: netAmount - exactNetAmount,
+    /**
+     * The whole-rupee payable: the payload's totalNetAmountAfterRoundOff, and
+     * the only net the UI ever shows. Rounding once, here, is what keeps the
+     * totals strip, the payment screen's amount due, the printed NET PAYABLE
+     * and the saved record on the same number — the exact figure stays inside
+     * buildBillingPayload, which derives it from the lines itself.
+     */
     netAmount,
   };
 };

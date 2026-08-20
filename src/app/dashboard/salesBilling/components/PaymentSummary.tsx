@@ -529,6 +529,17 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
       label: "Discount",
       value: (totals.itemDiscount || 0) + (totals.billDiscount || 0),
     },
+    {
+      /**
+       * The paise given up (or taken) to settle in whole rupees — the bill's
+       * roundOffAmount. Without this line the card stops adding up: Total less
+       * Discount is the exact figure, NET PAYABLE is that figure rounded, and a
+       * bill the customer cannot check is worse than one carrying a 40 paise
+       * line.
+       */
+      label: "Round Off",
+      value: totals.roundOff || 0,
+    },
   ];
 
   /** The two customer facts on the right. */
@@ -618,28 +629,31 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                 <DataTable columns={columns} data={lines} />
               </div>
 
-              {/* Amount in words beside the totals — 184px tall, 16px apart */}
+              {/* Amount in words beside the totals — 216px tall, 16px apart */}
               <div
                 data-print="summary"
                 className="w-full flex flex-col lg:flex-row items-stretch gap-4"
               >
                 <div
                   data-print="words"
-                  className="flex-1 lg:min-h-[184px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
+                  className="flex-1 lg:min-h-[216px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
                 >
                   <span className="font-body text-p4 font-normal text-pneutral-800">
                     Amount in words
                   </span>
+                  {/* netAmount is already the whole-rupee payable, so the
+                      words match the printed NET PAYABLE exactly. */}
                   <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
-                    {amountInWords(Math.round(totals.netAmount || 0))}
+                    {amountInWords(totals.netAmount || 0)}
                   </span>
                 </div>
 
-                {/* Amount summary — four 24px lines at an 8px rhythm, then NET
-                    PAYABLE on its own 32px line above a hairline. */}
+                {/* Amount summary — five 24px lines at an 8px rhythm, then NET
+                    PAYABLE on its own 32px line above a hairline. 216px is that
+                    stack exactly: 24 padding + 5x24 + 5x8 gaps + 32. */}
                 <div
                   data-print="totals"
-                  className="w-full lg:w-[364px] shrink-0 lg:h-[184px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
+                  className="w-full lg:w-[364px] shrink-0 lg:h-[216px] rounded-lg border border-pneutral-200 bg-white p-3 flex flex-col gap-2"
                 >
                   {AMOUNT_ROWS.map((row) => (
                     <div

@@ -78,9 +78,20 @@ const toBillRecord = (bill: BillingRecord): BillRecord => {
     // The bill carries the settled flag; the payments only carry balances.
     // Anything not fully PAID is still owed, so it reads as pending.
     status: bill.paymentType === "PAID" ? "Paid" : "Pending",
-    netAmount: bill.totalNetAmount ?? 0,
+    netAmount: payableOf(bill),
   };
 };
+
+/**
+ * The payable on a saved bill: the whole-rupee figure it was settled at.
+ *
+ * `totalNetAmount` is the exact arithmetic and is never shown — displaying it
+ * would quote a customer 302.40 for a bill that was rung up, collected and
+ * stored as 302. Bills saved before the round-off columns existed have only the
+ * one figure, so it stands in.
+ */
+const payableOf = (bill: BillingRecord) =>
+  bill.totalNetAmountAfterRoundOff ?? bill.totalNetAmount ?? 0;
 
 /**
  * What is still owed on a saved bill. Each payment records the balance left
@@ -200,8 +211,10 @@ const savedTotals = (bill: BillingRecord, lines: BillLine[]): BillTotals => ({
   billDiscountPercentage: 0,
   taxableAmount: bill.totalGrossAmount || 0,
   gstAmount: bill.totalGstAmount || 0,
-  roundOff: 0,
-  netAmount: bill.totalNetAmount || 0,
+  // Stored on the bill now, rather than re-derived — an older bill has no
+  // round off, which is exactly the 0 it defaults to.
+  roundOff: bill.roundOffAmount ?? 0,
+  netAmount: payableOf(bill),
 });
 
 /** What the POS flow has collected so far. */
