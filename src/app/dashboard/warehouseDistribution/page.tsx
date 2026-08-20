@@ -518,7 +518,19 @@ const page = () => {
     if (!createdAllocation?.warehouseDistributionId) return
     setIsDispatching(true)
     try {
-      const updated = await dispatchAllocation(createdAllocation.warehouseDistributionId)
+      // This screen has no per-line editing, so the whole issued quantity ships.
+      const lines = (createdAllocation.lines ?? [])
+        .filter((line) => line.warehouseDistributionDetailsId != null)
+        .map((line) => ({
+          warehouseDistributionDetailsId: line.warehouseDistributionDetailsId!,
+          dispatchedQuantity: line.issueQuantity ?? 0,
+          remarks: null,
+        }))
+
+      const updated = await dispatchAllocation(
+        createdAllocation.warehouseDistributionId,
+        { lines }
+      )
       setCreatedAllocation(updated)
       showToast.success('Products dispatched successfully')
       setView('dispatch')

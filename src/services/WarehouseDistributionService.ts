@@ -2,11 +2,13 @@ import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 import {
   CreateWarehouseDistributionRequest,
+  DispatchWarehouseDistributionRequest,
   ReceiveWarehouseDistributionRequest,
   WarehouseDistributionData,
   WarehouseDistributionSummaryData,
   WarehouseDistributionSummary,
   WarehouseDistributionReceiptKpi,
+  WarehouseDistributionTransferKpi,
 } from '@/types/WarehouseDistributionData';
 
 // Create a distribution / stock-transfer allocation.
@@ -105,13 +107,43 @@ export const receiveAllocation = async (
   }
 };
 
+// Inter-store transfer list: distributions where the current store is the source.
+// GET /warehouse/distribution/warehouse/source -> WarehouseDistributionController#getBySource
+export const getSourceDistributions = async (): Promise<
+  WarehouseDistributionSummary[]
+> => {
+  try {
+    const response = await api.get('/warehouse/distribution/warehouse/source');
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch outgoing stock transfers.');
+  }
+};
+
+// Inter-store transfer KPIs: lifecycle counts for the current store as source,
+// computed server-side.
+// GET /warehouse/distribution/warehouse/source/kpi -> WarehouseDistributionController#getSourceKpi
+export const getSourceTransferKpi =
+  async (): Promise<WarehouseDistributionTransferKpi> => {
+    try {
+      const response = await api.get('/warehouse/distribution/warehouse/source/kpi');
+      return response.data;
+    } catch (error) {
+      throw handleApiError(error, 'Failed to fetch inter-store transfer KPIs.');
+    }
+  };
+
 // Dispatch: source stock leaves (DISTRIBUTION_CREATED -> PRODUCTS_DISPATCHED).
 // POST /warehouse/distribution/{distributionId}/dispatch -> WarehouseDistributionController#dispatch
 export const dispatchAllocation = async (
-  distributionId: number
+  distributionId: number,
+  request: DispatchWarehouseDistributionRequest
 ): Promise<WarehouseDistributionData> => {
   try {
-    const response = await api.post(`/warehouse/distribution/${distributionId}/dispatch`);
+    const response = await api.post(
+      `/warehouse/distribution/${distributionId}/dispatch`,
+      request
+    );
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to dispatch the allocation.');

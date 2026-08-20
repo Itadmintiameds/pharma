@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Download,
   ClipboardList,
@@ -15,6 +15,18 @@ import Dropdown, { DropdownOption } from '@/app/components/common/Dropdown'
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import {
+  getSourceDistributions,
+  getSourceTransferKpi,
+  getWarehouseDistribution,
+} from '@/services/WarehouseDistributionService'
+import type {
+  DistributionStatus,
+  WarehouseDistributionData,
+  WarehouseDistributionSummary,
+  WarehouseDistributionTransferKpi,
+} from '@/types/WarehouseDistributionData'
+import { showToast } from '@/app/components/common/Toast'
 import TransferDetails from './components/TransferDetails'
 import DispatchProducts from './components/DispatchProducts'
 import PendingReceipt from './components/PendingReceipt'
@@ -80,7 +92,7 @@ const StatCard = ({
   </div>
 )
 
-const CompletedStatCard = () => (
+const CompletedStatCard = ({ value }: { value: string }) => (
   <div
     className={`flex items-start gap-3 self-stretch rounded-2xl border-t-[3px] border-t-success-600 bg-white p-4 ${cardShadow}`}
   >
@@ -90,15 +102,19 @@ const CompletedStatCard = () => (
 
     <div className="flex flex-1 flex-col items-start justify-between gap-3">
       <p className="text-p3 font-regular text-pneutral-900">Completed</p>
-      <p className="text-label-l4 font-semibold text-success-600">142</p>
+      <p className="text-label-l4 font-semibold text-success-600">{value}</p>
     </div>
   </div>
 )
 
-const statCards: StatCardProps[] = [
+// The KPI endpoint covers the three lifecycle buckets; "Awaiting Acceptance" has no
+// backing status yet, so its card stays blank rather than showing an invented count.
+const buildStatCards = (
+  kpi: WarehouseDistributionTransferKpi | null
+): StatCardProps[] => [
   {
     label: ['Awaiting', 'Acceptance'],
-    value: '6',
+    value: '—',
     Icon: ClipboardList,
     borderColor: 'border-t-danger-600',
     iconBg: 'bg-danger-50',
@@ -106,7 +122,7 @@ const statCards: StatCardProps[] = [
   },
   {
     label: ['Ready to', 'Dispatch'],
-    value: '4',
+    value: kpi ? String(kpi.readyToDispatch) : '—',
     Icon: Send,
     borderColor: 'border-t-info-600',
     iconBg: 'bg-info-50',
@@ -114,7 +130,7 @@ const statCards: StatCardProps[] = [
   },
   {
     label: ['Pending', 'Receipt'],
-    value: '3',
+    value: kpi ? String(kpi.pendingReceipt) : '—',
     Icon: Truck,
     borderColor: 'border-t-primary-800',
     iconBg: 'bg-primary-100',
@@ -122,12 +138,16 @@ const statCards: StatCardProps[] = [
   },
 ]
 
-const StatCardsRow = () => (
+const StatCardsRow = ({
+  kpi,
+}: {
+  kpi: WarehouseDistributionTransferKpi | null
+}) => (
   <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-4">
-    {statCards.map((card) => (
-      <StatCard key={card.value} {...card} />
+    {buildStatCards(kpi).map((card) => (
+      <StatCard key={card.label.join(' ')} {...card} />
     ))}
-    <CompletedStatCard />
+    <CompletedStatCard value={kpi ? String(kpi.completed) : '—'} />
   </div>
 )
 
@@ -193,6 +213,7 @@ type TransferStatus =
 
 interface TransferRow {
   key: string
+  distributionId: number
   displayNo: string
   ptNo: string
   from: string
@@ -204,68 +225,42 @@ interface TransferRow {
   action: string
 }
 
-const transferRows: TransferRow[] = [
-  {
-    key: 'row-1',
-    displayNo: '1',
-    ptNo: 'TR00022',
-    from: 'Hebbal',
-    toStore: 'Malleshwaram Store',
-    toCode: 'STO0010',
-    products: '5',
-    qty: '35 PU',
-    status: 'awaiting_acceptance',
-    action: 'Review',
-  },
-  {
-    key: 'row-2',
-    displayNo: '2',
-    ptNo: 'TR00022',
-    from: 'Hebbal',
-    toStore: 'Malleshwaram Store',
-    toCode: 'STO0010',
-    products: '16',
-    qty: '35 PU',
-    status: 'ready_to_dispatch',
-    action: 'Dispatch',
-  },
-  {
-    key: 'row-3',
-    displayNo: '3',
-    ptNo: 'TR00022',
-    from: 'Hebbal',
-    toStore: 'Malleshwaram Store',
-    toCode: 'STO0010',
-    products: '13',
-    qty: '35 PU',
-    status: 'pending_receipt',
-    action: 'Reason',
-  },
-  {
-    key: 'row-4',
-    displayNo: '3',
-    ptNo: 'TR00022',
-    from: 'Hebbal',
-    toStore: 'Malleshwaram Store',
-    toCode: 'STO0010',
-    products: '13',
-    qty: '35 PU',
-    status: 'completed',
-    action: 'Reason',
-  },
-  {
-    key: 'row-5',
-    displayNo: '3',
-    ptNo: 'TR00022',
-    from: 'Hebbal',
-    toStore: 'Malleshwaram Store',
-    toCode: 'STO0010',
-    products: '13',
-    qty: '35 PU',
-    status: 'rejected',
-    action: 'Reason',
-  },
-]
+// The backend lifecycle only covers the three states below; "awaiting_acceptance"
+// and "rejected" have no DistributionStatus behind them yet.
+const STATUS_FROM_API: Partial<Record<DistributionStatus, TransferStatus>> = {
+  DISTRIBUTION_CREATED: 'ready_to_dispatch',
+  PRODUCTS_DISPATCHED: 'pending_receipt',
+  STOCK_RECEIVED: 'completed',
+}
+
+const ACTION_LABEL: Record<TransferStatus, string> = {
+  awaiting_acceptance: 'Review',
+  ready_to_dispatch: 'Dispatch',
+  pending_receipt: 'View',
+  completed: 'View',
+  rejected: 'Reason',
+}
+
+const toTransferRow = (
+  summary: WarehouseDistributionSummary,
+  index: number
+): TransferRow => {
+  const status = STATUS_FROM_API[summary.currentStatus] ?? 'ready_to_dispatch'
+
+  return {
+    key: String(summary.warehouseDistributionId ?? `row-${index}`),
+    distributionId: summary.warehouseDistributionId,
+    displayNo: String(index + 1),
+    ptNo: summary.allocationNo,
+    from: summary.fromStore || summary.fromId,
+    toStore: summary.toStore || summary.toId,
+    toCode: summary.toId,
+    products: String(summary.productsCount ?? 0),
+    qty: String(summary.totalIssueQuantity ?? 0),
+    status,
+    action: ACTION_LABEL[status],
+  }
+}
 
 const statusBadgeClass: Record<TransferStatus, string> = {
   awaiting_acceptance: 'border-danger-600 bg-danger-50 text-danger-600',
@@ -381,15 +376,25 @@ const buildTransferColumns = (
 ]
 
 const PAGE_SIZE = 7
-const TOTAL_ENTRIES = 128
 
 const TransfersTable = ({
+  rows,
+  loading,
+  error,
   onSelectRow,
 }: {
+  rows: TransferRow[]
+  loading: boolean
+  error: string | null
   onSelectRow: (row: TransferRow) => void
 }) => {
   const [currentPage, setCurrentPage] = useState(1)
   const transferColumns = buildTransferColumns(onSelectRow)
+  // The API returns every transfer at once, so pages are sliced client-side.
+  const pageRows = rows.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  )
 
   return (
     <div className="flex w-full flex-col items-start gap-3">
@@ -397,16 +402,21 @@ const TransfersTable = ({
         Inter-Store Transfers
       </h2>
 
+      {error && (
+        <p className="text-label-l4 font-regular text-danger-600">{error}</p>
+      )}
+
       <TableWithoutGrid
         columns={transferColumns}
-        data={transferRows}
+        data={pageRows}
         rowKey={(row) => row.key}
         headerVariant="primary"
         container="card"
+        loading={loading}
         pagination={{
           page: currentPage,
           pageSize: PAGE_SIZE,
-          totalItems: TOTAL_ENTRIES,
+          totalItems: rows.length,
           onPageChange: setCurrentPage,
         }}
       />
@@ -421,18 +431,92 @@ const page = () => {
   const [activeTransfer, setActiveTransfer] = useState<TransferRow | null>(
     null
   )
+  const [rows, setRows] = useState<TransferRow[]>([])
+  const [kpi, setKpi] = useState<WarehouseDistributionTransferKpi | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [activeDistribution, setActiveDistribution] =
+    useState<WarehouseDistributionData | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  // The list and the stat cards are fetched together, but a failing KPI call only
+  // blanks the cards — the table still renders.
+  const fetchTransfers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    const [list, kpiResult] = await Promise.allSettled([
+      getSourceDistributions(),
+      getSourceTransferKpi(),
+    ])
+
+    if (list.status === 'fulfilled') {
+      setRows(list.value.map(toTransferRow))
+    } else {
+      console.error('Failed to fetch inter-store transfers:', list.reason)
+      setError(
+        list.reason instanceof Error
+          ? list.reason.message
+          : 'Failed to load inter-store transfers.'
+      )
+      setRows([])
+    }
+
+    if (kpiResult.status === 'fulfilled') {
+      setKpi(kpiResult.value)
+    } else {
+      console.error('Failed to fetch inter-store transfer KPIs:', kpiResult.reason)
+      setKpi(null)
+    }
+
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    fetchTransfers()
+  }, [fetchTransfers])
+
+  // Fetch the full distribution, then show the given screen. A transfer still awaiting
+  // dispatch opens on the review screen; anything already dispatched opens on its summary.
+  const openTransfer = async (row: TransferRow) => {
+    const nextView: PageView =
+      row.status === 'ready_to_dispatch' ? 'details' : 'pending_receipt'
+
+    setActiveTransfer(row)
+    setActiveDistribution(null)
+    setDetailLoading(true)
+    setView(nextView)
+    try {
+      setActiveDistribution(await getWarehouseDistribution(row.distributionId))
+    } catch (err) {
+      showToast.error(
+        err instanceof Error
+          ? err.message
+          : 'Failed to fetch the transfer details.'
+      )
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const backToList = () => {
+    setView('list')
+    setActiveTransfer(null)
+    setActiveDistribution(null)
+    fetchTransfers()
+  }
 
   if (view === 'pending_receipt' && activeTransfer) {
     return (
       <div className="flex w-full flex-col items-start gap-4">
         <PendingReceipt
           referenceNo={activeTransfer.ptNo}
+          fromStore={activeTransfer.from}
           destinationStore={activeTransfer.toStore}
-          onBack={() => setView('dispatch')}
-          onClose={() => {
-            setView('list')
-            setActiveTransfer(null)
-          }}
+          toCode={activeTransfer.toCode}
+          distribution={activeDistribution}
+          onBack={backToList}
+          onClose={backToList}
         />
       </div>
     )
@@ -442,10 +526,18 @@ const page = () => {
     return (
       <div className="flex min-h-full w-full flex-col items-start gap-4">
         <DispatchProducts
+          transferNo={activeTransfer.ptNo}
+          fromStore={activeTransfer.from}
           destinationStore={activeTransfer.toStore}
+          toCode={activeTransfer.toCode}
           status="ready_to_dispatch"
+          distribution={activeDistribution}
+          loading={detailLoading}
           onBack={() => setView('details')}
-          onDispatch={() => setView('pending_receipt')}
+          onDispatched={(updated) => {
+            setActiveDistribution(updated)
+            setView('pending_receipt')
+          }}
         />
       </div>
     )
@@ -457,10 +549,9 @@ const page = () => {
         <TransferDetails
           referenceNo={activeTransfer.ptNo}
           status={activeTransfer.status}
-          onBack={() => {
-            setView('list')
-            setActiveTransfer(null)
-          }}
+          distribution={activeDistribution}
+          loading={detailLoading}
+          onBack={backToList}
           onAccept={() => setView('dispatch')}
         />
       </div>
@@ -470,13 +561,13 @@ const page = () => {
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <HeaderRow />
-      <StatCardsRow />
+      <StatCardsRow kpi={kpi} />
       <FiltersRow />
       <TransfersTable
-        onSelectRow={(row) => {
-          setActiveTransfer(row)
-          setView('details')
-        }}
+        rows={rows}
+        loading={loading}
+        error={error}
+        onSelectRow={openTransfer}
       />
     </div>
   )

@@ -136,6 +136,17 @@ export interface WarehouseDistributionReceiptKpi {
   productsReceivedToday: number;
 }
 
+// Stat-card figures for the Inter-Store Transfer dashboard, computed server-side
+// against the current store as source. Each count is a lifecycle bucket:
+// readyToDispatch = DISTRIBUTION_CREATED, pendingReceipt = PRODUCTS_DISPATCHED,
+// completed = STOCK_RECEIVED.
+// GET /warehouse/distribution/warehouse/source/kpi.
+export interface WarehouseDistributionTransferKpi {
+  readyToDispatch: number;
+  pendingReceipt: number;
+  completed: number;
+}
+
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
   productId: string;
@@ -155,6 +166,20 @@ export interface CreateWarehouseDistributionRequest {
   destinationType: LocationType;
   destinationId: string;
   lines: WarehouseDistributionLineRequest[];
+}
+
+// Mirrors WarehouseDistributionDispatchLineRequest.java — how much of one issued
+// line actually left the source store, keyed by the line's warehouseDistributionDetailsId.
+export interface DispatchWarehouseDistributionLineRequest {
+  warehouseDistributionDetailsId: number;
+  dispatchedQuantity: number;
+  remarks?: string | null;
+}
+
+// Mirrors WarehouseDistributionDispatchRequest.java — payload for
+// POST /warehouse/distribution/{distributionId}/dispatch.
+export interface DispatchWarehouseDistributionRequest {
+  lines: DispatchWarehouseDistributionLineRequest[];
 }
 
 // Mirrors WarehouseDistributionReceiveLineRequest.java — the received/damaged outcome

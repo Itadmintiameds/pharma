@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   FileText,
   Truck,
@@ -14,6 +14,14 @@ import {
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import type {
+  DispatchWarehouseDistributionLineRequest,
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+} from '@/types/WarehouseDistributionData'
+import { dispatchAllocation } from '@/services/WarehouseDistributionService'
+import { formatDate, formatDateTime } from '@/utils/formatDate'
+import { showToast } from '@/app/components/common/Toast'
 
 export type DispatchProductsStatus =
   | 'awaiting_acceptance'
@@ -31,8 +39,11 @@ interface DispatchProductsProps {
   toCode?: string
   requestedOn?: string
   requestedBy?: string
+  distribution?: WarehouseDistributionData | null
+  loading?: boolean
   onBack?: () => void
-  onDispatch?: () => void
+  // Fires after the dispatch is accepted server-side; receives the updated distribution.
+  onDispatched?: (updated: WarehouseDistributionData) => void
 }
 
 const statusBadgeClass: Record<DispatchProductsStatus, string> = {
@@ -161,38 +172,42 @@ interface DispatchProductRow {
   packInfo: string
   batchNo: string
   expiryDate: string
-  availableStock: string
   requestedQty: string
   dispatchQty: string
   remarks: string
 }
 
-const initialDispatchProducts: DispatchProductRow[] = [
-  {
-    id: 1,
-    icon: 'pill',
-    productName: 'Dolo 650 Tablet',
-    packInfo: 'Strip of 10 Tablets',
-    batchNo: 'B24001',
-    expiryDate: '31-Dec-2027',
-    availableStock: '120 Strip',
-    requestedQty: '20 Strip',
-    dispatchQty: '15',
-    remarks: 'Something',
-  },
-  {
-    id: 2,
-    icon: 'box',
-    productName: 'Crocin Syrup',
-    packInfo: 'Bottle of 60 ml',
-    batchNo: 'C12001',
-    expiryDate: '31-Aug-2027',
-    availableStock: '25 Bottle',
-    requestedQty: '15 Bottle',
-    dispatchQty: '10',
-    remarks: 'Something',
-  },
-]
+// "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
+const iconForUnit = (unit?: string): ProductIcon => {
+  const u = (unit ?? '').toLowerCase()
+  return u.includes('strip') || u.includes('tablet') || u.includes('tab')
+    ? 'pill'
+    : 'box'
+}
+
+// One issued line -> one editable dispatch row. Dispatch qty defaults to the issued
+// qty (the common case is "everything ships"); the user edits it down for shortfalls.
+const mapLineToDispatchRow = (
+  line: WarehouseDistributionLineData,
+  index: number
+): DispatchProductRow => {
+  const unit = line.packaging?.purchaseUnit ?? ''
+  const contains = line.packaging?.purchaseUnitContains
+  const issued = line.issueQuantity ?? 0
+
+  return {
+    id: line.warehouseDistributionDetailsId ?? index + 1,
+    icon: iconForUnit(unit),
+    productName: line.product?.productName ?? line.productId,
+    packInfo:
+      unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    expiryDate: formatDate(line.batch?.expiryDate),
+    requestedQty: unit ? `${issued} ${unit}` : String(issued),
+    dispatchQty: String(line.dispatchedQuantity ?? issued),
+    remarks: line.dispatchRemarks ?? '',
+  }
+}
 
 const dispatchQtyInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-success-600 focus:outline-none focus:border-secondary-700'
@@ -258,16 +273,6 @@ const buildDispatchColumns = (
     ),
   },
   {
-    header: 'Available Stock',
-    width: 'w-32',
-    align: 'center',
-    render: (row) => (
-      <span className="text-label-l4 font-regular text-success-600">
-        {row.availableStock}
-      </span>
-    ),
-  },
-  {
     header: 'Requested Qty',
     width: 'w-32',
     align: 'center',
@@ -307,22 +312,20 @@ const buildDispatchColumns = (
   },
 ]
 
-const ProductsToDispatch = () => {
-  const [items, setItems] = useState<DispatchProductRow[]>(
-    initialDispatchProducts
-  )
-
-  const handleFieldChange = (
+const ProductsToDispatch = ({
+  items,
+  onFieldChange,
+  loading,
+}: {
+  items: DispatchProductRow[]
+  onFieldChange: (
     id: number,
     field: 'dispatchQty' | 'remarks',
     value: string
-  ) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
-    )
-  }
-
-  const columns = buildDispatchColumns(handleFieldChange)
+  ) => void
+  loading?: boolean
+}) => {
+  const columns = buildDispatchColumns(onFieldChange)
 
   return (
     <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
@@ -336,6 +339,7 @@ const ProductsToDispatch = () => {
         rowKey={(row) => row.id.toString()}
         headerVariant="primary"
         container="box"
+        loading={loading}
       />
     </div>
   )
@@ -347,15 +351,20 @@ const actionButtonClass =
 const DispatchProductsActions = ({
   onBack,
   onDispatch,
+  submitting,
+  disabled,
 }: {
   onBack?: () => void
   onDispatch?: () => void
+  submitting?: boolean
+  disabled?: boolean
 }) => (
   <div className="sticky bottom-0 z-10 flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
       type="button"
       onClick={onBack}
-      className={`${actionButtonClass} w-[141px] border-2 border-pneutral-900 text-pneutral-900`}
+      disabled={submitting}
+      className={`${actionButtonClass} w-[141px] border-2 border-pneutral-900 text-pneutral-900 disabled:opacity-50`}
     >
       <ArrowLeft className="size-5" strokeWidth={2} />
       Back
@@ -365,9 +374,10 @@ const DispatchProductsActions = ({
       <button
         type="button"
         onClick={onDispatch}
-        className={`${actionButtonClass} w-[200px] bg-primary-800 text-pneutral-50`}
+        disabled={submitting || disabled}
+        className={`${actionButtonClass} w-[200px] bg-primary-800 text-pneutral-50 disabled:opacity-50`}
       >
-        Dispatch Products
+        {submitting ? 'Dispatching…' : 'Dispatch Products'}
       </button>
     </div>
   </div>
@@ -382,9 +392,72 @@ const DispatchProducts = ({
   toCode = 'STO0012',
   requestedOn = '05-Aug-2026 09:15 AM',
   requestedBy = 'Warehouse Admin',
+  distribution,
+  loading,
   onBack,
-  onDispatch,
+  onDispatched,
 }: DispatchProductsProps) => {
+  const dispatchRows = useMemo(
+    () => (distribution?.lines ?? []).map(mapLineToDispatchRow),
+    [distribution]
+  )
+
+  // Only the user's edits are held in state, keyed by line id, so a newly loaded
+  // distribution re-seeds the table without an effect syncing a copy of the rows.
+  const [edits, setEdits] = useState<
+    Record<number, Partial<Pick<DispatchProductRow, 'dispatchQty' | 'remarks'>>>
+  >({})
+  const [submitting, setSubmitting] = useState(false)
+
+  const items = useMemo(
+    () => dispatchRows.map((row) => ({ ...row, ...edits[row.id] })),
+    [dispatchRows, edits]
+  )
+
+  const handleFieldChange = (
+    id: number,
+    field: 'dispatchQty' | 'remarks',
+    value: string
+  ) => {
+    setEdits((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  const handleDispatch = async () => {
+    const distributionId = distribution?.warehouseDistributionId
+    if (distributionId == null) {
+      showToast.error('Missing distribution reference — cannot dispatch.')
+      return
+    }
+
+    const lines: DispatchWarehouseDistributionLineRequest[] = items.map((item) => {
+      const remarks = item.remarks.trim()
+      return {
+        warehouseDistributionDetailsId: item.id,
+        dispatchedQuantity: Number(item.dispatchQty) || 0,
+        remarks: remarks ? remarks : null,
+      }
+    })
+
+    setSubmitting(true)
+    try {
+      const updated = await dispatchAllocation(distributionId, { lines })
+      showToast.success('Products dispatched.')
+      onDispatched?.(updated)
+    } catch (error) {
+      showToast.error(
+        error instanceof Error ? error.message : 'Failed to dispatch the allocation.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // Everything the summary bar shows comes off the fetched distribution; the
+  // props stay as fallbacks for when it is still loading.
+  const source = distribution?.sourceName?.trim() || distribution?.sourceId
+  const destination =
+    distribution?.destinationName?.trim() || distribution?.destinationId
+
   return (
     <div className="flex w-full flex-1 flex-col items-start gap-4">
       <div className="flex w-full flex-1 flex-col items-start gap-4">
@@ -394,7 +467,7 @@ const DispatchProducts = ({
               Dispatch Products
             </h1>
             <p className="text-label-l4 font-regular text-pneutral-600">
-              Prepare and dispatch the products to {destinationStore}.
+              Prepare and dispatch the products to {destination || destinationStore}.
             </p>
           </div>
 
@@ -411,19 +484,36 @@ const DispatchProducts = ({
         </div>
 
         <TransferSummaryBar
-          transferNo={transferNo}
-          fromStore={fromStore}
-          fromCode={fromCode}
-          toStore={destinationStore}
-          toCode={toCode}
-          requestedOn={requestedOn}
-          requestedBy={requestedBy}
+          transferNo={distribution?.allocationNo ?? transferNo}
+          fromStore={source || fromStore}
+          fromCode={distribution?.sourceId ?? fromCode}
+          toStore={destination || destinationStore}
+          toCode={distribution?.destinationId ?? toCode}
+          requestedOn={
+            distribution?.allocationDate
+              ? formatDateTime(distribution.allocationDate)
+              : requestedOn
+          }
+          requestedBy={
+            distribution?.allocationRequestedBy ||
+            distribution?.createdBy ||
+            requestedBy
+          }
         />
 
-        <ProductsToDispatch />
+        <ProductsToDispatch
+          items={items}
+          onFieldChange={handleFieldChange}
+          loading={loading}
+        />
       </div>
 
-      <DispatchProductsActions onBack={onBack} onDispatch={onDispatch} />
+      <DispatchProductsActions
+        onBack={onBack}
+        onDispatch={handleDispatch}
+        submitting={submitting}
+        disabled={loading || items.length === 0}
+      />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   Check,
   Printer,
@@ -15,6 +15,12 @@ import {
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import type {
+  DistributionStatus,
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+} from '@/types/WarehouseDistributionData'
+import { formatDate, formatDateTime } from '@/utils/formatDate'
 
 interface PendingReceiptProps {
   referenceNo?: string
@@ -25,6 +31,8 @@ interface PendingReceiptProps {
   requestedOn?: string
   requestedBy?: string
   dispatchedOn?: string
+  // The distribution as the dispatch call returned it — the source for this summary.
+  distribution?: WarehouseDistributionData | null
   onPrintDispatchNote?: () => void
   onBack?: () => void
   onClose?: () => void
@@ -37,13 +45,36 @@ interface TransferStep {
   state: StepState
 }
 
-const transferSteps: TransferStep[] = [
-  { label: 'Requested', state: 'done' },
-  { label: 'Accepted', state: 'done' },
-  { label: 'Dispatched', state: 'done' },
-  { label: 'Pending Receipt', state: 'current' },
-  { label: 'Completed', state: 'upcoming' },
-]
+const STEP_LABELS = [
+  'Requested',
+  'Accepted',
+  'Dispatched',
+  'Pending Receipt',
+  'Completed',
+] as const
+
+// Where the lifecycle sits on the 5-step bar. This screen is reached straight after a
+// dispatch, so "Pending Receipt" is the live step unless the destination already received.
+const currentStepIndexFor = (status?: DistributionStatus): number => {
+  switch (status) {
+    case 'STOCK_RECEIVED':
+      return 4
+    case 'DISTRIBUTION_CREATED':
+      return 2
+    case 'PRODUCTS_DISPATCHED':
+    default:
+      return 3
+  }
+}
+
+const buildTransferSteps = (status?: DistributionStatus): TransferStep[] => {
+  const currentIndex = currentStepIndexFor(status)
+  return STEP_LABELS.map((label, index) => ({
+    label,
+    state:
+      index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+  }))
+}
 
 const StepCircle = ({ step, index }: { step: TransferStep; index: number }) => {
   if (step.state === 'done') {
@@ -75,12 +106,12 @@ const stepLabelClass = (state: StepState) => {
   return 'font-regular text-pneutral-900'
 }
 
-const TransferStatusStepper = () => (
+const TransferStatusStepper = ({ steps }: { steps: TransferStep[] }) => (
   <div className="flex w-full flex-1 flex-col gap-5 rounded-2xl bg-white p-4 shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)]">
     <p className="text-label-l5 font-semibold text-secondary-700">Transfer Status</p>
 
     <div className="flex w-full items-center">
-      {transferSteps.map((step, index) => (
+      {steps.map((step, index) => (
         <React.Fragment key={step.label}>
           <div className="flex flex-col items-center gap-2">
             <StepCircle step={step} index={index} />
@@ -91,8 +122,12 @@ const TransferStatusStepper = () => (
             </span>
           </div>
 
-          {index < transferSteps.length - 1 && (
-            <div className="h-0.5 flex-1 bg-success-600" />
+          {index < steps.length - 1 && (
+            <div
+              className={`h-0.5 flex-1 ${
+                step.state === 'done' ? 'bg-success-600' : 'bg-pneutral-200'
+              }`}
+            />
           )}
         </React.Fragment>
       ))}
@@ -220,6 +255,8 @@ const TransferSummaryBar = ({
 
 type ProductIcon = 'pill' | 'box'
 
+type LineReceiptStatus = 'pending_receipt' | 'received'
+
 interface DispatchedProductRow {
   id: number
   icon: ProductIcon
@@ -229,41 +266,66 @@ interface DispatchedProductRow {
   dispatchedQty: string
   pendingReceiptQty: string
   expiryDate: string
-  status: 'pending_receipt'
+  status: LineReceiptStatus
 }
 
-const dispatchedProducts: DispatchedProductRow[] = [
-  {
-    id: 1,
-    icon: 'pill',
-    productName: 'Dolo 650 Tablet',
-    packInfo: 'Strip of 10 Tablets',
-    batchNo: 'B24001',
-    dispatchedQty: '20 Strip',
-    pendingReceiptQty: '20 Strip',
-    expiryDate: '31-Dec-2027',
-    status: 'pending_receipt',
-  },
-  {
-    id: 2,
-    icon: 'box',
-    productName: 'Crocin Syrup',
-    packInfo: 'Bottle of 60 ml',
-    batchNo: 'C12001',
-    dispatchedQty: '15 Bottle',
-    pendingReceiptQty: '15 Bottle',
-    expiryDate: '31-Aug-2027',
-    status: 'pending_receipt',
-  },
-]
+// "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
+const iconForUnit = (unit?: string): ProductIcon => {
+  const u = (unit ?? '').toLowerCase()
+  return u.includes('strip') || u.includes('tablet') || u.includes('tab')
+    ? 'pill'
+    : 'box'
+}
 
-const receiptStatusLabel: Record<DispatchedProductRow['status'], string> = {
+// One dispatched line -> one summary row. Anything dispatched but not yet confirmed
+// by the destination is still pending receipt.
+const mapLineToDispatchedRow = (
+  line: WarehouseDistributionLineData,
+  index: number
+): DispatchedProductRow => {
+  const unit = line.packaging?.purchaseUnit ?? ''
+  const contains = line.packaging?.purchaseUnitContains
+  const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
+  const received = line.receivedQuantity
+  const pending = received != null ? Math.max(dispatched - received, 0) : dispatched
+  const withUnit = (qty: number) => (unit ? `${qty} ${unit}` : String(qty))
+
+  return {
+    id: line.warehouseDistributionDetailsId ?? index + 1,
+    icon: iconForUnit(unit),
+    productName: line.product?.productName ?? line.productId,
+    packInfo:
+      unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    dispatchedQty: withUnit(dispatched),
+    pendingReceiptQty: withUnit(pending),
+    expiryDate: formatDate(line.batch?.expiryDate),
+    status: pending === 0 ? 'received' : 'pending_receipt',
+  }
+}
+
+const receiptStatusLabel: Record<LineReceiptStatus, string> = {
   pending_receipt: 'Pending Receipt',
+  received: 'Received',
 }
 
-const ReceiptStatusBadge = ({ status }: { status: DispatchedProductRow['status'] }) => (
-  <span className="inline-flex items-center gap-1 rounded-full border border-danger-600 bg-danger-50 px-3 py-1 text-label-l3 font-medium text-danger-600">
-    <span className="size-1.5 shrink-0 rounded-full bg-danger-600" />
+const receiptStatusClass: Record<LineReceiptStatus, string> = {
+  pending_receipt: 'border-danger-600 bg-danger-50 text-danger-600',
+  received: 'border-success-600 bg-success-50 text-success-800',
+}
+
+const receiptStatusDotClass: Record<LineReceiptStatus, string> = {
+  pending_receipt: 'bg-danger-600',
+  received: 'bg-success-600',
+}
+
+const ReceiptStatusBadge = ({ status }: { status: LineReceiptStatus }) => (
+  <span
+    className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-label-l3 font-medium ${receiptStatusClass[status]}`}
+  >
+    <span
+      className={`size-1.5 shrink-0 rounded-full ${receiptStatusDotClass[status]}`}
+    />
     {receiptStatusLabel[status]}
   </span>
 )
@@ -346,7 +408,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
 ]
 
-const DispatchedProductsCard = () => (
+const DispatchedProductsCard = ({ rows }: { rows: DispatchedProductRow[] }) => (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Dispatched Products
@@ -354,7 +416,7 @@ const DispatchedProductsCard = () => (
 
     <TableWithoutGrid
       columns={dispatchedProductColumns}
-      data={dispatchedProducts}
+      data={rows}
       rowKey={(row) => row.id.toString()}
       headerVariant="primary"
       container="box"
@@ -402,26 +464,47 @@ const PendingReceipt = ({
   requestedOn = '05-Aug-2026 09:15 AM',
   requestedBy = 'Warehouse Admin',
   dispatchedOn = '05-Aug-2026 09:15 AM',
+  distribution,
   onPrintDispatchNote,
   onBack,
   onClose,
 }: PendingReceiptProps) => {
+  const productRows = useMemo(
+    () => (distribution?.lines ?? []).map(mapLineToDispatchedRow),
+    [distribution]
+  )
+
+  const steps = buildTransferSteps(distribution?.currentStatus)
+  const isReceived = distribution?.currentStatus === 'STOCK_RECEIVED'
+
+  const allocationNo = distribution?.allocationNo ?? referenceNo
+  const source = distribution?.sourceName?.trim() || distribution?.sourceId
+  const destination =
+    distribution?.destinationName?.trim() || distribution?.destinationId
+  const destinationLabel = destination || destinationStore
+
+  // The dispatch timestamp lives in the status history rather than on the header.
+  const dispatchedAt = distribution?.statuses?.find(
+    (entry) => entry.status === 'PRODUCTS_DISPATCHED'
+  )?.createdAt
+
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <div className="flex w-full flex-col items-start gap-5 sm:flex-row">
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-h5 font-semibold text-pneutral-900">
-              Pending Receipt
+              {isReceived ? 'Transfer Completed' : 'Pending Receipt'}
             </h1>
             <span className="rounded-lg bg-secondary-100 px-3 py-1 text-label-l4 font-semibold text-secondary-700">
-              {referenceNo}
+              {allocationNo}
             </span>
           </div>
 
           <p className="text-p3 font-regular text-pneutral-500">
-            Products have been dispatched. Awaiting receipt confirmation from{' '}
-            {destinationStore}.
+            {isReceived
+              ? `Stock has been received and recorded by ${destinationLabel}.`
+              : `Products have been dispatched. Awaiting receipt confirmation from ${destinationLabel}.`}
           </p>
         </div>
 
@@ -436,25 +519,37 @@ const PendingReceipt = ({
       </div>
 
       <div className="flex w-full flex-col items-stretch gap-4 rounded-2xl border border-pneutral-200 bg-white p-4 lg:flex-row">
-        <TransferStatusStepper />
+        <TransferStatusStepper steps={steps} />
         <CurrentStatusPanel
-          statusLabel="Pending Receipt"
-          description={`Awaiting stock receipt confirmation from ${destinationStore}.`}
+          statusLabel={isReceived ? 'Completed' : 'Pending Receipt'}
+          description={
+            isReceived
+              ? `${destinationLabel} has confirmed the stock receipt.`
+              : `Awaiting stock receipt confirmation from ${destinationLabel}.`
+          }
         />
       </div>
 
       <TransferSummaryBar
-        transferNo={referenceNo}
-        fromStore={fromStore}
-        fromCode={fromCode}
-        toStore={destinationStore}
-        toCode={toCode}
-        requestedOn={requestedOn}
-        requestedBy={requestedBy}
-        dispatchedOn={dispatchedOn}
+        transferNo={allocationNo}
+        fromStore={source || fromStore}
+        fromCode={distribution?.sourceId ?? fromCode}
+        toStore={destinationLabel}
+        toCode={distribution?.destinationId ?? toCode}
+        requestedOn={
+          distribution?.allocationDate
+            ? formatDateTime(distribution.allocationDate)
+            : requestedOn
+        }
+        requestedBy={
+          distribution?.allocationRequestedBy ||
+          distribution?.createdBy ||
+          requestedBy
+        }
+        dispatchedOn={dispatchedAt ? formatDateTime(dispatchedAt) : dispatchedOn}
       />
 
-      <DispatchedProductsCard />
+      <DispatchedProductsCard rows={productRows} />
 
       <PendingReceiptActions onBack={onBack} onClose={onClose} />
     </div>

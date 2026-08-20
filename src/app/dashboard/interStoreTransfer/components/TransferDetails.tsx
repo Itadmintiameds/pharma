@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   Users,
   CalendarRange,
@@ -14,6 +14,11 @@ import {
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import type {
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+} from '@/types/WarehouseDistributionData'
+import { formatDate, formatDateTime } from '@/utils/formatDate'
 
 export type TransferDetailsStatus =
   | 'awaiting_acceptance'
@@ -26,6 +31,8 @@ interface TransferDetailsProps {
   referenceNo?: string
   assignedBy?: string
   status?: TransferDetailsStatus
+  distribution?: WarehouseDistributionData | null
+  loading?: boolean
   onBack?: () => void
   onAccept?: () => void
 }
@@ -80,7 +87,6 @@ interface StoreBlockProps {
   iconColor: string
   name: string
   code: string
-  address: string
 }
 
 const StoreBlock = ({
@@ -90,7 +96,6 @@ const StoreBlock = ({
   iconColor,
   name,
   code,
-  address,
 }: StoreBlockProps) => (
   <div className="flex w-full flex-col items-start gap-1 md:w-64">
     <p className="text-p3 font-regular text-pneutral-600">{label}</p>
@@ -101,13 +106,28 @@ const StoreBlock = ({
       <div className="flex min-w-0 flex-col items-start gap-1">
         <p className="text-label-l4 font-semibold text-pneutral-900">{name}</p>
         <p className="text-p3 font-regular text-pneutral-600">{code}</p>
-        <p className="text-p3 font-regular text-pneutral-900">{address}</p>
       </div>
     </div>
   </div>
 )
 
-const TransferInformationCard = () => (
+const TransferInformationCard = ({
+  requestedBy,
+  requestedOn,
+  sourceName,
+  sourceCode,
+  destinationName,
+  destinationCode,
+  destinationIsWarehouse,
+}: {
+  requestedBy: string
+  requestedOn: string
+  sourceName: string
+  sourceCode: string
+  destinationName: string
+  destinationCode: string
+  destinationIsWarehouse: boolean
+}) => (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Transfer Information
@@ -118,13 +138,13 @@ const TransferInformationCard = () => (
         <InfoRow
           Icon={Users}
           label="Requested By"
-          value="Warehouse Admin"
+          value={requestedBy}
           valueClass="text-secondary-700"
         />
         <InfoRow
           Icon={CalendarRange}
           label="Request Date & Time"
-          value="05-Aug-2026 09:15 AM"
+          value={requestedOn}
         />
       </div>
 
@@ -134,9 +154,8 @@ const TransferInformationCard = () => (
           iconBg="bg-secondary-50"
           Icon={Warehouse}
           iconColor="text-secondary-700"
-          name="Hebbal Medical Store"
-          code="STO0008"
-          address="#23, 3rd Cross, Hebbal, Bangalore - 560024, Karnataka"
+          name={sourceName}
+          code={sourceCode}
         />
 
         <div className="flex shrink-0 items-center justify-center self-center rounded-full bg-pneutral-50 p-3">
@@ -146,11 +165,10 @@ const TransferInformationCard = () => (
         <StoreBlock
           label="Destination Store (Receiving)"
           iconBg="bg-success-50"
-          Icon={Store}
+          Icon={destinationIsWarehouse ? Warehouse : Store}
           iconColor="text-success-700"
-          name="Rajajinagar Medical Store"
-          code="STO0012"
-          address="#23, 3rd Cross, Hebbal, Bangalore - 560024, Karnataka"
+          name={destinationName}
+          code={destinationCode}
         />
       </div>
     </div>
@@ -167,31 +185,38 @@ interface RequestedProductRow {
   batchNo: string
   expiryDate: string
   requestedQty: string
-  availableStock: string
 }
 
-const requestedProducts: RequestedProductRow[] = [
-  {
-    id: 1,
-    icon: 'pill',
-    productName: 'Dolo 650 Tablet',
-    packInfo: 'Strip of 10 Tablets',
-    batchNo: 'B24001',
-    expiryDate: '31-Dec-2027',
-    requestedQty: '20 Strip',
-    availableStock: '120 Strip',
-  },
-  {
-    id: 2,
-    icon: 'box',
-    productName: 'Crocin Syrup',
-    packInfo: 'Bottle of 60 ml',
-    batchNo: 'C12001',
-    expiryDate: '31-Aug-2027',
-    requestedQty: '15 Bottle',
-    availableStock: '25 Bottle',
-  },
-]
+// "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
+const iconForUnit = (unit?: string): ProductIcon => {
+  const u = (unit ?? '').toLowerCase()
+  return u.includes('strip') || u.includes('tablet') || u.includes('tab')
+    ? 'pill'
+    : 'box'
+}
+
+// One issued line -> one read-only review row. Quantities are the issued amounts;
+// nothing has been dispatched yet at this point in the flow.
+const mapLineToRequestedRow = (
+  line: WarehouseDistributionLineData,
+  index: number
+): RequestedProductRow => {
+  const unit = line.packaging?.purchaseUnit ?? ''
+  const contains = line.packaging?.purchaseUnitContains
+
+  return {
+    id: line.warehouseDistributionDetailsId ?? index + 1,
+    icon: iconForUnit(unit),
+    productName: line.product?.productName ?? line.productId,
+    packInfo:
+      unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    expiryDate: formatDate(line.batch?.expiryDate),
+    requestedQty: unit
+      ? `${line.issueQuantity ?? 0} ${unit}`
+      : String(line.issueQuantity ?? 0),
+  }
+}
 
 const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
   {
@@ -254,19 +279,15 @@ const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
       </span>
     ),
   },
-  {
-    header: 'Available Stock',
-    width: 'w-32',
-    align: 'center',
-    render: (row) => (
-      <span className="text-label-l4 font-regular text-success-600">
-        {row.availableStock}
-      </span>
-    ),
-  },
 ]
 
-const RequestedProductsCard = () => (
+const RequestedProductsCard = ({
+  rows,
+  loading,
+}: {
+  rows: RequestedProductRow[]
+  loading?: boolean
+}) => (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Requested Products
@@ -274,10 +295,11 @@ const RequestedProductsCard = () => (
 
     <TableWithoutGrid
       columns={requestedProductColumns}
-      data={requestedProducts}
+      data={rows}
       rowKey={(row) => row.id.toString()}
       headerVariant="primary"
       container="box"
+      loading={loading}
     />
   </div>
 )
@@ -288,9 +310,11 @@ const actionButtonClass =
 const TransferDetailsActions = ({
   onBack,
   onAccept,
+  acceptDisabled,
 }: {
   onBack?: () => void
   onAccept?: () => void
+  acceptDisabled?: boolean
 }) => (
   <div className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -305,7 +329,8 @@ const TransferDetailsActions = ({
     <button
       type="button"
       onClick={onAccept}
-      className={`${actionButtonClass} w-[180px] bg-primary-800 text-pneutral-50`}
+      disabled={acceptDisabled}
+      className={`${actionButtonClass} w-[180px] bg-primary-800 text-pneutral-50 disabled:opacity-50`}
     >
       Accept
       <ArrowRight className="size-5" strokeWidth={2} />
@@ -317,9 +342,22 @@ const TransferDetails = ({
   referenceNo = 'PT000021',
   assignedBy = 'Warehouse Admin',
   status = 'awaiting_acceptance',
+  distribution,
+  loading,
   onBack,
   onAccept,
 }: TransferDetailsProps) => {
+  const productRows = useMemo(
+    () => (distribution?.lines ?? []).map(mapLineToRequestedRow),
+    [distribution]
+  )
+
+  // Who asked for the transfer: the requesting store if the API recorded one,
+  // otherwise the user who created the allocation.
+  const requestedBy =
+    distribution?.allocationRequestedBy || distribution?.createdBy || assignedBy
+  const allocationNo = distribution?.allocationNo ?? referenceNo
+
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <div className="flex w-full flex-col items-start gap-5 sm:flex-row">
@@ -329,12 +367,12 @@ const TransferDetails = ({
               Inter-Store Transfer Details
             </h1>
             <span className="rounded-lg bg-secondary-100 px-3 py-1 text-label-l4 font-semibold text-secondary-700">
-              {referenceNo}
+              {allocationNo}
             </span>
           </div>
 
           <p className="text-label-l4 font-regular text-pneutral-600">
-            Review transfer request from {assignedBy} and take action.
+            Review transfer request from {requestedBy} and take action.
           </p>
         </div>
 
@@ -350,9 +388,23 @@ const TransferDetails = ({
         </div>
       </div>
 
-      <TransferInformationCard />
-      <RequestedProductsCard />
-      <TransferDetailsActions onBack={onBack} onAccept={onAccept} />
+      <TransferInformationCard
+        requestedBy={requestedBy}
+        requestedOn={formatDateTime(distribution?.allocationDate)}
+        sourceName={distribution?.sourceName?.trim() || distribution?.sourceId || '—'}
+        sourceCode={distribution?.sourceId ?? '—'}
+        destinationName={
+          distribution?.destinationName?.trim() || distribution?.destinationId || '—'
+        }
+        destinationCode={distribution?.destinationId ?? '—'}
+        destinationIsWarehouse={distribution?.destinationType === 'WAREHOUSE'}
+      />
+      <RequestedProductsCard rows={productRows} loading={loading} />
+      <TransferDetailsActions
+        onBack={onBack}
+        onAccept={onAccept}
+        acceptDisabled={loading || productRows.length === 0}
+      />
     </div>
   )
 }
