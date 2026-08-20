@@ -147,6 +147,16 @@ export interface WarehouseDistributionTransferKpi {
   completed: number;
 }
 
+// Stat-card figures for the Transfer Explorer, computed server-side over the
+// distributions the current store requested/originated.
+// GET /warehouse/distribution/warehouse/requested-by/kpi.
+export interface WarehouseDistributionKpi {
+  totalTransfers: number;
+  completed: number;
+  pending: number;
+  readyToDispatch: number;
+}
+
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
   productId: string;

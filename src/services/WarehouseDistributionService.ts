@@ -9,6 +9,7 @@ import {
   WarehouseDistributionSummary,
   WarehouseDistributionReceiptKpi,
   WarehouseDistributionTransferKpi,
+  WarehouseDistributionKpi,
 } from '@/types/WarehouseDistributionData';
 
 // Create a distribution / stock-transfer allocation.
@@ -46,6 +47,20 @@ export const getWarehouseDistributionList = async (): Promise<
     return response.data ?? [];
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the warehouse distribution list.');
+  }
+};
+
+// Transfer Explorer KPIs: totals/completed/pending/ready-to-dispatch over the
+// distributions the current store originated, computed server-side.
+// GET /warehouse/distribution/warehouse/requested-by/kpi -> WarehouseDistributionController#getRequestedByKpi
+export const getRequestedByKpi = async (): Promise<WarehouseDistributionKpi> => {
+  try {
+    const response = await api.get(
+      '/warehouse/distribution/warehouse/requested-by/kpi'
+    );
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch warehouse distribution KPIs.');
   }
 };
 

@@ -19,6 +19,7 @@ import {
 import {
   createAllocation,
   dispatchAllocation,
+  getRequestedByKpi,
   getWarehouseDistributionList,
 } from '@/services/WarehouseDistributionService'
 import { showToast } from '@/app/components/common/Toast'
@@ -26,6 +27,7 @@ import { formatDate, formatDateTime } from '@/utils/formatDate'
 import {
   DistributionStatus,
   WarehouseDistributionData,
+  WarehouseDistributionKpi,
   WarehouseDistributionSummaryData,
 } from '@/types/WarehouseDistributionData'
 
@@ -34,10 +36,13 @@ type View = 'list' | 'wizard' | 'summary' | 'dispatch'
 const cardShadow =
   'shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)]'
 
-interface StatCardData {
+// Which KPI figure fills each card. 'total' shows an "All time" caption; the rest
+// show their share of the total transfers.
+type StatCardKey = 'total' | 'completed' | 'pending' | 'readyToDispatch'
+
+interface StatCardTemplate {
+  key: StatCardKey
   label: string
-  value: string
-  caption: string
   iconBg: string
   valueColor: string
   icon: string
@@ -45,11 +50,15 @@ interface StatCardData {
   iconHeight: number
 }
 
-const statCards: StatCardData[] = [
+interface StatCardData extends StatCardTemplate {
+  value: string
+  caption: string
+}
+
+const statCardTemplates: StatCardTemplate[] = [
   {
+    key: 'total',
     label: 'Total Transfers',
-    value: '128',
-    caption: 'All time',
     iconBg: 'bg-secondary-50',
     valueColor: 'text-secondary-700',
     icon: '/warehouseDistribution/transferExplorer/statCards/total-transfers.svg',
@@ -57,9 +66,8 @@ const statCards: StatCardData[] = [
     iconHeight: 14.625,
   },
   {
+    key: 'completed',
     label: 'Completed',
-    value: '86',
-    caption: '67.19%',
     iconBg: 'bg-success-50',
     valueColor: 'text-success-700',
     icon: '/warehouseDistribution/transferExplorer/statCards/completed.svg',
@@ -67,9 +75,8 @@ const statCards: StatCardData[] = [
     iconHeight: 14.625,
   },
   {
+    key: 'pending',
     label: 'Pending',
-    value: '23',
-    caption: '17.97%',
     iconBg: 'bg-danger-50',
     valueColor: 'text-danger-600',
     icon: '/warehouseDistribution/transferExplorer/statCards/pending.svg',
@@ -77,9 +84,8 @@ const statCards: StatCardData[] = [
     iconHeight: 14.4,
   },
   {
+    key: 'readyToDispatch',
     label: 'Ready to Dispatch',
-    value: '23',
-    caption: '7.97%',
     iconBg: 'bg-info-50',
     valueColor: 'text-info-600',
     icon: '/warehouseDistribution/transferExplorer/statCards/ready-to-dispatch.svg',
@@ -87,6 +93,30 @@ const statCards: StatCardData[] = [
     iconHeight: 12.3694,
   },
 ]
+
+// Percentage of the total, to 2 decimals — matches the caption format the design uses.
+const asShareOfTotal = (part: number, total: number): string =>
+  total > 0 ? `${((part / total) * 100).toFixed(2)}%` : '0%'
+
+// Fold the server KPI figures into the card templates. Falls back to zeros before
+// the KPI has loaded so the cards render in a stable, well-defined state.
+const buildStatCards = (kpi: WarehouseDistributionKpi | null): StatCardData[] => {
+  const totalTransfers = kpi?.totalTransfers ?? 0
+  const valueFor: Record<StatCardKey, number> = {
+    total: totalTransfers,
+    completed: kpi?.completed ?? 0,
+    pending: kpi?.pending ?? 0,
+    readyToDispatch: kpi?.readyToDispatch ?? 0,
+  }
+  return statCardTemplates.map((template) => ({
+    ...template,
+    value: String(valueFor[template.key]),
+    caption:
+      template.key === 'total'
+        ? 'All time'
+        : asShareOfTotal(valueFor[template.key], totalTransfers),
+  }))
+}
 
 const StatCard = ({ card }: { card: StatCardData }) => (
   <div
@@ -442,6 +472,8 @@ const page = () => {
   // just-created or just-dispatched allocation on the way back to it).
   const [transferList, setTransferList] = useState<WarehouseDistributionSummaryData[]>([])
   const [isLoadingTransferList, setIsLoadingTransferList] = useState(true)
+  // Transfer Explorer stat cards, computed server-side (see getRequestedByKpi).
+  const [kpi, setKpi] = useState<WarehouseDistributionKpi | null>(null)
 
   useEffect(() => {
     if (view !== 'list') return
@@ -449,8 +481,14 @@ const page = () => {
     const fetchTransferList = async () => {
       setIsLoadingTransferList(true)
       try {
-        const data = await getWarehouseDistributionList()
-        if (active) setTransferList(data)
+        const [data, kpiData] = await Promise.all([
+          getWarehouseDistributionList(),
+          getRequestedByKpi(),
+        ])
+        if (active) {
+          setTransferList(data)
+          setKpi(kpiData)
+        }
       } catch (err) {
         console.error('Failed to fetch the warehouse distribution list', err)
       } finally {
@@ -462,6 +500,8 @@ const page = () => {
       active = false
     }
   }, [view])
+
+  const statCards = buildStatCards(kpi)
 
   const updateDraft = (patch: Partial<AllocationDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }))
