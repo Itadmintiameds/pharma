@@ -103,8 +103,9 @@ const TypeIcon = ({ src, size = 16 }: { src: string; size?: number }) => (
 );
 
 /**
- * The eight values of the backend CustomerType enum — seven sit on the first
- * row and Insurance wraps onto the second.
+ * The eight values of the backend CustomerType enum, in their canonical order.
+ * The picker renders ORDERED_CUSTOMER_TYPES below instead, which floats the
+ * ones that actually work to the front.
  */
 const CUSTOMER_TYPES: {
   label: string;
@@ -132,6 +133,16 @@ const ENABLED_CUSTOMER_TYPES: CustomerType[] = [
   "OP_PATIENT",
   "IP_PATIENT",
   "DAYCARE",
+];
+
+/**
+ * Picker order: everything the counter can actually bill first, the
+ * coming-soon ones after. Derived from ENABLED_CUSTOMER_TYPES rather than
+ * hand-sorted, so enabling a type moves its chip up on its own.
+ */
+const ORDERED_CUSTOMER_TYPES = [
+  ...CUSTOMER_TYPES.filter((type) => ENABLED_CUSTOMER_TYPES.includes(type.value)),
+  ...CUSTOMER_TYPES.filter((type) => !ENABLED_CUSTOMER_TYPES.includes(type.value)),
 ];
 
 /** Types that bill a patient rather than a walk-in customer. */
@@ -603,9 +614,10 @@ const Billing: React.FC<BillingProps> = ({
           Customer Information
         </div>
 
-        {/* Customer types — 7 on the first row, the 8th wraps below */}
+        {/* Customer types — 7 on the first row, the 8th wraps below.
+            Selectable ones lead; the disabled "coming soon" chips trail. */}
         <div className="grid grid-cols-4 md:grid-cols-7 gap-4">
-          {CUSTOMER_TYPES.map((type) => {
+          {ORDERED_CUSTOMER_TYPES.map((type) => {
             const isSelected = customer.customerType === type.value;
             const isEnabled = ENABLED_CUSTOMER_TYPES.includes(type.value);
             return (

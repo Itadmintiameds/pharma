@@ -32,8 +32,12 @@ const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, v
 /** A bank-detail line: label, colon, then the value on the same 20px baseline. */
 const BankRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="h-5 flex items-center gap-2 text-[14px] leading-5">
-    <span className="font-normal text-pneutral-800 whitespace-nowrap">{label}</span>
-    <span className="font-normal text-pneutral-800">:</span>
+    {/* Fixed, not content-width: "Bank Name" and "A/C No" are different
+        lengths, so a shrink-to-fit label put each row's colon at its own
+        indent and the card read as two unrelated lines. Sized to the longest
+        label in either column, which lines every colon up down the card. */}
+    <span className="w-[88px] shrink-0 font-normal text-pneutral-800 whitespace-nowrap">{label}</span>
+    <span className="w-[5px] shrink-0 font-normal text-pneutral-800">:</span>
     <span className="flex-1 min-w-0 truncate font-semibold text-pneutral-900">{value}</span>
   </div>
 );
@@ -355,12 +359,18 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
             ].map((col, i, all) => (
               <div
                 key={col.label}
-                className={`flex-1 min-w-0 h-full px-2 py-4 flex flex-col justify-between ${
+                // Centred, not flush left: the columns are narrow and their
+                // labels and values are different lengths, so left alignment
+                // left each pair looking unrelated to its own cell.
+                // px-1, down from px-2: at 16px "₹ 54,330.40" and "CGST (%)"
+                // are close to a seventh of the strip, and the padding is the
+                // only place left to find the room without wrapping them.
+                className={`flex-1 min-w-0 h-full px-1 py-4 flex flex-col items-center justify-between text-center ${
                   i < all.length - 1 ? "border-r border-pneutral-200" : ""
                 }`}
               >
-                <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800 whitespace-nowrap">{col.label}</span>
-                <span className="h-5 text-[14px] leading-5 font-semibold text-pneutral-900 whitespace-nowrap">{col.value}</span>
+                <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">{col.label}</span>
+                <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">{col.value}</span>
               </div>
             ))}
           </div>
@@ -385,15 +395,20 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
                 { label: "Items", value: String(totalItemsCount) },
                 { label: "QTY", value: String(totalQtyCount) },
                 { label: "CR/DB Round", value: "₹ 0.00" },
-              ].map((row, i) => (
+              ].map((row) => (
+                // No rule between the rows — the card's own border already
+                // groups them, and three hairlines across a 230px box read as
+                // a table of one column.
                 <div
                   key={row.label}
-                  className={`w-full h-12 px-3 flex items-center justify-between gap-3 ${
-                    i > 0 ? "border-t border-pneutral-200" : ""
-                  }`}
+                  className="w-full h-12 px-3 flex items-center gap-3"
                 >
-                  <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800 whitespace-nowrap">{row.label}</span>
-                  <span className="h-5 text-[14px] leading-5 font-normal text-pneutral-800">:</span>
+                  {/* Same fixed-label trick as the bank card: sized to
+                      "CR/DB Round" so all three colons sit on one line, near
+                      the middle of the card, instead of drifting with each
+                      label's length. */}
+                  <span className="h-5 w-[104px] shrink-0 text-[14px] leading-5 font-normal text-pneutral-800 whitespace-nowrap">{row.label}</span>
+                  <span className="h-5 w-[5px] shrink-0 text-[14px] leading-5 font-normal text-pneutral-800">:</span>
                   <span className="h-5 flex-1 text-right text-[14px] leading-5 font-semibold text-pneutral-900 truncate">{row.value}</span>
                 </div>
               ))}
