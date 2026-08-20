@@ -21,6 +21,19 @@ export class ProductService {
     }
   }
 
+  // Batches at a specific pharmacy rather than the caller's currently active one —
+  // e.g. the source pharmacy chosen for a pharmacy-to-pharmacy transfer, which may
+  // differ from the pharmacy the caller is scoped to via X-Pharmacy-Id.
+  static async getBatchesForPharmacy(pharmacyId: string) {
+    try {
+      const response = await api.get(`/product/batches/pharmacy/${pharmacyId}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching batches for pharmacy ${pharmacyId}:`, error);
+      throw error;
+    }
+  }
+
   static async getBatchById(batchId: string) {
     try {
       const response = await api.get(`/product/batch/${batchId}`);

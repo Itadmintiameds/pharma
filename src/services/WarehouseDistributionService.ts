@@ -3,6 +3,7 @@ import { handleApiError } from '@/utils/errorHandler';
 import {
   CreateWarehouseDistributionRequest,
   WarehouseDistributionData,
+  WarehouseDistributionSummaryData,
 } from '@/types/WarehouseDistributionData';
 
 // Create a distribution / stock-transfer allocation.
@@ -26,6 +27,20 @@ export const getNextAllocationNo = async (): Promise<string> => {
     return response.data?.allocationNo ?? '';
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the next allocation number.');
+  }
+};
+
+// List this warehouse's distributions (incoming + outgoing) as summary rows,
+// for the Transfer Explorer table.
+// GET /warehouse/distribution/warehouse/list -> WarehouseDistributionController#getAll
+export const getWarehouseDistributionList = async (): Promise<
+  WarehouseDistributionSummaryData[]
+> => {
+  try {
+    const response = await api.get('/warehouse/distribution/warehouse/list');
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the warehouse distribution list.');
   }
 };
 

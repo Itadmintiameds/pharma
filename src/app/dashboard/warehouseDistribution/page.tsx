@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import AllocationWizardLayout from './components/AllocationWizardLayout'
 import CreateAllocation from './components/CreateAllocation'
 import DistributionType from './components/DistributionType'
@@ -16,10 +16,18 @@ import {
   createInitialAllocationDraft,
   resolveSourceLabel,
 } from './allocationDraft'
-import { createAllocation, dispatchAllocation } from '@/services/WarehouseDistributionService'
+import {
+  createAllocation,
+  dispatchAllocation,
+  getWarehouseDistributionList,
+} from '@/services/WarehouseDistributionService'
 import { showToast } from '@/app/components/common/Toast'
-import { formatDate } from '@/utils/formatDate'
-import { WarehouseDistributionData } from '@/types/WarehouseDistributionData'
+import { formatDate, formatDateTime } from '@/utils/formatDate'
+import {
+  DistributionStatus,
+  WarehouseDistributionData,
+  WarehouseDistributionSummaryData,
+} from '@/types/WarehouseDistributionData'
 
 type View = 'list' | 'wizard' | 'summary' | 'dispatch'
 
@@ -215,63 +223,26 @@ interface TransferRow {
   status: string
 }
 
-const transferRows: TransferRow[] = [
-  {
-    transferNo: 'PT000021',
-    dateTime: '05-Aug 11:20 AM',
-    fromName: 'Hebbal Medical Store',
-    fromCode: 'STO0008',
-    toName: 'Rajajinagar Medical Store',
-    toCode: 'STO0012',
-    products: 2,
-    qty: '35 PU',
-    status: 'Completed',
-  },
-  {
-    transferNo: 'PT000020',
-    dateTime: '05-Aug 11:20 AM',
-    fromName: 'Jayanagar Medical Store',
-    fromCode: 'STO0009',
-    toName: 'Hebbal Medical Store',
-    toCode: 'STO0008',
-    products: 5,
-    qty: '18 PU',
-    status: 'Pending Receipt',
-  },
-  {
-    transferNo: 'PT000019',
-    dateTime: '05-Aug 11:20 AM',
-    fromName: 'Malleshwaram Medical Store',
-    fromCode: 'STO0010',
-    toName: 'Rajajinagar Medical Store',
-    toCode: 'STO0012',
-    products: 1,
-    qty: '10 PU',
-    status: 'Rejected',
-  },
-  {
-    transferNo: 'PT000018',
-    dateTime: '05-Aug 11:20 AM',
-    fromName: 'Hebbal Medical Store',
-    fromCode: 'STO0008',
-    toName: 'Jayanagar Medical Store',
-    toCode: 'STO0009',
-    products: 3,
-    qty: '27 PU',
-    status: 'Ready to Dispatch',
-  },
-  {
-    transferNo: 'PT000017',
-    dateTime: '05-Aug 11:20 AM',
-    fromName: 'Rajajinagar Medical Store',
-    fromCode: 'STO0012',
-    toName: 'Malleshwaram Medical Store',
-    toCode: 'STO0010',
-    products: 4,
-    qty: '22 PU',
-    status: 'Completed',
-  },
-]
+// Maps the lifecycle enum from WarehouseDistributionSummaryResponse.currentStatus
+// to the labels the table's status pill already has styles for.
+const distributionStatusLabel: Record<DistributionStatus, string> = {
+  DISTRIBUTION_CREATED: 'Ready to Dispatch',
+  PRODUCTS_DISPATCHED: 'Pending Receipt',
+  STOCK_RECEIVED: 'Completed',
+  STOCK_REJECTED: 'Rejected',
+}
+
+const toTransferRow = (summary: WarehouseDistributionSummaryData): TransferRow => ({
+  transferNo: summary.allocationNo,
+  dateTime: formatDateTime(summary.allocationDate),
+  fromName: summary.fromStore || summary.fromId,
+  fromCode: summary.fromId,
+  toName: summary.toStore || summary.toId,
+  toCode: summary.toId,
+  products: summary.productsCount,
+  qty: `${summary.totalQuantity} PU`,
+  status: distributionStatusLabel[summary.currentStatus] ?? summary.currentStatus,
+})
 
 const transferStatusStyles: Record<string, string> = {
   Completed: 'border-success-600 bg-success-50 text-success-600',
@@ -465,6 +436,32 @@ const page = () => {
     null
   )
   const [isDispatching, setIsDispatching] = useState(false)
+
+  // Transfer Explorer's table — this warehouse's distributions, incoming and
+  // outgoing, fetched fresh whenever the list view is shown (so it reflects a
+  // just-created or just-dispatched allocation on the way back to it).
+  const [transferList, setTransferList] = useState<WarehouseDistributionSummaryData[]>([])
+  const [isLoadingTransferList, setIsLoadingTransferList] = useState(true)
+
+  useEffect(() => {
+    if (view !== 'list') return
+    let active = true
+    const fetchTransferList = async () => {
+      setIsLoadingTransferList(true)
+      try {
+        const data = await getWarehouseDistributionList()
+        if (active) setTransferList(data)
+      } catch (err) {
+        console.error('Failed to fetch the warehouse distribution list', err)
+      } finally {
+        if (active) setIsLoadingTransferList(false)
+      }
+    }
+    fetchTransferList()
+    return () => {
+      active = false
+    }
+  }, [view])
 
   const updateDraft = (patch: Partial<AllocationDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }))
@@ -764,14 +761,27 @@ const page = () => {
 
       <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
         <p className="text-label-l5 font-semibold text-primary-800">
-          Transfer List (128)
+          Transfer List ({transferList.length})
         </p>
 
         <div className="w-full overflow-x-auto rounded-sm border border-pneutral-200">
           <TransferTableHeader />
-          {transferRows.map((row) => (
-            <TransferTableRow key={row.transferNo} row={row} />
-          ))}
+          {isLoadingTransferList ? (
+            <div className="flex min-w-233 items-center justify-center py-10 text-p3 text-pneutral-500">
+              Loading transfers...
+            </div>
+          ) : transferList.length === 0 ? (
+            <div className="flex min-w-233 items-center justify-center py-10 text-p3 text-pneutral-500">
+              No transfers found.
+            </div>
+          ) : (
+            transferList.map((summary) => (
+              <TransferTableRow
+                key={summary.warehouseDistributionId}
+                row={toTransferRow(summary)}
+              />
+            ))
+          )}
         </div>
       </div>
     </div>

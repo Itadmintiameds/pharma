@@ -75,11 +75,26 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // A pharmacy transfer's products must come from the chosen source pharmacy,
+  // not whichever pharmacy the caller is currently scoped to — those two can
+  // differ, and fetching the wrong one lets a batch get added here that the
+  // source has no stock of, only to fail later at dispatch.
+  const isPharmacyTransfer = draft.distributionMode === 'pharmacy'
+  const sourcePharmacyId = isPharmacyTransfer ? draft.sourceId : ''
+
   useEffect(() => {
+    if (isPharmacyTransfer && !sourcePharmacyId) {
+      setBatchCatalog([])
+      setIsLoadingBatches(false)
+      return
+    }
     let active = true
     const fetchBatches = async () => {
+      setIsLoadingBatches(true)
       try {
-        const res = await ProductService.getAllBatches()
+        const res = isPharmacyTransfer
+          ? await ProductService.getBatchesForPharmacy(sourcePharmacyId)
+          : await ProductService.getAllBatches()
         if (active) setBatchCatalog(res?.data || [])
       } catch (err) {
         console.error('Failed to fetch batches', err)
@@ -91,7 +106,7 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
     return () => {
       active = false
     }
-  }, [])
+  }, [isPharmacyTransfer, sourcePharmacyId])
 
   // Batches come back flat (one row per batch, product fields repeated on
   // every row) — group them into a searchable per-product list.

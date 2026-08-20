@@ -91,6 +91,30 @@ export interface WarehouseDistributionData {
   createdAt?: string;
 }
 
+// Relative to the acting warehouse: it either shipped the allocation (OUTGOING)
+// or is receiving it (INCOMING). Mirrors the direction values set in
+// WarehouseDistributionServiceImpl's summary mapping.
+export type DistributionDirection = "OUTGOING" | "INCOMING";
+
+// Mirrors WarehouseDistributionSummaryResponse.java — one row of the distribution
+// list screen: identifiers, both ends already resolved to their store name, line
+// totals and the latest status, with no per-line detail.
+export interface WarehouseDistributionSummaryData {
+  warehouseDistributionId: number;
+  allocationNo: string;
+  direction: DistributionDirection;
+  fromType: LocationType;
+  fromId: string;
+  fromStore: string;
+  toType: LocationType;
+  toId: string;
+  toStore: string;
+  productsCount: number;
+  totalQuantity: number;
+  currentStatus: DistributionStatus;
+  allocationDate?: string;
+}
+
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
   productId: string;

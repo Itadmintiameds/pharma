@@ -9,6 +9,8 @@ import { getUserOrganization } from '@/services/SetupBusinessService'
 import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService'
 import { getNextAllocationNo } from '@/services/WarehouseDistributionService'
 import { OrganizationWarehouse } from '@/types/SetupWarehouseData'
+import { useWarehouseStore } from '@/store/warehouseStore'
+import { warehouseLabel } from '@/types/UserData'
 import {
   AllocationDraft,
   distributionTypeLabel,
@@ -94,6 +96,12 @@ const AllocationDetails = ({ draft, onChange, showValidation }: AllocationDetail
   const [pharmacies, setPharmacies] = useState<PharmacyOption[]>([])
   const [isLoadingPharmacies, setIsLoadingPharmacies] = useState(true)
   const [warehouses, setWarehouses] = useState<OrganizationWarehouse[]>([])
+  // The warehouse(s) the signed-in user is actually mapped to, and the one
+  // selected as X-Warehouse-Id on every request (see utils/api.ts). A
+  // warehouse manager may only create an allocation sourced from this one —
+  // the backend rejects any other warehouse in the org, even one that
+  // belongs to the same organization.
+  const { selectedWarehouse } = useWarehouseStore()
 
   useEffect(() => {
     let active = true
@@ -148,14 +156,26 @@ const AllocationDetails = ({ draft, onChange, showValidation }: AllocationDetail
     }
   }, [])
 
-  // No source-warehouse picker exists — a centrally managed org has exactly
-  // one, so it fills the draft in as soon as it loads.
+  // No source-warehouse picker exists, so this fills the draft in as soon as
+  // it loads. Prefer the warehouse the user is mapped to and currently acting
+  // as (matches what the backend will validate the request against); only a
+  // non-warehouse-manager admin on a centrally managed org — who isn't mapped
+  // to any warehouse and isn't subject to that check — falls back to the
+  // org's warehouse list, where a centrally managed org has exactly one.
   useEffect(() => {
     if (draft.distributionMode !== 'warehouse') return
-    if (draft.sourceId || warehouses.length === 0) return
+    if (draft.sourceId) return
+    if (selectedWarehouse) {
+      onChange({
+        sourceId: selectedWarehouse.warehouseId,
+        sourceLabel: warehouseLabel(selectedWarehouse),
+      })
+      return
+    }
+    if (warehouses.length === 0) return
     const warehouse = warehouses[0]
     onChange({ sourceId: warehouse.warehouseId ?? '', sourceLabel: warehouse.warehouseName })
-  }, [draft.distributionMode, draft.sourceId, warehouses])
+  }, [draft.distributionMode, draft.sourceId, warehouses, selectedWarehouse])
 
   // Same pharmacy list backs both fields — a pharmacy transfer's source and
   // destination are both picked from the org's pharmacies.
