@@ -41,7 +41,9 @@ export interface AllocationDraft {
 export const createInitialAllocationDraft = (): AllocationDraft => ({
   allocationMode: 'myself',
   distributionMode: 'warehouse',
-  allocationNo: 'AL000124',
+  // Populated once AllocationDetails fetches the real value from
+  // GET /warehouse/distribution/next-allocation-no.
+  allocationNo: '',
   // Native <input type="date"> needs an ISO (YYYY-MM-DD) value; defaults to
   // today, since that's when the allocation is actually being created.
   allocationDate: new Date().toISOString().slice(0, 10),

@@ -7,6 +7,7 @@ import Dropdown, { DropdownOption } from '@/app/components/common/Dropdown'
 import { getCities } from '@/services/UserManagementService'
 import { getUserOrganization } from '@/services/SetupBusinessService'
 import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService'
+import { getNextAllocationNo } from '@/services/WarehouseDistributionService'
 import { OrganizationWarehouse } from '@/types/SetupWarehouseData'
 import {
   AllocationDraft,
@@ -104,6 +105,23 @@ const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
   }, [])
 
   useEffect(() => {
+    if (draft.allocationNo) return
+    let active = true
+    const fetchAllocationNo = async () => {
+      try {
+        const allocationNo = await getNextAllocationNo()
+        if (active && allocationNo) onChange({ allocationNo })
+      } catch (err) {
+        console.error('Failed to fetch the next allocation number', err)
+      }
+    }
+    fetchAllocationNo()
+    return () => {
+      active = false
+    }
+  }, [draft.allocationNo])
+
+  useEffect(() => {
     let active = true
     const fetchSourceWarehouse = async () => {
       try {
@@ -152,10 +170,7 @@ const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
       </p>
 
       <FormRow label="Allocation No">
-        <Input
-          value={draft.allocationNo}
-          onChange={(e) => onChange({ allocationNo: e.target.value })}
-        />
+        <Input value={draft.allocationNo} readOnly />
       </FormRow>
 
       <FormRow label="Allocation Date">

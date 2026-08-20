@@ -17,3 +17,14 @@ export const createAllocation = async (
     throw handleApiError(error, 'Failed to create warehouse distribution allocation.');
   }
 };
+
+// Preview the allocation number a new allocation will be assigned on create.
+// GET /warehouse/distribution/next-allocation-no -> WarehouseDistributionController#nextAllocationNo
+export const getNextAllocationNo = async (): Promise<string> => {
+  try {
+    const response = await api.get('/warehouse/distribution/next-allocation-no');
+    return response.data?.allocationNo ?? '';
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the next allocation number.');
+  }
+};

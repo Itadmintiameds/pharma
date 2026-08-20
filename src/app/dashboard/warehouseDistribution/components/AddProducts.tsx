@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
+import { X } from 'lucide-react'
 import Input from '@/app/components/common/Input'
 import StatusBadge from '@/app/components/common/table/StatusBadge'
+import { ProductService } from '@/services/ProductService'
 import {
   AllocationDraft,
   AllocationDraftLine,
@@ -12,6 +14,7 @@ import {
 } from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
 type Batch = {
+  batchId: string
   batchNo: string
   expiryDate: string
   available: number
@@ -24,20 +27,18 @@ type Product = {
   batches: Batch[]
 }
 
-const products: Product[] = [
-  {
-    id: 'dolo-650',
-    name: 'Dolo 650 Tablet',
-    purchaseUnit: 'Strip',
-    batches: [
-      { batchNo: 'B24001', expiryDate: 'Jan-2027', available: 120 },
-      { batchNo: 'B24008', expiryDate: 'May-2027', available: 80 },
-    ],
-  },
-  
-]
+// Shape of one row returned by GET /product/batches (ProductService.getAllBatches).
+type BatchApiRow = {
+  batchId?: string
+  batchNumber?: string
+  expiryDate?: string
+  productId?: string
+  productName?: string
+  purchaseUnit?: string
+  totalStock?: number
+}
 
-const batchKey = (productId: string, batchNo: string) => `${productId}-${batchNo}`
+const batchKey = (productId: string, batchId: string) => `${productId}-${batchId}`
 
 type AddProductsProps = {
   draft: AllocationDraft
@@ -46,11 +47,74 @@ type AddProductsProps = {
 
 const AddProducts = ({ draft, onChange }: AddProductsProps) => {
   const [searchInput, setSearchInput] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false)
+  const searchBoxRef = useRef<HTMLDivElement>(null)
+
+  // Products picked from the search suggestions — each renders its own
+  // batch panel below, until removed.
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
 
   // Quantities typed in the batch rows before "Add" commits them into the
   // shared draft — transient per-row input, not part of the allocation yet.
   const [issueQtyByBatch, setIssueQtyByBatch] = useState<Record<string, string>>({})
+
+  const [batchCatalog, setBatchCatalog] = useState<BatchApiRow[]>([])
+  const [isLoadingBatches, setIsLoadingBatches] = useState(true)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
+        setIsSuggestionsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    const fetchBatches = async () => {
+      try {
+        const res = await ProductService.getAllBatches()
+        if (active) setBatchCatalog(res?.data || [])
+      } catch (err) {
+        console.error('Failed to fetch batches', err)
+      } finally {
+        if (active) setIsLoadingBatches(false)
+      }
+    }
+    fetchBatches()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Batches come back flat (one row per batch, product fields repeated on
+  // every row) — group them into a searchable per-product list.
+  const products = useMemo(() => {
+    const byProduct = new Map<string, Product>()
+    batchCatalog.forEach((row) => {
+      if (!row.productId || !row.batchId) return
+      const batch: Batch = {
+        batchId: row.batchId,
+        batchNo: row.batchNumber || 'N/A',
+        expiryDate: row.expiryDate || 'N/A',
+        available: Number(row.totalStock) || 0,
+      }
+      const existing = byProduct.get(row.productId)
+      if (existing) {
+        existing.batches.push(batch)
+      } else {
+        byProduct.set(row.productId, {
+          id: row.productId,
+          name: row.productName || 'Unknown Product',
+          purchaseUnit: row.purchaseUnit || '',
+          batches: [batch],
+        })
+      }
+    })
+    return Array.from(byProduct.values())
+  }, [batchCatalog])
 
   const cart = draft.lines
 
@@ -92,19 +156,42 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
     },
   ]
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
-  )
+  // Suggestions shown under the search box as the user types — nothing is
+  // shown until there's a query, else it would dump the whole catalog.
+  const trimmedQuery = searchInput.trim().toLowerCase()
+  const suggestions = trimmedQuery
+    ? products.filter(
+        (product) =>
+          product.name.toLowerCase().includes(trimmedQuery) ||
+          product.batches.some((batch) => batch.batchNo.toLowerCase().includes(trimmedQuery))
+      )
+    : []
+
+  // Products picked from the suggestions — each gets its own batch panel
+  // below, in the order they were picked.
+  const selectedProducts = selectedProductIds
+    .map((id) => products.find((product) => product.id === id))
+    .filter((product): product is Product => Boolean(product))
+
+  const handleSelectProduct = (product: Product) => {
+    setSelectedProductIds((prev) => (prev.includes(product.id) ? prev : [...prev, product.id]))
+    setSearchInput('')
+    setIsSuggestionsOpen(false)
+  }
+
+  const handleRemoveProductPanel = (productId: string) => {
+    setSelectedProductIds((prev) => prev.filter((id) => id !== productId))
+  }
 
   const handleAddToCart = (product: Product, batch: Batch) => {
-    const qty = Number(issueQtyByBatch[batchKey(product.id, batch.batchNo)] || 0)
+    const qty = Number(issueQtyByBatch[batchKey(product.id, batch.batchId)] || 0)
     if (!qty) return
 
     const line: AllocationDraftLine = {
-      id: batchKey(product.id, batch.batchNo),
+      id: batchKey(product.id, batch.batchId),
       productId: product.id,
       productName: product.name,
-      batchId: batch.batchNo,
+      batchId: batch.batchId,
       batchNo: batch.batchNo,
       purchaseUnit: product.purchaseUnit,
       availableQuantity: batch.available,
@@ -148,42 +235,66 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
         ))}
       </div>
 
-      <div className="flex w-full flex-col gap-4 rounded-lg border border-pneutral-200 bg-white p-4">
+      <div ref={searchBoxRef} className="relative flex w-full flex-col gap-4 rounded-lg border border-pneutral-200 bg-white p-4">
         <p className="text-label-l5 font-medium text-pneutral-900">Search Product</p>
-        <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row">
-          <div className="flex-1">
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchQuery(searchInput)}
-              placeholder="Search by Product Name / Generic Name / Batch Number"
-              leftIcon={
-                <Image
-                  src="/warehouseDistribution/search-mini.svg"
-                  alt=""
-                  width={16}
-                  height={16}
-                />
-              }
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => setSearchQuery(searchInput)}
-            className="flex h-12 w-35.25 shrink-0 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4"
-          >
+        <Input
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value)
+            setIsSuggestionsOpen(true)
+          }}
+          onFocus={() => setIsSuggestionsOpen(true)}
+          placeholder="Search by Product Name / Generic Name / Batch Number"
+          leftIcon={
             <Image
-              src="/warehouseDistribution/search-outline.svg"
+              src="/warehouseDistribution/search-mini.svg"
               alt=""
-              width={18}
-              height={18}
+              width={16}
+              height={16}
             />
-            <span className="text-label-l4 font-medium text-secondary-700">Search</span>
-          </button>
-        </div>
+          }
+        />
+
+        {isSuggestionsOpen && trimmedQuery && (
+          <div className="absolute left-4 right-4 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-md border border-pneutral-200 bg-white shadow-lg">
+            {isLoadingBatches ? (
+              <p className="p-3 text-center text-p4 text-pneutral-500">Loading products...</p>
+            ) : suggestions.length === 0 ? (
+              <p className="p-3 text-center text-p4 text-pneutral-500">
+                No products found for &quot;{searchInput.trim()}&quot;.
+              </p>
+            ) : (
+              suggestions.map((product) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => handleSelectProduct(product)}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-pneutral-50"
+                >
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary-100">
+                    <Image
+                      src="/warehouseDistribution/pill-icon.svg"
+                      alt=""
+                      width={16}
+                      height={16}
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-label-l4 font-medium text-pneutral-900">
+                      {product.name}
+                    </p>
+                    <p className="truncate text-p4 text-pneutral-500">
+                      Purchase Unit : {product.purchaseUnit}
+                    </p>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
-      {filteredProducts.map((product) => (
+      {selectedProducts.map((product) => (
         <div
           key={product.id}
           className="flex w-full flex-col gap-3 rounded-lg border border-pneutral-200 bg-white p-4"
@@ -200,6 +311,14 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
             <p className="text-h6 font-semibold text-pneutral-900">{product.name}</p>
             <StatusBadge status="Active" />
             <div className="flex-1" />
+            <button
+              type="button"
+              onClick={() => handleRemoveProductPanel(product.id)}
+              aria-label={`Remove ${product.name} from view`}
+              className="flex size-8 shrink-0 items-center justify-center rounded-full text-pneutral-500 transition-colors hover:bg-pneutral-100 hover:text-pneutral-900"
+            >
+              <X size={16} />
+            </button>
             <button type="button" className="flex items-center gap-2">
               <span className="text-label-l4 font-medium text-primary-800">
                 View Product Details
@@ -240,7 +359,7 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
 
               {product.batches.map((batch) => (
                 <div
-                  key={batch.batchNo}
+                  key={batch.batchId}
                   className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3 py-2"
                 >
                   <p className="w-27 shrink-0 text-p4 font-medium text-pneutral-900">
@@ -256,11 +375,11 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
                     <Input
                       type="number"
                       min={0}
-                      value={issueQtyByBatch[batchKey(product.id, batch.batchNo)] ?? ''}
+                      value={issueQtyByBatch[batchKey(product.id, batch.batchId)] ?? ''}
                       onChange={(e) =>
                         setIssueQtyByBatch((prev) => ({
                           ...prev,
-                          [batchKey(product.id, batch.batchNo)]: e.target.value,
+                          [batchKey(product.id, batch.batchId)]: e.target.value,
                         }))
                       }
                     />
