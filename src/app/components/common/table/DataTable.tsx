@@ -6,17 +6,28 @@ import {
   getCoreRowModel,
   useReactTable,
 } from "@tanstack/react-table";
+import PaginationFooter, {
+  type TablePagination,
+} from "./Pagination";
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
+  /**
+   * The rows to draw. When paginating this is the current slice, not the whole
+   * set — the caller slices, because it is the one that knows what its filters
+   * left behind. `pagination.totalItems` carries the unsliced count.
+   */
   data: TData[];
   emptyState?: React.ReactNode;
+  /** Controlled pagination. Omit for a table that shows everything it is given. */
+  pagination?: TablePagination;
 }
 
 export default function DataTable<TData>({
   columns,
   data,
   emptyState,
+  pagination,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     columns,
@@ -81,6 +92,11 @@ export default function DataTable<TData>({
           ))}
         </tbody>
       </table>
+
+      {/* Outside the table, inside the card: the footer belongs to the list as
+          a whole, and a row spanning every column would inherit the cell
+          borders. */}
+      {pagination && <PaginationFooter {...pagination} />}
     </div>
   );
 }

@@ -63,6 +63,9 @@ interface AddProductsProps {
   onBack?: () => void;
 }
 
+/** Rows per page in the existing-product list. */
+const PRODUCT_PAGE_SIZE = 10;
+
 const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Product Details");
@@ -200,6 +203,15 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     [productRows, appliedQuery]
   );
 
+  // The dropdown is capped at six suggestions and needs none of this; only the
+  // table below it is paged.
+  const [productPage, setProductPage] = useState(1);
+
+  const productPageRows = tableRows.slice(
+    (productPage - 1) * PRODUCT_PAGE_SIZE,
+    productPage * PRODUCT_PAGE_SIZE
+  );
+
   const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
 
   // Each step must pass its own validation before the user can move forward.
@@ -320,6 +332,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
 
   const handleSearch = () => {
     setAppliedQuery(searchQuery.trim());
+    // Back to page 1: a search run from page 4 would otherwise land on a page
+    // the narrowed list no longer has.
+    setProductPage(1);
   };
 
   // Existing product: skip the product step and go straight to package + batch.
@@ -545,15 +560,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         // on the page rather than inside a second card.
         <div className="flex flex-col gap-3 w-full mb-3">
           <DataTable columns={tableColumns} data={store.purchaseDetails} />
-
-          <div className="flex justify-end w-full">
-            <button
-              onClick={() => setViewState('summary')}
-              className="px-4 py-2 bg-secondary-600 hover:bg-secondary-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
-            >
-              View Summary & Save Invoice
-            </button>
-          </div>
         </div>
       )}
 
@@ -672,7 +678,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
           {/* Product master list */}
           <div className="mt-4">
             <ProductSearchTable
-              rows={tableRows}
+              rows={productPageRows}
               loading={isLoadingProducts}
               error={productsError}
               emptyMessage={
@@ -681,16 +687,43 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
                   : "No products yet. Click '+ Add Item' to create one."
               }
               onAddStock={handleAddStock}
+              pagination={{
+                page: productPage,
+                pageSize: PRODUCT_PAGE_SIZE,
+                totalItems: tableRows.length,
+                onPageChange: setProductPage,
+              }}
             />
           </div>
 
-          {/* Back to the supplier details this invoice is being built against.
-              Sits at the foot of the step, like the wizard's own Back. */}
-          {onBack && (
+          {/* The step's footer: Back to the supplier details this invoice is
+              being built against on the left, and the way out of the step on
+              the right. Both live on one rule so the two exits read as a pair
+              rather than the action floating loose against the grid. */}
+          {(onBack || store.purchaseDetails.length > 0) && (
             <div className="flex justify-between items-center w-full mt-4 pt-4 border-t border-gray-100 pb-8">
-              <Button variant="outline" onClick={onBack} className="w-[120px]">
-                Back
-              </Button>
+              {onBack && (
+                <Button variant="outline" onClick={onBack} className="w-[120px]">
+                  Back
+                </Button>
+              )}
+
+              {/* Only once something is on the invoice — there is no summary to
+                  view before the first line is added.
+                  ml-auto, not justify-end on the row: without a Back button it
+                  still has to sit right, and justify-between would push a lone
+                  child to the left. */}
+              {store.purchaseDetails.length > 0 && (
+                <Button
+                  variant="primary"
+                  onClick={() => setViewState('summary')}
+                  // Twice the Back button's 120px, and the brand purple rather
+                  // than the variant's secondary-700.
+                  className="ml-auto w-[240px] bg-primary-800!"
+                >
+                  View Summary & Save Invoice
+                </Button>
+              )}
             </div>
           )}
         </>

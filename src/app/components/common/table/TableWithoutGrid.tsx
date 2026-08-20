@@ -2,6 +2,12 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import PaginationFooter, {
+    type TablePagination,
+} from "./Pagination";
+
+// Re-exported: callers have always imported the pagination shape from here.
+export type { TablePagination };
 
 /** Row-level helpers passed to each cell renderer (e.g. to toggle expansion from an actions cell). */
 export interface TableRowContext {
@@ -17,12 +23,6 @@ export interface TableColumn<T> {
     render: (row: T, ctx: TableRowContext) => React.ReactNode;
 }
 
-export interface TablePagination {
-    page: number;
-    pageSize: number;
-    totalItems: number;
-    onPageChange: (page: number) => void;
-}
 
 interface TableWithoutGridProps<T> {
     columns: TableColumn<T>[];
@@ -152,78 +152,7 @@ export default function TableWithoutGrid<T>({
 
             {footer}
 
-            {/* Pagination */}
-            {pagination && (
-                <div className="flex items-center justify-between border-t border-pneutral-100 px-2 py-3">
-                    <span className="text-p4 font-normal font-noto-sans">
-                        Showing{" "}
-                        {pagination.totalItems === 0
-                            ? 0
-                            : (pagination.page - 1) * pagination.pageSize + 1}{" "}
-                        to{" "}
-                        {Math.min(
-                            pagination.page * pagination.pageSize,
-                            pagination.totalItems
-                        )}{" "}
-                        of {pagination.totalItems} entries
-                    </span>
-
-                    <Pagination {...pagination} />
-                </div>
-            )}
-        </div>
-    );
-}
-
-function Pagination({
-    page,
-    pageSize,
-    totalItems,
-    onPageChange,
-}: TablePagination) {
-    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-    const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
-
-    return (
-        <div className="flex items-center gap-3">
-            <button
-                disabled={page === 1}
-                onClick={() => onPageChange(page - 1)}
-                className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-                <Image
-                    src="/UserManagement/PreviousIcon.svg"
-                    alt="Previous"
-                    width={24}
-                    height={24}
-                />
-            </button>
-
-            {pageNumbers.map((n) => (
-                <button
-                    key={n}
-                    onClick={() => onPageChange(n)}
-                    className={`flex h-11.25 w-11.25 items-center justify-center rounded-xl border text-label-l5 transition-all ${page === n
-                        ? "border-secondary-700 bg-secondary-500 text-primary-900 font-semibold"
-                        : "border-pneutral-200 bg-white text-pneutral-900 font-normal"
-                        }`}
-                >
-                    {n}
-                </button>
-            ))}
-
-            <button
-                disabled={page === totalPages}
-                onClick={() => onPageChange(page + 1)}
-                className="flex h-11.25 w-11.25 items-center justify-center rounded-xl border border-pneutral-200 bg-secondary-100 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-                <Image
-                    src="/UserManagement/NextIcon.svg"
-                    alt="Next"
-                    width={24}
-                    height={24}
-                />
-            </button>
+            {pagination && <PaginationFooter {...pagination} />}
         </div>
     );
 }

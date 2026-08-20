@@ -2,14 +2,20 @@
 
 import React from "react";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
+import PaginationFooter, {
+  type TablePagination,
+} from "@/app/components/common/table/Pagination";
 import { formatShelfLife, type ProductStockRow } from "@/utils/productStock";
 
 interface ProductSearchTableProps {
+  /** The current page's rows when paginating — the caller does the slicing. */
   rows: ProductStockRow[];
   loading?: boolean;
   error?: string | null;
   emptyMessage?: string;
   onAddStock: (row: ProductStockRow) => void;
+  /** Controlled pagination. Omit to show every row handed in. */
+  pagination?: TablePagination;
 }
 
 const COLUMNS = ["Sl. No.", "Product Name", "Stock (Units)", "Shelf Life", "Status", "Action"];
@@ -29,7 +35,13 @@ const ProductSearchTable: React.FC<ProductSearchTableProps> = ({
   error = null,
   emptyMessage = "No products found.",
   onAddStock,
+  pagination,
 }) => {
+  // Sl. No. counts within the whole result set, not within the page.
+  const rowOffset = pagination
+    ? (pagination.page - 1) * pagination.pageSize
+    : 0;
+
   return (
     <div className="w-full rounded-[12px] border border-pneutral-200 overflow-hidden bg-white">
       <table className="w-full border-collapse table-fixed">
@@ -67,7 +79,7 @@ const ProductSearchTable: React.FC<ProductSearchTableProps> = ({
           ) : (
             rows.map((row, idx) => (
               <tr key={`${row.productId}-${idx}`} className="hover:bg-gray-50 transition-colors">
-                <td className={`${BODY_CELL} text-center font-medium`}>{idx + 1}</td>
+                <td className={`${BODY_CELL} text-center font-medium`}>{rowOffset + idx + 1}</td>
                 <td className={BODY_CELL}>
                   <div className="flex flex-col gap-[2px]">
                     <span className="font-bold text-pneutral-900">{row.productName}</span>
@@ -99,6 +111,10 @@ const ProductSearchTable: React.FC<ProductSearchTableProps> = ({
           )}
         </tbody>
       </table>
+
+      {/* Hidden while loading or failed: "Showing 0 to 0 of 0 entries" under a
+          spinner reads as an empty result rather than a pending one. */}
+      {pagination && !loading && !error && <PaginationFooter {...pagination} />}
     </div>
   );
 };

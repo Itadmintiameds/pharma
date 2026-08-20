@@ -227,9 +227,13 @@ const EMPTY_DRAFT: BillDraft = {
   discountType: "PERCENTAGE",
 };
 
+/** Rows per page in the bill list. */
+const PAGE_SIZE = 10;
+
 const Page = () => {
   const [step, setStep] = useState<Step>("list");
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [bills, setBills] = useState<BillRecord[]>([]);
   const [isLoadingBills, setIsLoadingBills] = useState(true);
   const [draft, setDraft] = useState<BillDraft>(EMPTY_DRAFT);
@@ -398,8 +402,18 @@ const Page = () => {
     );
   }, [bills, search]);
 
+  const pageBills = filteredBills.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   const columns: ColumnDef<BillRecord>[] = [
-    { header: "Sl. No.", cell: ({ row }) => row.index + 1 },
+    {
+      header: "Sl. No.",
+      // row.index counts within the page's slice, so page 2 would restart at 1
+      // without the offset.
+      cell: ({ row }) => (currentPage - 1) * PAGE_SIZE + row.index + 1,
+    },
     {
       accessorKey: "billDate",
       header: "Bill Date",
@@ -716,7 +730,12 @@ const Page = () => {
         <div className="flex-1">
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(value) => {
+              setSearch(value);
+              // Back to page 1: a search run from page 4 would otherwise land
+              // on a page the narrowed list no longer has.
+              setCurrentPage(1);
+            }}
             placeholder="Search bill by invoice no, customer name, mobile..."
             onQRCodeClick={() => console.log("Open QR Scanner")}
           />
@@ -734,11 +753,25 @@ const Page = () => {
 
       <DataTable
         columns={columns}
-        data={filteredBills}
+        data={pageBills}
         emptyState={
           <div className="py-16 text-center text-label-l4 text-pneutral-500">
             {isLoadingBills ? "Loading bills…" : "No bills yet."}
           </div>
+        }
+        // Withheld while loading: "Showing 0 to 0 of 0 entries" under the
+        // "Loading bills…" row reads as an empty result rather than a pending
+        // one. The purchase list has no equivalent because its loading state
+        // replaces the table outright.
+        pagination={
+          isLoadingBills
+            ? undefined
+            : {
+                page: currentPage,
+                pageSize: PAGE_SIZE,
+                totalItems: filteredBills.length,
+                onPageChange: setCurrentPage,
+              }
         }
       />
     </div>

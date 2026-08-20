@@ -111,11 +111,15 @@ const buildInvoiceLines = async (purchase: PurchaseData): Promise<InvoiceLine[]>
 export const buildColumns = (
   onView: (purchase: PurchaseData) => void,
   onDownload: (purchase: PurchaseData) => void,
-  busy = false
+  busy = false,
+  /** How many rows precede this page, so Sl. No. keeps counting across pages. */
+  rowOffset = 0
 ): ColumnDef<PurchaseData>[] => [
   {
     header: "Sl. No.",
-    cell: ({ row }) => row.index + 1,
+    // row.index is the position within the page's slice, so page 2 would
+    // restart at 1 without the offset.
+    cell: ({ row }) => rowOffset + row.index + 1,
   },
 
   {
@@ -233,6 +237,9 @@ interface OpenInvoice {
   print: boolean;
 }
 
+/** Rows per page in the goods receipt list. */
+const PAGE_SIZE = 10;
+
 const PurchaseContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -242,6 +249,7 @@ const PurchaseContent = () => {
   const view = searchParams.get("view");
   const showGoodsReceipt = view === "add";
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [purchases, setPurchases] = useState<PurchaseData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -388,6 +396,11 @@ const PurchaseContent = () => {
     });
   }, [purchases, search]);
 
+  const pageData = filteredPurchases.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   // Fetch on the list view — on first load and each time we return from the
   // Add flow — so a just-added purchase shows up.
   useEffect(() => {
@@ -444,7 +457,15 @@ const PurchaseContent = () => {
               <div className="flex-1">
                 <SearchInput
                   value={search}
-                  onChange={setSearch}
+                  onChange={(value) => {
+                    setSearch(value);
+                    // Searching collapses the result set, so go back to page 1
+                    // — a search run from page 4 would otherwise land on a page
+                    // the narrowed list no longer has. Done here rather than in
+                    // an effect on `search`: the page number is a consequence
+                    // of this event, not state to be synchronised after it.
+                    setCurrentPage(1);
+                  }}
                   placeholder="Search product by name, generic, code..."
                   onQRCodeClick={() => {
                     console.log("Open QR Scanner");
@@ -491,9 +512,16 @@ const PurchaseContent = () => {
                   columns={buildColumns(
                     (purchase) => openInvoice(purchase, false),
                     (purchase) => openInvoice(purchase, true),
-                    isPreparing
+                    isPreparing,
+                    (currentPage - 1) * PAGE_SIZE
                   )}
-                  data={filteredPurchases}
+                  data={pageData}
+                  pagination={{
+                    page: currentPage,
+                    pageSize: PAGE_SIZE,
+                    totalItems: filteredPurchases.length,
+                    onPageChange: setCurrentPage,
+                  }}
                 />
               )}
             </div>
