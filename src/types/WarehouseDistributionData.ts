@@ -49,9 +49,12 @@ export interface WarehouseDistributionLineData {
   packagingId?: string;
   batchId?: string;
   issueQuantity: number;
-  receivedQuantity?: number;
-  damagedQuantity?: number;
+  dispatchedQuantity?: number;
+  receivedQuantity?: number | null;
+  damagedQuantity?: number | null;
   remarks?: string;
+  dispatchRemarks?: string | null;
+  receiveRemarks?: string | null;
   product?: WarehouseDistributionLineProductInfo;
   packaging?: WarehouseDistributionLinePackagingInfo;
   batch?: WarehouseDistributionLineBatchInfo;
@@ -97,8 +100,10 @@ export interface WarehouseDistributionData {
 export type DistributionDirection = "OUTGOING" | "INCOMING";
 
 // Mirrors WarehouseDistributionSummaryResponse.java — one row of the distribution
-// list screen: identifiers, both ends already resolved to their store name, line
-// totals and the latest status, with no per-line detail.
+// list endpoints (warehouse/list, warehouse/source, warehouse/destination): both
+// ends already resolved to their store name, and quantity totals broken out by
+// stage (issued vs. actually dispatched vs. actually received, since a partial
+// dispatch/receipt can make these differ), with no per-line detail.
 export interface WarehouseDistributionSummaryData {
   warehouseDistributionId: number;
   allocationNo: string;
@@ -110,10 +115,17 @@ export interface WarehouseDistributionSummaryData {
   toId: string;
   toStore: string;
   productsCount: number;
-  totalQuantity: number;
+  totalIssueQuantity: number;
+  totalDispatchedQuantity: number;
+  totalReceivedQuantity: number;
   currentStatus: DistributionStatus;
   allocationDate?: string;
 }
+
+// Alias for the stock-receipt screens, named before this type was consolidated
+// with the Transfer Explorer list's — same shape, kept as one definition so the
+// two can't drift apart again.
+export type WarehouseDistributionSummary = WarehouseDistributionSummaryData;
 
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
@@ -134,4 +146,19 @@ export interface CreateWarehouseDistributionRequest {
   destinationType: LocationType;
   destinationId: string;
   lines: WarehouseDistributionLineRequest[];
+}
+
+// Mirrors WarehouseDistributionReceiveLineRequest.java — the received/damaged outcome
+// for one dispatched line, keyed by the line's warehouseDistributionDetailsId.
+export interface ReceiveWarehouseDistributionLineRequest {
+  warehouseDistributionDetailsId: number;
+  receivedQuantity: number;
+  damagedQuantity: number;
+  remarks?: string | null;
+}
+
+// Mirrors WarehouseDistributionReceiveRequest.java — payload for
+// POST /warehouse/distribution/{distributionId}/receive.
+export interface ReceiveWarehouseDistributionRequest {
+  lines: ReceiveWarehouseDistributionLineRequest[];
 }

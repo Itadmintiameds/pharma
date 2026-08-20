@@ -240,7 +240,7 @@ const toTransferRow = (summary: WarehouseDistributionSummaryData): TransferRow =
   toName: summary.toStore || summary.toId,
   toCode: summary.toId,
   products: summary.productsCount,
-  qty: `${summary.totalQuantity} PU`,
+  qty: `${summary.totalIssueQuantity} PU`,
   status: distributionStatusLabel[summary.currentStatus] ?? summary.currentStatus,
 })
 

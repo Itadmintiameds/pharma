@@ -1,6 +1,6 @@
 'use client'
 
-import { ReactNode, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClipboardList, CheckCircle2, Package } from 'lucide-react'
 import TableWithoutGrid, {
@@ -8,6 +8,16 @@ import TableWithoutGrid, {
 } from '@/app/components/common/table/TableWithoutGrid'
 import StockReceiptView from './components/StockReceipt'
 import ReceiptCompleteView from './components/ReceiptComplete'
+import {
+  getDestinationDistributions,
+  getWarehouseDistribution,
+} from '@/services/WarehouseDistributionService'
+import {
+  WarehouseDistributionData,
+  WarehouseDistributionSummary,
+} from '@/types/WarehouseDistributionData'
+import { formatDate } from '@/utils/formatDate'
+import { showToast } from '@/app/components/common/Toast'
 
 interface StatCardProps {
   icon: ReactNode
@@ -37,6 +47,7 @@ type ReceiptStatus = 'Pending Receipt' | 'Completed'
 
 interface StockReceipt {
   id: number
+  warehouseDistributionId: number
   transferNo: string
   from: string
   products: number
@@ -44,6 +55,22 @@ interface StockReceipt {
   date: string
   status: ReceiptStatus
 }
+
+// A distribution is "Completed" once its stock has been received; anything still
+// in flight (dispatched, awaiting receipt) shows as a pending receipt to action.
+const mapSummaryToReceipt = (
+  summary: WarehouseDistributionSummary,
+  index: number
+): StockReceipt => ({
+  id: index + 1,
+  warehouseDistributionId: summary.warehouseDistributionId,
+  transferNo: summary.allocationNo,
+  from: summary.fromStore ?? '—',
+  products: summary.productsCount,
+  quantity: summary.totalDispatchedQuantity ?? summary.totalIssueQuantity,
+  date: formatDate(summary.allocationDate),
+  status: summary.currentStatus === 'STOCK_RECEIVED' ? 'Completed' : 'Pending Receipt',
+})
 
 const ReceiptStatusBadge = ({ status }: { status: ReceiptStatus }) => (
   <span
@@ -57,38 +84,9 @@ const ReceiptStatusBadge = ({ status }: { status: ReceiptStatus }) => (
   </span>
 )
 
-const stockReceipts: StockReceipt[] = [
-  {
-    id: 1,
-    transferNo: 'TR00022',
-    from: 'Hebbal Medical Store',
-    products: 5,
-    quantity: 5,
-    date: '323332',
-    status: 'Pending Receipt',
-  },
-  {
-    id: 2,
-    transferNo: 'TR00022',
-    from: 'Central Warehouse',
-    products: 16,
-    quantity: 16,
-    date: '464664',
-    status: 'Completed',
-  },
-  {
-    id: 3,
-    transferNo: 'TR00022',
-    from: 'JP Nagar Medical Store',
-    products: 13,
-    quantity: 13,
-    date: '666653',
-    status: 'Completed',
-  },
-]
-
 const buildReceiptColumns = (
-  onReceiveNow: (row: StockReceipt) => void
+  onReceiveNow: (row: StockReceipt) => void,
+  onView: (row: StockReceipt) => void
 ): TableColumn<StockReceipt>[] => [
   {
     header: '#',
@@ -169,6 +167,7 @@ const buildReceiptColumns = (
       ) : (
         <button
           type="button"
+          onClick={() => onView(row)}
           className="flex h-9 min-w-27 items-center justify-center rounded-lg border-[1.5px] border-secondary-700 px-3 text-label-l3 font-medium text-secondary-700"
         >
           View
@@ -178,24 +177,82 @@ const buildReceiptColumns = (
 ]
 
 const PAGE_SIZE = 7
-const TOTAL_ENTRIES = 128
 
 type View = 'list' | 'receipt' | 'complete'
+
+const isSameDay = (iso: string | undefined, today: string): boolean =>
+  !!iso && iso.split('T')[0] === today
 
 const page = () => {
   const router = useRouter()
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useState<View>('list')
-  const [activeReceipt, setActiveReceipt] = useState<StockReceipt | null>(null)
 
-  if (view === 'complete' && activeReceipt) {
+  const [summaries, setSummaries] = useState<WarehouseDistributionSummary[]>([])
+  const [receipts, setReceipts] = useState<StockReceipt[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const [activeReceipt, setActiveReceipt] = useState<StockReceipt | null>(null)
+  const [activeDistribution, setActiveDistribution] =
+    useState<WarehouseDistributionData | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const loadList = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await getDestinationDistributions()
+      setSummaries(data)
+      setReceipts(data.map(mapSummaryToReceipt))
+    } catch (error) {
+      showToast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to fetch incoming stock distributions.'
+      )
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadList()
+  }, [loadList])
+
+  // Fetch the full distribution, then show the given view (receive form or completed).
+  const openDetail = async (row: StockReceipt, nextView: 'receipt' | 'complete') => {
+    setActiveReceipt(row)
+    setActiveDistribution(null)
+    setDetailLoading(true)
+    setView(nextView)
+    try {
+      const detail = await getWarehouseDistribution(row.warehouseDistributionId)
+      setActiveDistribution(detail)
+    } catch (error) {
+      showToast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to fetch the distribution details.'
+      )
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
+  const backToList = () => {
+    setView('list')
+    setActiveReceipt(null)
+    setActiveDistribution(null)
+    loadList()
+  }
+
+  if (view === 'complete') {
     return (
       <ReceiptCompleteView
-        referenceNo={activeReceipt.transferNo}
-        fromStore={activeReceipt.from}
+        referenceNo={activeReceipt?.transferNo}
+        fromStore={activeReceipt?.from}
+        distribution={activeDistribution}
         onGoToDashboard={() => {
-          setView('list')
-          setActiveReceipt(null)
+          backToList()
           router.push('/dashboard/warehouseReceipt')
         }}
       />
@@ -207,16 +264,35 @@ const page = () => {
       <StockReceiptView
         referenceNo={activeReceipt.transferNo}
         fromLocation={activeReceipt.from}
-        onBack={() => setView('list')}
-        onConfirmReceipt={() => setView('complete')}
+        distribution={activeDistribution}
+        loading={detailLoading}
+        onBack={backToList}
+        onReceived={(updated) => {
+          setActiveDistribution(updated)
+          setView('complete')
+        }}
       />
     )
   }
 
-  const receiptColumns = buildReceiptColumns((row) => {
-    setActiveReceipt(row)
-    setView('receipt')
-  })
+  const receiptColumns = buildReceiptColumns(
+    (row) => openDetail(row, 'receipt'),
+    (row) => openDetail(row, 'complete')
+  )
+
+  // Stat cards derived from the list. "Today" is measured against the allocation date
+  // (the API summary has no dedicated received-on timestamp).
+  const todayIso = new Date().toISOString().split('T')[0]
+  const pendingCount = receipts.filter((r) => r.status === 'Pending Receipt').length
+  const receivedToday = summaries.filter(
+    (s) => s.currentStatus === 'STOCK_RECEIVED' && isSameDay(s.allocationDate, todayIso)
+  )
+  const productsReceivedToday = receivedToday.reduce(
+    (sum, s) => sum + (s.productsCount ?? 0),
+    0
+  )
+
+  const pad2 = (n: number) => String(n).padStart(2, '0')
 
   return (
     <div className="flex w-full flex-col items-start gap-4">
@@ -234,19 +310,19 @@ const page = () => {
           icon={<ClipboardList className="size-6 text-secondary-700" strokeWidth={1.8} />}
           iconBg="bg-secondary-100"
           label="Pending Receipts"
-          value="03"
+          value={pad2(pendingCount)}
         />
         <StatCard
           icon={<CheckCircle2 className="size-6 text-success-600" strokeWidth={1.8} />}
           iconBg="bg-success-50"
           label="Received Today"
-          value="07"
+          value={pad2(receivedToday.length)}
         />
         <StatCard
           icon={<Package className="size-6 text-info-600" strokeWidth={1.8} />}
           iconBg="bg-info-50"
           label="Products Received Today"
-          value="45"
+          value={pad2(productsReceivedToday)}
         />
       </div>
 
@@ -255,19 +331,32 @@ const page = () => {
           Recent Stock Receipts
         </h2>
 
-        <TableWithoutGrid
-          columns={receiptColumns}
-          data={stockReceipts}
-          rowKey={(row) => row.id.toString()}
-          headerVariant="primary"
-          container="card"
-          pagination={{
-            page: currentPage,
-            pageSize: PAGE_SIZE,
-            totalItems: TOTAL_ENTRIES,
-            onPageChange: setCurrentPage,
-          }}
-        />
+        {loading ? (
+          <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+            Loading stock receipts…
+          </p>
+        ) : receipts.length === 0 ? (
+          <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+            No stock receipts found.
+          </p>
+        ) : (
+          <TableWithoutGrid
+            columns={receiptColumns}
+            data={receipts.slice(
+              (currentPage - 1) * PAGE_SIZE,
+              currentPage * PAGE_SIZE
+            )}
+            rowKey={(row) => row.id.toString()}
+            headerVariant="primary"
+            container="card"
+            pagination={{
+              page: currentPage,
+              pageSize: PAGE_SIZE,
+              totalItems: receipts.length,
+              onPageChange: setCurrentPage,
+            }}
+          />
+        )}
       </div>
     </div>
   )

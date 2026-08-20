@@ -2,8 +2,10 @@ import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 import {
   CreateWarehouseDistributionRequest,
+  ReceiveWarehouseDistributionRequest,
   WarehouseDistributionData,
   WarehouseDistributionSummaryData,
+  WarehouseDistributionSummary,
 } from '@/types/WarehouseDistributionData';
 
 // Create a distribution / stock-transfer allocation.
@@ -41,6 +43,49 @@ export const getWarehouseDistributionList = async (): Promise<
     return response.data ?? [];
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the warehouse distribution list.');
+  }
+};
+
+// Stock-receipt list: distributions where the current store is the destination.
+// GET /warehouse/distribution/warehouse/destination -> WarehouseDistributionController#getByDestination
+export const getDestinationDistributions = async (): Promise<
+  WarehouseDistributionSummary[]
+> => {
+  try {
+    const response = await api.get('/warehouse/distribution/warehouse/destination');
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch incoming stock distributions.');
+  }
+};
+
+// Full detail of one distribution (header, lines with product/batch/packaging, status history).
+// GET /warehouse/distribution/{distributionId} -> WarehouseDistributionController#getById
+export const getWarehouseDistribution = async (
+  distributionId: number
+): Promise<WarehouseDistributionData> => {
+  try {
+    const response = await api.get(`/warehouse/distribution/${distributionId}`);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the distribution details.');
+  }
+};
+
+// Receive: destination confirms received/damaged quantities (PRODUCTS_DISPATCHED -> STOCK_RECEIVED).
+// POST /warehouse/distribution/{distributionId}/receive -> WarehouseDistributionController#receive
+export const receiveAllocation = async (
+  distributionId: number,
+  request: ReceiveWarehouseDistributionRequest
+): Promise<WarehouseDistributionData> => {
+  try {
+    const response = await api.post(
+      `/warehouse/distribution/${distributionId}/receive`,
+      request
+    );
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to confirm stock receipt.');
   }
 };
 
