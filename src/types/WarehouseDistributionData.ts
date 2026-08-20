@@ -127,6 +127,15 @@ export interface WarehouseDistributionSummaryData {
 // two can't drift apart again.
 export type WarehouseDistributionSummary = WarehouseDistributionSummaryData;
 
+// Stat-card figures for the Stock Receipt dashboard, computed server-side against
+// the current store as destination ("today" measured on the backend clock).
+// GET /warehouse/distribution/warehouse/destination/kpi.
+export interface WarehouseDistributionReceiptKpi {
+  pendingReceipts: number;
+  receivedToday: number;
+  productsReceivedToday: number;
+}
+
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
   productId: string;

@@ -10,10 +10,12 @@ import StockReceiptView from './components/StockReceipt'
 import ReceiptCompleteView from './components/ReceiptComplete'
 import {
   getDestinationDistributions,
+  getDestinationReceiptKpi,
   getWarehouseDistribution,
 } from '@/services/WarehouseDistributionService'
 import {
   WarehouseDistributionData,
+  WarehouseDistributionReceiptKpi,
   WarehouseDistributionSummary,
 } from '@/types/WarehouseDistributionData'
 import { formatDate } from '@/utils/formatDate'
@@ -180,16 +182,13 @@ const PAGE_SIZE = 7
 
 type View = 'list' | 'receipt' | 'complete'
 
-const isSameDay = (iso: string | undefined, today: string): boolean =>
-  !!iso && iso.split('T')[0] === today
-
 const page = () => {
   const router = useRouter()
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useState<View>('list')
 
-  const [summaries, setSummaries] = useState<WarehouseDistributionSummary[]>([])
   const [receipts, setReceipts] = useState<StockReceipt[]>([])
+  const [kpi, setKpi] = useState<WarehouseDistributionReceiptKpi | null>(null)
   const [loading, setLoading] = useState(true)
 
   const [activeReceipt, setActiveReceipt] = useState<StockReceipt | null>(null)
@@ -200,9 +199,12 @@ const page = () => {
   const loadList = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getDestinationDistributions()
-      setSummaries(data)
+      const [data, kpiData] = await Promise.all([
+        getDestinationDistributions(),
+        getDestinationReceiptKpi(),
+      ])
       setReceipts(data.map(mapSummaryToReceipt))
+      setKpi(kpiData)
     } catch (error) {
       showToast.error(
         error instanceof Error
@@ -280,18 +282,6 @@ const page = () => {
     (row) => openDetail(row, 'complete')
   )
 
-  // Stat cards derived from the list. "Today" is measured against the allocation date
-  // (the API summary has no dedicated received-on timestamp).
-  const todayIso = new Date().toISOString().split('T')[0]
-  const pendingCount = receipts.filter((r) => r.status === 'Pending Receipt').length
-  const receivedToday = summaries.filter(
-    (s) => s.currentStatus === 'STOCK_RECEIVED' && isSameDay(s.allocationDate, todayIso)
-  )
-  const productsReceivedToday = receivedToday.reduce(
-    (sum, s) => sum + (s.productsCount ?? 0),
-    0
-  )
-
   const pad2 = (n: number) => String(n).padStart(2, '0')
 
   return (
@@ -310,19 +300,19 @@ const page = () => {
           icon={<ClipboardList className="size-6 text-secondary-700" strokeWidth={1.8} />}
           iconBg="bg-secondary-100"
           label="Pending Receipts"
-          value={pad2(pendingCount)}
+          value={pad2(kpi?.pendingReceipts ?? 0)}
         />
         <StatCard
           icon={<CheckCircle2 className="size-6 text-success-600" strokeWidth={1.8} />}
           iconBg="bg-success-50"
           label="Received Today"
-          value={pad2(receivedToday.length)}
+          value={pad2(kpi?.receivedToday ?? 0)}
         />
         <StatCard
           icon={<Package className="size-6 text-info-600" strokeWidth={1.8} />}
           iconBg="bg-info-50"
           label="Products Received Today"
-          value={pad2(productsReceivedToday)}
+          value={pad2(kpi?.productsReceivedToday ?? 0)}
         />
       </div>
 
