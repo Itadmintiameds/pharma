@@ -15,14 +15,19 @@ import {
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import {
+  DistributionStatus,
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+  WarehouseDistributionStatusData,
+} from '@/types/WarehouseDistributionData'
+import { formatDateTime } from '@/utils/formatDate'
 
 interface ReceiptCompleteProps {
   referenceNo?: string
   fromStore?: string
   toStore?: string
-  requestedOn?: string
-  dispatchedOn?: string
-  receivedOn?: string
+  distribution?: WarehouseDistributionData | null
   onPrintReceipt?: () => void
   onDownload?: () => void
   onGoToDashboard?: () => void
@@ -31,47 +36,53 @@ interface ReceiptCompleteProps {
 const headerButtonClass =
   'flex h-12 min-w-27 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700'
 
+const EM_DASH = '—'
+
+// First timestamp recorded for a given lifecycle status, if the transfer reached it.
+const statusAt = (
+  statuses: WarehouseDistributionStatusData[] | undefined,
+  status: DistributionStatus
+): string | undefined => statuses?.find((s) => s.status === status)?.createdAt
+
+const TIMELINE_LABEL: Record<DistributionStatus, string> = {
+  DISTRIBUTION_CREATED: 'Transfer Created',
+  PRODUCTS_DISPATCHED: 'Dispatched',
+  STOCK_RECEIVED: 'Receipt Completed',
+  STOCK_REJECTED: 'Rejected',
+}
+
 interface ProgressStep {
   label: string
   timestamp?: string
-  timestampClass?: string
   actor?: string
   bold?: boolean
 }
 
-const progressSteps: ProgressStep[] = [
-  {
-    label: 'Transfer Created',
-    timestamp: '05-Aug-2026 09:15 AM',
-    actor: 'Warehouse Admin',
-  },
-  {
-    label: 'Accepted',
-    timestamp: '05-Aug-2026 10:02 AM',
-    actor: 'Hebbal Medical Store',
-  },
-  {
-    label: 'Dispatched',
-    timestamp: '05-Aug-2026 11:20 AM',
-    timestampClass: 'text-p3 font-regular',
-    actor: 'Hebbal Medical Store',
-  },
-  {
-    label: 'Receipt Completed',
-    actor: 'Yet to be completed',
-    bold: true,
-  },
-]
+const buildProgressSteps = (
+  distribution?: WarehouseDistributionData | null
+): ProgressStep[] => {
+  const statuses = distribution?.statuses ?? []
+  if (statuses.length === 0) {
+    return [{ label: 'Receipt Completed', bold: true }]
+  }
 
-const TransferProgressTimeline = () => (
+  return statuses.map((s, index) => ({
+    label: TIMELINE_LABEL[s.status] ?? s.status,
+    timestamp: s.createdAt ? formatDateTime(s.createdAt) : undefined,
+    actor: s.createdBy,
+    bold: index === statuses.length - 1,
+  }))
+}
+
+const TransferProgressTimeline = ({ steps }: { steps: ProgressStep[] }) => (
   <div className="flex w-full flex-col items-start gap-5 rounded-2xl border border-pneutral-200 bg-white p-4 shadow-[0px_9px_28px_8px_rgba(0,0,0,0.05),0px_3px_6px_-4px_rgba(0,0,0,0.12),0px_6px_16px_0px_rgba(0,0,0,0.08)]">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Transfer Progress
     </p>
 
     <div className="flex w-full items-center">
-      {progressSteps.map((step, index) => (
-        <React.Fragment key={step.label}>
+      {steps.map((step, index) => (
+        <React.Fragment key={`${step.label}-${index}`}>
           <div className="flex flex-col items-center gap-2">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success-600">
               <Check className="size-4.5 text-white" strokeWidth={3} />
@@ -86,11 +97,7 @@ const TransferProgressTimeline = () => (
             </span>
 
             {step.timestamp && (
-              <span
-                className={`whitespace-nowrap text-center text-pneutral-600 ${
-                  step.timestampClass ?? 'text-label-l2 font-regular'
-                }`}
-              >
+              <span className="whitespace-nowrap text-center text-label-l2 font-regular text-pneutral-600">
                 {step.timestamp}
               </span>
             )}
@@ -102,7 +109,7 @@ const TransferProgressTimeline = () => (
             )}
           </div>
 
-          {index < progressSteps.length - 1 && (
+          {index < steps.length - 1 && (
             <div className="h-0.5 flex-1 bg-success-600" />
           )}
         </React.Fragment>
@@ -226,32 +233,35 @@ interface ReceivedItem {
   damagedQty: string
 }
 
-const receivedItems: ReceivedItem[] = [
-  {
-    id: 1,
-    icon: 'pill',
-    productName: 'Dolo 650 Tablet',
-    packInfo: 'Strip of 10 Tablets',
-    batchNo: 'B24001',
-    purchaseUnit: 'Strip',
-    expiryDate: '31-Dec-2027',
-    dispatchedQty: '20 Strip',
-    receivedQty: '20 Strip',
-    damagedQty: '20 Strip',
-  },
-  {
-    id: 2,
-    icon: 'box',
-    productName: 'Crocin Syrup',
-    packInfo: 'Bottle of 60 ml',
-    batchNo: 'C12001',
-    purchaseUnit: 'Bottle',
-    expiryDate: '31-Aug-2027',
-    dispatchedQty: '15 Bottle',
-    receivedQty: '15 Bottle',
-    damagedQty: '15 Bottle',
-  },
-]
+const iconForUnit = (unit?: string): ProductIcon => {
+  const u = (unit ?? '').toLowerCase()
+  return u.includes('strip') || u.includes('tablet') || u.includes('tab')
+    ? 'pill'
+    : 'box'
+}
+
+const mapLineToReceivedItem = (
+  line: WarehouseDistributionLineData,
+  index: number
+): ReceivedItem => {
+  const unit = line.packaging?.purchaseUnit ?? ''
+  const contains = line.packaging?.purchaseUnitContains
+  const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
+  const suffix = unit ? ` ${unit}` : ''
+  return {
+    id: line.warehouseDistributionDetailsId ?? index + 1,
+    icon: iconForUnit(unit),
+    productName: line.product?.productName ?? line.productId,
+    packInfo:
+      unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || EM_DASH,
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? EM_DASH,
+    purchaseUnit: unit || EM_DASH,
+    expiryDate: line.batch?.expiryDate ? formatDateTime(line.batch.expiryDate) : EM_DASH,
+    dispatchedQty: `${dispatched}${suffix}`,
+    receivedQty: `${line.receivedQuantity ?? 0}${suffix}`,
+    damagedQty: `${line.damagedQuantity ?? 0}${suffix}`,
+  }
+}
 
 const receivedColumns: TableColumn<ReceivedItem>[] = [
   {
@@ -354,19 +364,25 @@ const receivedColumns: TableColumn<ReceivedItem>[] = [
   },
 ]
 
-const ProductsReceived = () => (
+const ProductsReceived = ({ items }: { items: ReceivedItem[] }) => (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Products Received
     </p>
 
-    <TableWithoutGrid
-      columns={receivedColumns}
-      data={receivedItems}
-      rowKey={(row) => row.id.toString()}
-      headerVariant="primary"
-      container="box"
-    />
+    {items.length === 0 ? (
+      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+        No products recorded.
+      </p>
+    ) : (
+      <TableWithoutGrid
+        columns={receivedColumns}
+        data={items}
+        rowKey={(row) => row.id.toString()}
+        headerVariant="primary"
+        container="box"
+      />
+    )}
   </div>
 )
 
@@ -391,16 +407,29 @@ const ReceiptCompleteActions = ({
 )
 
 const ReceiptComplete = ({
-  referenceNo = 'PT000021',
-  fromStore = 'Hebbal Medical Store',
-  toStore = 'Rajajinagar Medical Store',
-  requestedOn = '05-Aug-2026  11:20 AM',
-  dispatchedOn = '05-Aug-2026  11:20 AM',
-  receivedOn = '05-Aug-2026  11:20 AM',
+  referenceNo,
+  fromStore,
+  toStore,
+  distribution,
   onPrintReceipt,
   onDownload,
   onGoToDashboard,
 }: ReceiptCompleteProps) => {
+  const statuses = distribution?.statuses
+  const reference = distribution?.allocationNo ?? referenceNo ?? EM_DASH
+  const from = distribution?.sourceName ?? fromStore ?? EM_DASH
+  const to = distribution?.destinationName ?? toStore ?? EM_DASH
+
+  const requestedOn = formatDateTime(
+    statusAt(statuses, 'DISTRIBUTION_CREATED') ?? distribution?.allocationDate,
+    EM_DASH
+  )
+  const dispatchedOn = formatDateTime(statusAt(statuses, 'PRODUCTS_DISPATCHED'), EM_DASH)
+  const receivedOn = formatDateTime(statusAt(statuses, 'STOCK_RECEIVED'), EM_DASH)
+
+  const progressSteps = buildProgressSteps(distribution)
+  const receivedItems = (distribution?.lines ?? []).map(mapLineToReceivedItem)
+
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <div className="flex w-full flex-col items-start gap-4 lg:flex-row lg:items-center">
@@ -410,7 +439,7 @@ const ReceiptComplete = ({
               Receipt Completed
             </h1>
             <span className="rounded-lg bg-secondary-100 px-3 py-1 text-label-l4 font-semibold text-secondary-700">
-              {referenceNo}
+              {reference}
             </span>
           </div>
 
@@ -440,18 +469,18 @@ const ReceiptComplete = ({
         </div>
       </div>
 
-      <TransferProgressTimeline />
+      <TransferProgressTimeline steps={progressSteps} />
 
       <TransferDetails
-        referenceNo={referenceNo}
-        fromStore={fromStore}
-        toStore={toStore}
+        referenceNo={reference}
+        fromStore={from}
+        toStore={to}
         requestedOn={requestedOn}
         dispatchedOn={dispatchedOn}
         receivedOn={receivedOn}
       />
 
-      <ProductsReceived />
+      <ProductsReceived items={receivedItems} />
 
       <ReceiptCompleteActions onGoToDashboard={onGoToDashboard} />
     </div>

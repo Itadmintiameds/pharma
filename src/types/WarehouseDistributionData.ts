@@ -49,9 +49,12 @@ export interface WarehouseDistributionLineData {
   packagingId?: string;
   batchId?: string;
   issueQuantity: number;
-  receivedQuantity?: number;
-  damagedQuantity?: number;
+  dispatchedQuantity?: number;
+  receivedQuantity?: number | null;
+  damagedQuantity?: number | null;
   remarks?: string;
+  dispatchRemarks?: string | null;
+  receiveRemarks?: string | null;
   product?: WarehouseDistributionLineProductInfo;
   packaging?: WarehouseDistributionLinePackagingInfo;
   batch?: WarehouseDistributionLineBatchInfo;
@@ -91,6 +94,27 @@ export interface WarehouseDistributionData {
   createdAt?: string;
 }
 
+// Mirrors WarehouseDistributionSummaryResponse.java — one row of the distribution
+// list endpoints (e.g. GET /warehouse/distribution/warehouse/destination), a flattened
+// view of a distribution with source/destination names and roll-up counts resolved
+// server-side so a list row can render without fetching each distribution's lines.
+export interface WarehouseDistributionSummary {
+  warehouseDistributionId: number;
+  allocationNo: string;
+  allocationDate?: string;
+  currentStatus?: DistributionStatus;
+  direction?: "INCOMING" | "OUTGOING";
+  fromType?: LocationType;
+  fromId?: string;
+  fromStore?: string;
+  toType?: LocationType;
+  toId?: string;
+  toStore?: string;
+  productsCount: number;
+  totalQuantity: number;
+  totalDispatchedQuantity?: number;
+}
+
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
 export interface WarehouseDistributionLineRequest {
   productId: string;
@@ -110,4 +134,19 @@ export interface CreateWarehouseDistributionRequest {
   destinationType: LocationType;
   destinationId: string;
   lines: WarehouseDistributionLineRequest[];
+}
+
+// Mirrors WarehouseDistributionReceiveLineRequest.java — the received/damaged outcome
+// for one dispatched line, keyed by the line's warehouseDistributionDetailsId.
+export interface ReceiveWarehouseDistributionLineRequest {
+  warehouseDistributionDetailsId: number;
+  receivedQuantity: number;
+  damagedQuantity: number;
+  remarks?: string | null;
+}
+
+// Mirrors WarehouseDistributionReceiveRequest.java — payload for
+// POST /warehouse/distribution/{distributionId}/receive.
+export interface ReceiveWarehouseDistributionRequest {
+  lines: ReceiveWarehouseDistributionLineRequest[];
 }

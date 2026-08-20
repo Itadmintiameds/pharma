@@ -1,18 +1,28 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Check, Pill, Box, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import TableWithoutGrid, {
   TableColumn,
 } from '@/app/components/common/table/TableWithoutGrid'
+import {
+  DistributionStatus,
+  ReceiveWarehouseDistributionLineRequest,
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+} from '@/types/WarehouseDistributionData'
+import { formatDate } from '@/utils/formatDate'
+import { receiveAllocation } from '@/services/WarehouseDistributionService'
+import { showToast } from '@/app/components/common/Toast'
 
 interface StockReceiptProps {
   referenceNo?: string
   fromLocation?: string
-  currentStatus?: string
-  statusDescription?: string
+  distribution?: WarehouseDistributionData | null
+  loading?: boolean
   onBack?: () => void
-  onConfirmReceipt?: () => void
+  // Fires after the receive is confirmed server-side; receives the updated distribution.
+  onReceived?: (updated: WarehouseDistributionData) => void
 }
 
 type StepState = 'done' | 'current' | 'upcoming'
@@ -22,13 +32,55 @@ interface TransferStep {
   state: StepState
 }
 
-const transferSteps: TransferStep[] = [
-  { label: 'Requested', state: 'done' },
-  { label: 'Accepted', state: 'done' },
-  { label: 'Dispatched', state: 'done' },
-  { label: 'Pending Receipt', state: 'current' },
-  { label: 'Completed', state: 'upcoming' },
-]
+const STEP_LABELS = [
+  'Requested',
+  'Accepted',
+  'Dispatched',
+  'Pending Receipt',
+  'Completed',
+] as const
+
+// Where the lifecycle sits on the 5-step bar. The receipt screen normally opens on a
+// PRODUCTS_DISPATCHED transfer, so "Pending Receipt" is the live step by default.
+const currentStepIndexFor = (status?: DistributionStatus): number => {
+  switch (status) {
+    case 'STOCK_RECEIVED':
+      return 5
+    case 'DISTRIBUTION_CREATED':
+      return 2
+    case 'PRODUCTS_DISPATCHED':
+    default:
+      return 3
+  }
+}
+
+const buildTransferSteps = (status?: DistributionStatus): TransferStep[] => {
+  const currentIndex = currentStepIndexFor(status)
+  return STEP_LABELS.map((label, index) => ({
+    label,
+    state:
+      index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'upcoming',
+  }))
+}
+
+const STATUS_META: Record<DistributionStatus, { label: string; description: string }> = {
+  DISTRIBUTION_CREATED: {
+    label: 'Created',
+    description: 'The transfer has been created and is awaiting dispatch.',
+  },
+  PRODUCTS_DISPATCHED: {
+    label: 'Pending Receipt',
+    description: 'Stock has been dispatched and is awaiting your receipt confirmation.',
+  },
+  STOCK_RECEIVED: {
+    label: 'Completed',
+    description: 'Stock has been received and recorded.',
+  },
+  STOCK_REJECTED: {
+    label: 'Rejected',
+    description: 'The stock transfer was rejected.',
+  },
+}
 
 const StepCircle = ({ step, index }: { step: TransferStep; index: number }) => {
   if (step.state === 'done') {
@@ -60,12 +112,12 @@ const stepLabelClass = (state: StepState) => {
   return 'font-regular text-pneutral-900'
 }
 
-const TransferStatusStepper = () => (
+const TransferStatusStepper = ({ steps }: { steps: TransferStep[] }) => (
   <div className="flex w-full flex-1 flex-col gap-5 rounded-2xl bg-white p-4 shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)]">
     <p className="text-label-l5 font-semibold text-secondary-700">Transfer Status</p>
 
     <div className="flex w-full items-center">
-      {transferSteps.map((step, index) => (
+      {steps.map((step, index) => (
         <React.Fragment key={step.label}>
           <div className="flex flex-col items-center gap-2">
             <StepCircle step={step} index={index} />
@@ -76,8 +128,12 @@ const TransferStatusStepper = () => (
             </span>
           </div>
 
-          {index < transferSteps.length - 1 && (
-            <div className="h-0.5 flex-1 bg-success-600" />
+          {index < steps.length - 1 && (
+            <div
+              className={`h-0.5 flex-1 ${
+                steps[index].state === 'done' ? 'bg-success-600' : 'bg-pneutral-200'
+              }`}
+            />
           )}
         </React.Fragment>
       ))}
@@ -114,32 +170,38 @@ interface ReceiveItem {
   remarks: string
 }
 
-const initialReceiveItems: ReceiveItem[] = [
-  {
-    id: 1,
-    icon: 'pill',
-    productName: 'Dolo 650 Tablet',
-    packInfo: 'Strip of 10 Tablets',
-    batchNo: 'B24001',
-    expiryDate: '31-Dec-2027',
-    dispatchedQty: '20 Strip',
-    receivedQty: '15',
-    damagedQty: '15',
-    remarks: '15',
-  },
-  {
-    id: 2,
-    icon: 'box',
-    productName: 'Crocin Syrup',
-    packInfo: 'Bottle of 60 ml',
-    batchNo: 'C12001',
-    expiryDate: '31-Aug-2027',
-    dispatchedQty: '15 Bottle',
-    receivedQty: '15',
-    damagedQty: '15',
-    remarks: '15',
-  },
-]
+// "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
+const iconForUnit = (unit?: string): ProductIcon => {
+  const u = (unit ?? '').toLowerCase()
+  return u.includes('strip') || u.includes('tablet') || u.includes('tab')
+    ? 'pill'
+    : 'box'
+}
+
+// One dispatched line -> one editable receive row. Received qty defaults to the
+// dispatched qty (the common case is "all arrived"); the user edits down for shortfalls.
+const mapLineToReceiveItem = (
+  line: WarehouseDistributionLineData,
+  index: number
+): ReceiveItem => {
+  const unit = line.packaging?.purchaseUnit ?? ''
+  const contains = line.packaging?.purchaseUnitContains
+  const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
+  return {
+    id: line.warehouseDistributionDetailsId ?? index + 1,
+    icon: iconForUnit(unit),
+    productName: line.product?.productName ?? line.productId,
+    packInfo:
+      unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    expiryDate: formatDate(line.batch?.expiryDate),
+    dispatchedQty: unit ? `${dispatched} ${unit}` : `${dispatched}`,
+    receivedQty:
+      line.receivedQuantity != null ? String(line.receivedQuantity) : String(dispatched),
+    damagedQty: line.damagedQuantity != null ? String(line.damagedQuantity) : '0',
+    remarks: line.receiveRemarks ?? line.remarks ?? '',
+  }
+}
 
 const receiveInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
@@ -252,8 +314,110 @@ const buildReceiveColumns = (
   },
 ]
 
-const ProductsToReceive = () => {
-  const [items, setItems] = useState<ReceiveItem[]>(initialReceiveItems)
+const ProductsToReceive = ({
+  items,
+  onFieldChange,
+  loading,
+}: {
+  items: ReceiveItem[]
+  onFieldChange: (
+    id: number,
+    field: 'receivedQty' | 'damagedQty' | 'remarks',
+    value: string
+  ) => void
+  loading?: boolean
+}) => {
+  const columns = buildReceiveColumns(onFieldChange)
+
+  return (
+    <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
+      <p className="text-label-l5 font-semibold text-secondary-700">
+        Products to be Received
+      </p>
+
+      {loading ? (
+        <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+          Loading products…
+        </p>
+      ) : items.length === 0 ? (
+        <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+          No products to receive.
+        </p>
+      ) : (
+        <TableWithoutGrid
+          columns={columns}
+          data={items}
+          rowKey={(row) => row.id.toString()}
+          headerVariant="primary"
+          container="box"
+        />
+      )}
+    </div>
+  )
+}
+
+const actionButtonClass =
+  'flex h-12 min-w-27 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-label-l4 font-medium sm:flex-none'
+
+const StockReceiptActions = ({
+  onBack,
+  onConfirmReceipt,
+  submitting,
+  disabled,
+}: {
+  onBack?: () => void
+  onConfirmReceipt?: () => void
+  submitting?: boolean
+  disabled?: boolean
+}) => (
+  <div className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
+    <button
+      type="button"
+      onClick={onBack}
+      disabled={submitting}
+      className={`${actionButtonClass} border-2 border-pneutral-900 text-pneutral-900 disabled:opacity-50`}
+    >
+      <ArrowLeft className="size-5" strokeWidth={2} />
+      Back
+    </button>
+
+    <button
+      type="button"
+      onClick={onConfirmReceipt}
+      disabled={submitting || disabled}
+      className={`${actionButtonClass} bg-primary-800 text-pneutral-50 disabled:opacity-50`}
+    >
+      <CheckCircle2 className="size-5" strokeWidth={2} />
+      {submitting ? 'Confirming…' : 'Confirm Receipt'}
+    </button>
+  </div>
+)
+
+const StockReceipt = ({
+  referenceNo = 'PT000021',
+  fromLocation = 'Hebbal Medical Store',
+  distribution,
+  loading,
+  onBack,
+  onReceived,
+}: StockReceiptProps) => {
+  const receiveItems = useMemo(
+    () => (distribution?.lines ?? []).map(mapLineToReceiveItem),
+    [distribution]
+  )
+
+  const [items, setItems] = useState<ReceiveItem[]>(receiveItems)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Re-seed the editable rows whenever a different distribution is loaded.
+  useEffect(() => {
+    setItems(receiveItems)
+  }, [receiveItems])
+
+  const steps = buildTransferSteps(distribution?.currentStatus)
+  const statusMeta = distribution?.currentStatus
+    ? STATUS_META[distribution.currentStatus]
+    : STATUS_META.PRODUCTS_DISPATCHED
 
   const handleFieldChange = (
     id: number,
@@ -265,64 +429,37 @@ const ProductsToReceive = () => {
     )
   }
 
-  const columns = buildReceiveColumns(handleFieldChange)
+  const handleConfirm = async () => {
+    const distributionId = distribution?.warehouseDistributionId
+    if (distributionId == null) {
+      showToast.error('Missing distribution reference — cannot confirm receipt.')
+      return
+    }
 
-  return (
-    <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
-      <p className="text-label-l5 font-semibold text-secondary-700">
-        Products to be Received
-      </p>
+    const lines: ReceiveWarehouseDistributionLineRequest[] = items.map((item) => {
+      const remarks = item.remarks.trim()
+      return {
+        warehouseDistributionDetailsId: item.id,
+        receivedQuantity: Number(item.receivedQty) || 0,
+        damagedQuantity: Number(item.damagedQty) || 0,
+        remarks: remarks ? remarks : null,
+      }
+    })
 
-      <TableWithoutGrid
-        columns={columns}
-        data={items}
-        rowKey={(row) => row.id.toString()}
-        headerVariant="primary"
-        container="box"
-      />
-    </div>
-  )
-}
+    setSubmitting(true)
+    try {
+      const updated = await receiveAllocation(distributionId, { lines })
+      showToast.success('Stock receipt confirmed.')
+      onReceived?.(updated)
+    } catch (error) {
+      showToast.error(
+        error instanceof Error ? error.message : 'Failed to confirm stock receipt.'
+      )
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
-const actionButtonClass =
-  'flex h-12 min-w-27 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-label-l4 font-medium sm:flex-none'
-
-const StockReceiptActions = ({
-  onBack,
-  onConfirmReceipt,
-}: {
-  onBack?: () => void
-  onConfirmReceipt?: () => void
-}) => (
-  <div className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
-    <button
-      type="button"
-      onClick={onBack}
-      className={`${actionButtonClass} border-2 border-pneutral-900 text-pneutral-900`}
-    >
-      <ArrowLeft className="size-5" strokeWidth={2} />
-      Back
-    </button>
-
-    <button
-      type="button"
-      onClick={onConfirmReceipt}
-      className={`${actionButtonClass} bg-primary-800 text-pneutral-50`}
-    >
-      <CheckCircle2 className="size-5" strokeWidth={2} />
-      Confirm Receipt
-    </button>
-  </div>
-)
-
-const StockReceipt = ({
-  referenceNo = 'PT000021',
-  fromLocation = 'Hebbal Medical Store',
-  currentStatus = 'Pending Receipt',
-  statusDescription = 'Awaiting stock receipt confirmation from Rajajinagar Medical Store.',
-  onBack,
-  onConfirmReceipt,
-}: StockReceiptProps) => {
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <div className="flex w-full flex-col items-start gap-1">
@@ -331,23 +468,36 @@ const StockReceipt = ({
             Stock Receipt
           </h1>
           <span className="rounded-lg bg-secondary-100 px-3 py-1 text-label-l4 font-semibold text-secondary-700">
-            {referenceNo}
+            {distribution?.allocationNo ?? referenceNo}
           </span>
         </div>
 
         <p className="text-label-l4 font-regular text-pneutral-500">
-          Confirm the received quantities from {fromLocation}.
+          Confirm the received quantities from{' '}
+          {distribution?.sourceName ?? fromLocation}.
         </p>
       </div>
 
       <div className="flex w-full flex-col items-stretch gap-4 rounded-2xl border border-pneutral-200 bg-white p-4 lg:flex-row">
-        <TransferStatusStepper />
-        <CurrentStatusPanel statusLabel={currentStatus} description={statusDescription} />
+        <TransferStatusStepper steps={steps} />
+        <CurrentStatusPanel
+          statusLabel={statusMeta.label}
+          description={statusMeta.description}
+        />
       </div>
 
-      <ProductsToReceive />
+      <ProductsToReceive
+        items={items}
+        onFieldChange={handleFieldChange}
+        loading={loading}
+      />
 
-      <StockReceiptActions onBack={onBack} onConfirmReceipt={onConfirmReceipt} />
+      <StockReceiptActions
+        onBack={onBack}
+        onConfirmReceipt={handleConfirm}
+        submitting={submitting}
+        disabled={loading || items.length === 0}
+      />
     </div>
   )
 }
