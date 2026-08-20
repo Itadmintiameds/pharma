@@ -16,6 +16,12 @@ type AllocationWizardLayoutProps = {
   onConfirm?: () => void
   /** True while the final Confirm Allocation call is in flight. */
   isConfirming?: boolean
+  /**
+   * Called with the step being left when Continue is clicked. Return false to
+   * block the move to the next step — e.g. to surface inline validation on
+   * the current step instead of advancing.
+   */
+  onBeforeNext?: (fromStep: number) => boolean
   children: (step: number, goToStep: (step: number) => void) => ReactNode
 }
 
@@ -23,9 +29,19 @@ const AllocationWizardLayout = ({
   onCancel,
   onConfirm,
   isConfirming,
+  onBeforeNext,
   children,
 }: AllocationWizardLayoutProps) => {
   const [currentStep, setCurrentStep] = useState(1)
+
+  const handleContinue = () => {
+    if (currentStep === STEP_DEFS.length) {
+      onConfirm?.()
+      return
+    }
+    if (onBeforeNext && !onBeforeNext(currentStep)) return
+    setCurrentStep((step) => Math.min(step + 1, STEP_DEFS.length))
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -108,11 +124,7 @@ const AllocationWizardLayout = ({
         <button
           type="button"
           disabled={currentStep === STEP_DEFS.length && isConfirming}
-          onClick={
-            currentStep === STEP_DEFS.length
-              ? onConfirm
-              : () => setCurrentStep((step) => Math.min(step + 1, STEP_DEFS.length))
-          }
+          onClick={handleContinue}
           className={`flex h-12 items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 ${
             currentStep === STEP_DEFS.length ? '' : 'w-35.25'
           } ${currentStep === STEP_DEFS.length && isConfirming ? 'cursor-not-allowed opacity-60' : ''}`}

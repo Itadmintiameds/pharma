@@ -2,7 +2,7 @@ import Image from "next/image";
 
 interface ProductDispatchRow {
   product: string;
-  genericName: string;
+  genericName?: string;
   batchNo: string;
   purchaseUnit: string;
   dispatchQty: number;
@@ -68,6 +68,8 @@ interface DistributionSummaryProps {
   timelineSteps?: TimelineStepData[];
   onBack?: () => void;
   onDispatchProducts?: () => void;
+  /** True while the dispatch API call is in flight. */
+  isDispatching?: boolean;
 }
 
 const StatusPill = ({ label }: { label: string }) => (
@@ -254,7 +256,7 @@ const ProductsToDispatch = ({ products }: { products: ProductDispatchRow[] }) =>
 
           {products.map((row, index) => (
             <div
-              key={row.batchNo}
+              key={`${row.product}-${row.batchNo}-${index}`}
               className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3.5 py-2.5"
             >
               <p className="w-6 shrink-0 text-p3 font-normal text-pneutral-900">
@@ -264,9 +266,11 @@ const ProductsToDispatch = ({ products }: { products: ProductDispatchRow[] }) =>
                 <p className="text-p3 font-semibold text-pneutral-900">
                   {row.product}
                 </p>
-                <p className="text-p3 font-normal text-pneutral-500">
-                  {row.genericName}
-                </p>
+                {row.genericName && (
+                  <p className="text-p3 font-normal text-pneutral-500">
+                    {row.genericName}
+                  </p>
+                )}
               </div>
               <p className="w-25 shrink-0 text-p3 font-normal text-pneutral-900">
                 {row.batchNo}
@@ -353,9 +357,11 @@ const DistributionTimeline = ({ steps }: { steps: TimelineStepData[] }) => (
 const DistributionFooter = ({
   onBack,
   onDispatchProducts,
+  isDispatching,
 }: {
   onBack?: () => void;
   onDispatchProducts?: () => void;
+  isDispatching?: boolean;
 }) => (
   <div className="flex w-full flex-col gap-3 border-t border-pneutral-200  py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -371,7 +377,8 @@ const DistributionFooter = ({
     <button
       type="button"
       onClick={onDispatchProducts}
-      className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 sm:w-auto"
+      disabled={isDispatching}
+      className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
     >
       <Image
         src="/warehouseDistribution/truck-outline-white.svg"
@@ -380,7 +387,7 @@ const DistributionFooter = ({
         height={20}
       />
       <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
-        Dispatch Products
+        {isDispatching ? "Dispatching..." : "Dispatch Products"}
       </span>
     </button>
   </div>
@@ -401,6 +408,7 @@ const DistributionSummary = ({
   timelineSteps = defaultTimelineSteps,
   onBack,
   onDispatchProducts,
+  isDispatching,
 }: DistributionSummaryProps) => {
   return (
     <>
@@ -445,6 +453,7 @@ const DistributionSummary = ({
       <DistributionFooter
         onBack={onBack}
         onDispatchProducts={onDispatchProducts}
+        isDispatching={isDispatching}
       />
     </>
   );

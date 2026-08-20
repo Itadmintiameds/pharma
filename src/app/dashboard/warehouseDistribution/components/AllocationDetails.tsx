@@ -76,11 +76,20 @@ const FlowBadge = ({ label }: { label: string }) => (
 type AllocationDetailsProps = {
   draft: AllocationDraft
   onChange: (patch: Partial<AllocationDraft>) => void
+  /** True once Continue has been clicked without required fields filled — shows inline errors below. */
+  showValidation?: boolean
 }
 
-const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
+const AllocationDetails = ({ draft, onChange, showValidation }: AllocationDetailsProps) => {
   const distributionType = distributionTypeLabel(draft.distributionMode)
   const sourceWarehouseLabel = resolveSourceLabel(draft)
+
+  const sourcePharmacyError =
+    showValidation && draft.distributionMode === 'pharmacy' && !draft.sourceId
+      ? 'Please select a source pharmacy'
+      : undefined
+  const destinationPharmacyError =
+    showValidation && !draft.destinationId ? 'Please select a destination pharmacy' : undefined
 
   const [pharmacies, setPharmacies] = useState<PharmacyOption[]>([])
   const [isLoadingPharmacies, setIsLoadingPharmacies] = useState(true)
@@ -207,6 +216,7 @@ const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
             }}
             placeholder="Select Source Pharmacy"
             isLoading={isLoadingPharmacies}
+            error={sourcePharmacyError}
           />
         </FormRow>
       )}
@@ -222,6 +232,7 @@ const AllocationDetails = ({ draft, onChange }: AllocationDetailsProps) => {
           }}
           placeholder="Select Destination Pharmacy"
           isLoading={isLoadingPharmacies}
+          error={destinationPharmacyError}
         />
       </FormRow>
 

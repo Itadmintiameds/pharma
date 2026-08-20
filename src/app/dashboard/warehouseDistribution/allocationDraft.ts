@@ -14,6 +14,7 @@ export interface AllocationDraftLine {
   id: string
   productId: string
   productName: string
+  packagingId: string
   batchId: string
   batchNo: string
   purchaseUnit: string
@@ -85,6 +86,7 @@ export const buildCreateAllocationRequest = (
   destinationId: draft.destinationId,
   lines: draft.lines.map((line) => ({
     productId: line.productId,
+    packagingId: line.packagingId,
     batchId: line.batchId,
     issueQuantity: line.issueQuantity,
   })),

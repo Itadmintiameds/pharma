@@ -18,6 +18,7 @@ type Batch = {
   batchNo: string
   expiryDate: string
   available: number
+  packagingId: string
 }
 
 type Product = {
@@ -35,6 +36,7 @@ type BatchApiRow = {
   productId?: string
   productName?: string
   purchaseUnit?: string
+  packagingId?: string
   totalStock?: number
 }
 
@@ -43,9 +45,11 @@ const batchKey = (productId: string, batchId: string) => `${productId}-${batchId
 type AddProductsProps = {
   draft: AllocationDraft
   onChange: (patch: Partial<AllocationDraft>) => void
+  /** True once Continue has been clicked with an empty cart — shows the inline error below. */
+  showValidation?: boolean
 }
 
-const AddProducts = ({ draft, onChange }: AddProductsProps) => {
+const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
   const [searchInput, setSearchInput] = useState('')
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false)
   const searchBoxRef = useRef<HTMLDivElement>(null)
@@ -100,6 +104,7 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
         batchNo: row.batchNumber || 'N/A',
         expiryDate: row.expiryDate || 'N/A',
         available: Number(row.totalStock) || 0,
+        packagingId: row.packagingId || '',
       }
       const existing = byProduct.get(row.productId)
       if (existing) {
@@ -183,14 +188,24 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
     setSelectedProductIds((prev) => prev.filter((id) => id !== productId))
   }
 
+  // A batch row's issue qty can never exceed what's actually available in it.
+  const issueQtyError = (batch: Batch, rawQty: string) => {
+    if (!rawQty) return undefined
+    return Number(rawQty) > batch.available
+      ? `Cannot exceed available quantity (${batch.available})`
+      : undefined
+  }
+
   const handleAddToCart = (product: Product, batch: Batch) => {
-    const qty = Number(issueQtyByBatch[batchKey(product.id, batch.batchId)] || 0)
-    if (!qty) return
+    const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId)] || ''
+    const qty = Number(rawQty)
+    if (!qty || issueQtyError(batch, rawQty)) return
 
     const line: AllocationDraftLine = {
       id: batchKey(product.id, batch.batchId),
       productId: product.id,
       productName: product.name,
+      packagingId: batch.packagingId,
       batchId: batch.batchId,
       batchNo: batch.batchNo,
       purchaseUnit: product.purchaseUnit,
@@ -338,44 +353,41 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
 
           <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
             <div className="min-w-165">
-              <div className="flex w-full items-center gap-2 bg-pneutral-50 px-3 py-2">
-                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
-                  Batch No.
-                </p>
-                <p className="w-25 shrink-0 text-p4 font-semibold text-pneutral-500">
-                  Expiry Date
-                </p>
-                <p className="w-32 shrink-0 text-p4 font-semibold text-pneutral-500">
+              <div className="grid w-full grid-cols-5 items-center gap-2 bg-pneutral-50 px-3 py-2">
+                <p className="text-p4 font-semibold text-pneutral-500">Batch No.</p>
+                <p className="text-p4 font-semibold text-pneutral-500">Expiry Date</p>
+                <p className="text-p4 font-semibold text-pneutral-500">
                   Available ({product.purchaseUnit})
                 </p>
-                <p className="w-35 shrink-0 text-p4 font-semibold text-pneutral-500">
+                <p className="text-p4 font-semibold text-pneutral-500">
                   Issue Qty ({product.purchaseUnit})
                 </p>
-                <div className="flex-1" />
-                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
-                  Action
-                </p>
+                <p className="text-p4 font-semibold text-pneutral-500">Action</p>
               </div>
 
-              {product.batches.map((batch) => (
-                <div
-                  key={batch.batchId}
-                  className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3 py-2"
-                >
-                  <p className="w-27 shrink-0 text-p4 font-medium text-pneutral-900">
-                    {batch.batchNo}
-                  </p>
-                  <p className="w-25 shrink-0 text-p4 font-normal text-pneutral-900">
-                    {batch.expiryDate}
-                  </p>
-                  <p className="w-32 shrink-0 text-p4 font-semibold text-success-600">
-                    {batch.available}
-                  </p>
-                  <div className="w-35 shrink-0">
+              {product.batches.map((batch) => {
+                const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId)] ?? ''
+                const qtyError = issueQtyError(batch, rawQty)
+                const isAddDisabled = !rawQty || Number(rawQty) <= 0 || Boolean(qtyError)
+
+                return (
+                  <div
+                    key={batch.batchId}
+                    className="grid w-full grid-cols-5 items-start gap-2 border-t border-pneutral-200 px-3 py-2"
+                  >
+                    <p className="pt-3 text-p4 font-medium text-pneutral-900">{batch.batchNo}</p>
+                    <p className="pt-3 text-p4 font-normal text-pneutral-900">
+                      {batch.expiryDate}
+                    </p>
+                    <p className="pt-3 text-p4 font-semibold text-success-600">
+                      {batch.available}
+                    </p>
                     <Input
                       type="number"
                       min={0}
-                      value={issueQtyByBatch[batchKey(product.id, batch.batchId)] ?? ''}
+                      max={batch.available}
+                      error={qtyError}
+                      value={rawQty}
                       onChange={(e) =>
                         setIssueQtyByBatch((prev) => ({
                           ...prev,
@@ -383,88 +395,102 @@ const AddProducts = ({ draft, onChange }: AddProductsProps) => {
                         }))
                       }
                     />
+                    <button
+                      type="button"
+                      onClick={() => handleAddToCart(product, batch)}
+                      disabled={isAddDisabled}
+                      className={`flex h-12 items-center justify-center rounded-lg border-2 px-4 font-medium text-label-l4 transition-colors ${
+                        isAddDisabled
+                          ? 'cursor-not-allowed border-pneutral-200 bg-pneutral-100 text-pneutral-400'
+                          : 'border-secondary-700 text-secondary-700 hover:bg-secondary-50'
+                      }`}
+                    >
+                      Add
+                    </button>
                   </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {cart.length === 0 && showValidation && (
+        <p className="w-full text-p3 font-normal text-warning-500">
+          Please add at least one product to the allocation cart before continuing.
+        </p>
+      )}
+
+      {cart.length > 0 && (
+        <div className="flex w-full flex-col gap-3 rounded-lg border border-pneutral-200 bg-white p-5">
+          <div className="flex items-center gap-2">
+            <Image
+              src="/warehouseDistribution/cart-shopping-outline.svg"
+              alt=""
+              width={20}
+              height={19}
+            />
+            <p className="text-h6 font-semibold text-pneutral-900">
+              Allocation Cart ({cart.length})
+            </p>
+          </div>
+
+          <div className="w-full overflow-x-auto">
+            <div className="min-w-150">
+              <div className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2">
+                <p className="w-8 shrink-0 text-p4 font-semibold text-pneutral-500">#</p>
+                <p className="w-55 shrink-0 text-p4 font-semibold text-pneutral-500">Product</p>
+                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
+                  Batch No.
+                </p>
+                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
+                  Purchase Unit
+                </p>
+                <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-500">Issue Qty</p>
+                <div className="flex-1" />
+                <p className="w-15 shrink-0 text-p4 font-semibold text-pneutral-500">Action</p>
+              </div>
+
+              {cart.map((line, index) => (
+                <div
+                  key={line.id}
+                  className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2"
+                >
+                  <p className="w-8 shrink-0 text-p3 font-normal text-pneutral-900">
+                    {index + 1}
+                  </p>
+                  <p className="w-55 shrink-0 text-label-l4 font-medium text-pneutral-900">
+                    {line.productName}
+                  </p>
+                  <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
+                    {line.batchNo}
+                  </p>
+                  <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
+                    {line.purchaseUnit}
+                  </p>
+                  <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-900">
+                    {line.issueQuantity}
+                  </p>
                   <div className="flex-1" />
                   <button
                     type="button"
-                    onClick={() => handleAddToCart(product, batch)}
-                    className="flex h-12 w-27 shrink-0 items-center justify-center rounded-lg border-2 border-secondary-700 px-4"
+                    onClick={() => handleRemoveFromCart(line.id)}
+                    aria-label={`Remove ${line.productName} from cart`}
+                    className="flex w-15 shrink-0 items-center"
                   >
-                    <span className="text-label-l4 font-medium text-secondary-700">Add</span>
+                    <Image
+                      src="/warehouseDistribution/trash-outline.svg"
+                      alt=""
+                      width={18}
+                      height={21}
+                    />
                   </button>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      ))}
-
-      <div className="flex w-full flex-col gap-3 rounded-lg border border-pneutral-200 bg-white p-5">
-        <div className="flex items-center gap-2">
-          <Image
-            src="/warehouseDistribution/cart-shopping-outline.svg"
-            alt=""
-            width={20}
-            height={19}
-          />
-          <p className="text-h6 font-semibold text-pneutral-900">
-            Allocation Cart ({cart.length})
-          </p>
-        </div>
-
-        <div className="w-full overflow-x-auto">
-          <div className="min-w-150">
-            <div className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2">
-              <p className="w-8 shrink-0 text-p4 font-semibold text-pneutral-500">#</p>
-              <p className="w-55 shrink-0 text-p4 font-semibold text-pneutral-500">Product</p>
-              <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">Batch No.</p>
-              <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
-                Purchase Unit
-              </p>
-              <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-500">Issue Qty</p>
-              <div className="flex-1" />
-              <p className="w-15 shrink-0 text-p4 font-semibold text-pneutral-500">Action</p>
-            </div>
-
-            {cart.map((line, index) => (
-              <div
-                key={line.id}
-                className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2"
-              >
-                <p className="w-8 shrink-0 text-p3 font-normal text-pneutral-900">
-                  {index + 1}
-                </p>
-                <p className="w-55 shrink-0 text-label-l4 font-medium text-pneutral-900">
-                  {line.productName}
-                </p>
-                <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
-                  {line.batchNo}
-                </p>
-                <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
-                  {line.purchaseUnit}
-                </p>
-                <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-900">
-                  {line.issueQuantity}
-                </p>
-                <div className="flex-1" />
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFromCart(line.id)}
-                  aria-label={`Remove ${line.productName} from cart`}
-                  className="flex w-15 shrink-0 items-center"
-                >
-                  <Image
-                    src="/warehouseDistribution/trash-outline.svg"
-                    alt=""
-                    width={18}
-                    height={21}
-                  />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
 
       <div className="w-full shrink-0 lg:w-75">

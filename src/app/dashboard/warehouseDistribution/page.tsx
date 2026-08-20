@@ -14,9 +14,12 @@ import {
   AllocationDraft,
   buildCreateAllocationRequest,
   createInitialAllocationDraft,
+  resolveSourceLabel,
 } from './allocationDraft'
-import { createAllocation } from '@/services/WarehouseDistributionService'
+import { createAllocation, dispatchAllocation } from '@/services/WarehouseDistributionService'
 import { showToast } from '@/app/components/common/Toast'
+import { formatDate } from '@/utils/formatDate'
+import { WarehouseDistributionData } from '@/types/WarehouseDistributionData'
 
 type View = 'list' | 'wizard' | 'summary' | 'dispatch'
 
@@ -447,6 +450,21 @@ const page = () => {
   const [draft, setDraft] = useState<AllocationDraft>(createInitialAllocationDraft())
   const [isConfirming, setIsConfirming] = useState(false)
   const [confirmError, setConfirmError] = useState<string | null>(null)
+  // Set once Continue is clicked on step 3 without a destination (and, for a
+  // pharmacy transfer, a source) picked — tells AllocationDetails to show
+  // its inline field errors instead of staying silent.
+  const [allocationDetailsValidationAttempted, setAllocationDetailsValidationAttempted] =
+    useState(false)
+  // Same idea for step 4 — Continue with an empty allocation cart tells
+  // AddProducts to show its inline error instead of staying silent.
+  const [addProductsValidationAttempted, setAddProductsValidationAttempted] = useState(false)
+  // The server's record of the allocation just confirmed — the summary view
+  // renders from this (plus the draft, for labels the response doesn't carry)
+  // instead of from placeholder data.
+  const [createdAllocation, setCreatedAllocation] = useState<WarehouseDistributionData | null>(
+    null
+  )
+  const [isDispatching, setIsDispatching] = useState(false)
 
   const updateDraft = (patch: Partial<AllocationDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }))
@@ -454,7 +472,26 @@ const page = () => {
   const handleStartWizard = () => {
     setDraft(createInitialAllocationDraft())
     setConfirmError(null)
+    setAllocationDetailsValidationAttempted(false)
+    setAddProductsValidationAttempted(false)
+    setCreatedAllocation(null)
     setView('wizard')
+  }
+
+  const handleBeforeNextStep = (fromStep: number) => {
+    if (fromStep === 3) {
+      const isValid =
+        Boolean(draft.destinationId) &&
+        (draft.distributionMode !== 'pharmacy' || Boolean(draft.sourceId))
+      if (!isValid) setAllocationDetailsValidationAttempted(true)
+      return isValid
+    }
+    if (fromStep === 4) {
+      const isValid = draft.lines.length > 0
+      if (!isValid) setAddProductsValidationAttempted(true)
+      return isValid
+    }
+    return true
   }
 
   // The wizard's Continue buttons never touch the network — they only move
@@ -464,7 +501,8 @@ const page = () => {
     setIsConfirming(true)
     setConfirmError(null)
     try {
-      await createAllocation(buildCreateAllocationRequest(draft))
+      const created = await createAllocation(buildCreateAllocationRequest(draft))
+      setCreatedAllocation(created)
       showToast.success('Allocation created successfully')
       setView('summary')
     } catch (error) {
@@ -476,18 +514,52 @@ const page = () => {
     }
   }
 
+  // Source stock leaves once the warehouse actually ships the products —
+  // POST /warehouse/distribution/{id}/dispatch moves the allocation from
+  // DISTRIBUTION_CREATED to PRODUCTS_DISPATCHED.
+  const handleDispatchProducts = async () => {
+    if (!createdAllocation?.warehouseDistributionId) return
+    setIsDispatching(true)
+    try {
+      const updated = await dispatchAllocation(createdAllocation.warehouseDistributionId)
+      setCreatedAllocation(updated)
+      showToast.success('Products dispatched successfully')
+      setView('dispatch')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to dispatch products.'
+      showToast.error(message)
+    } finally {
+      setIsDispatching(false)
+    }
+  }
+
   if (view === 'wizard') {
     return (
       <AllocationWizardLayout
         onCancel={() => setView('list')}
         onConfirm={handleConfirmAllocation}
         isConfirming={isConfirming}
+        onBeforeNext={handleBeforeNextStep}
       >
         {(step, goToStep) => {
           if (step === 1) return <CreateAllocation draft={draft} onChange={updateDraft} />
           if (step === 2) return <DistributionType draft={draft} onChange={updateDraft} />
-          if (step === 3) return <AllocationDetails draft={draft} onChange={updateDraft} />
-          if (step === 4) return <AddProducts draft={draft} onChange={updateDraft} />
+          if (step === 3)
+            return (
+              <AllocationDetails
+                draft={draft}
+                onChange={updateDraft}
+                showValidation={allocationDetailsValidationAttempted}
+              />
+            )
+          if (step === 4)
+            return (
+              <AddProducts
+                draft={draft}
+                onChange={updateDraft}
+                showValidation={addProductsValidationAttempted}
+              />
+            )
           if (step === 5)
             return (
               <ReviewConfirm
@@ -511,8 +583,47 @@ const page = () => {
     return (
       <div className="flex w-full flex-col items-start gap-4">
         <DistributionSummary
+          distributionNo={
+            createdAllocation?.warehouseDistributionId
+              ? `WD${String(createdAllocation.warehouseDistributionId).padStart(6, '0')}`
+              : undefined
+          }
+          sourceType="Stock Allocation"
+          sourceNo={createdAllocation?.allocationNo || draft.allocationNo || undefined}
+          distributionDate={formatDate(createdAllocation?.allocationDate || draft.allocationDate)}
+          sourceWarehouse={resolveSourceLabel(draft)}
+          destinationPharmacy={draft.destinationLabel || '—'}
+          reference={draft.referenceLabel || 'No reference specified'}
+          remarks={draft.remarks || 'No remarks added.'}
+          products={draft.lines.map((line) => ({
+            product: line.productName,
+            genericName: '',
+            batchNo: line.batchNo,
+            purchaseUnit: line.purchaseUnit,
+            dispatchQty: line.issueQuantity,
+          }))}
+          timelineSteps={[
+            {
+              icon: '/warehouseDistribution/document-text-mini-white.svg',
+              label: 'Draft',
+              timestamp: formatDate(createdAllocation?.createdAt),
+              description: 'Allocation created',
+              active: true,
+            },
+            {
+              icon: '/warehouseDistribution/truck-outline-gray.svg',
+              label: 'Pending Receipt',
+              description: 'Waiting for pharmacy to acknowledge receipt',
+            },
+            {
+              icon: '/warehouseDistribution/check-circle-outline-gray.svg',
+              label: 'Received',
+              description: 'Stock received and available at pharmacy',
+            },
+          ]}
           onBack={() => setView('list')}
-          onDispatchProducts={() => setView('dispatch')}
+          onDispatchProducts={handleDispatchProducts}
+          isDispatching={isDispatching}
         />
       </div>
     )

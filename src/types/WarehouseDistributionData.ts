@@ -12,7 +12,63 @@ export type DistributionStatus =
   | "STOCK_RECEIVED"
   | "STOCK_REJECTED";
 
-// Mirrors WarehouseDistribution.java (pharma_warehouse_distribution).
+// Mirrors WarehouseDistributionLineResponse.ProductInfo.
+export interface WarehouseDistributionLineProductInfo {
+  productId: string;
+  productName: string;
+  brandName?: string;
+  hsnNo?: string;
+  gstPercentage?: number;
+}
+
+// Mirrors WarehouseDistributionLineResponse.PackagingInfo.
+export interface WarehouseDistributionLinePackagingInfo {
+  packagingId: string;
+  purchaseUnit: string;
+  purchaseUnitContains?: number;
+}
+
+// Mirrors WarehouseDistributionLineResponse.BatchInfo.
+export interface WarehouseDistributionLineBatchInfo {
+  batchId: string;
+  batchNumber: string;
+  manufacturingDate?: string;
+  expiryDate?: string;
+  mrp?: number;
+  sellingPrice?: number;
+  purchasePrice?: number;
+  rackLocation?: string;
+}
+
+// Mirrors WarehouseDistributionLineResponse.java — one allocation line as the API
+// returns it (WarehouseDistributionDetails.java plus nested product/packaging/batch
+// info, so the frontend can render a line without extra lookups).
+export interface WarehouseDistributionLineData {
+  warehouseDistributionDetailsId?: number;
+  productId: string;
+  packagingId?: string;
+  batchId?: string;
+  issueQuantity: number;
+  receivedQuantity?: number;
+  damagedQuantity?: number;
+  remarks?: string;
+  product?: WarehouseDistributionLineProductInfo;
+  packaging?: WarehouseDistributionLinePackagingInfo;
+  batch?: WarehouseDistributionLineBatchInfo;
+}
+
+// Mirrors WarehouseDistributionStatusResponse.java — one entry of a distribution's
+// status history (created / dispatched / received / rejected).
+export interface WarehouseDistributionStatusData {
+  warehouseDistributionStatusId?: number;
+  status: DistributionStatus;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+// Mirrors WarehouseDistributionResponse.java — the API's shape for one distribution:
+// WarehouseDistribution.java plus the source/destination store names resolved
+// server-side, its lines and its full status history (oldest first).
 export interface WarehouseDistributionData {
   warehouseDistributionId?: number;
   allocationMode?: AllocationMode;
@@ -23,35 +79,16 @@ export interface WarehouseDistributionData {
   remarks?: string;
   sourceType: LocationType;
   sourceId: string;
+  sourceName?: string;
   destinationType: LocationType;
   destinationId: string;
+  destinationName?: string;
   allocationRequestedBy?: string;
-  createdBy?: string;
-  createdAt?: string;
-  modifiedBy?: string;
-  modifiedAt?: string;
-  // Not a column on the entity itself — carried on WarehouseDistributionResponse.java.
   currentStatus?: DistributionStatus;
-  details?: WarehouseDistributionDetailsData[];
-}
-
-// Mirrors WarehouseDistributionDetails.java (pharma_warehouse_distribution_details).
-// product/packaging/batch are @ManyToOne + @JsonIgnore on the entity, so the API
-// (see WarehouseDistributionLineResponse.java) flattens them down to their id strings.
-export interface WarehouseDistributionDetailsData {
-  warehouseDistributionDetailsId?: number;
-  warehouseDistributionId?: number;
-  productId: string;
-  packagingId?: string;
-  batchId?: string;
-  issueQuantity: number;
-  receivedQuantity?: number;
-  damagedQuantity?: number;
-  remarks?: string;
+  lines?: WarehouseDistributionLineData[];
+  statuses?: WarehouseDistributionStatusData[];
   createdBy?: string;
   createdAt?: string;
-  modifiedBy?: string;
-  modifiedAt?: string;
 }
 
 // Mirrors WarehouseDistributionLineRequest.java — one allocation line to be issued.
