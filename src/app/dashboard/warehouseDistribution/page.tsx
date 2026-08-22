@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AllocationWizardLayout from './components/AllocationWizardLayout'
 import CreateAllocation from './components/CreateAllocation'
 import DistributionType from './components/DistributionType'
@@ -10,16 +10,17 @@ import AddProducts from './components/AddProducts'
 import ReviewConfirm from './components/ReviewConfirm'
 import DistributionSummary from './components/DistributionSummary'
 import DispatchProducts from './components/StockMovementDetails'
+import PaginationFooter from '@/app/components/common/table/Pagination'
 import {
   AllocationDraft,
   buildCreateAllocationRequest,
   createInitialAllocationDraft,
-  resolveSourceLabel,
 } from './allocationDraft'
 import {
   createAllocation,
   dispatchAllocation,
   getRequestedByKpi,
+  getWarehouseDistribution,
   getWarehouseDistributionList,
 } from '@/services/WarehouseDistributionService'
 import { showToast } from '@/app/components/common/Toast'
@@ -31,7 +32,31 @@ import {
   WarehouseDistributionSummaryData,
 } from '@/types/WarehouseDistributionData'
 
-type View = 'list' | 'wizard' | 'summary' | 'dispatch'
+type View = 'list' | 'wizard' | 'summary' | 'dispatch' | 'details'
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// dd-mmm-yyyy with a 12-hour AM/PM time — used only for the Transfer No.
+// column's timestamp, which shows this format instead of the app-wide
+// dd-mm-yyyy 24-hour one.
+const formatDateTimeAmPm = (value?: string | null, fallback = '—'): string => {
+  if (!value) return fallback
+
+  const [datePart, timePart] = value.split('T')
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const dateLabel = iso
+    ? `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+    : datePart
+  if (!timePart) return dateLabel
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${dateLabel} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
 
 const cardShadow =
   'shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)]'
@@ -168,40 +193,56 @@ const FilterField = ({
 const TextFilterField = ({
   label,
   placeholder,
+  value,
+  onChange,
 }: {
   label: string
   placeholder: string
+  value: string
+  onChange: (value: string) => void
 }) => (
   <FilterField label={label}>
     <div className={filterFieldBox}>
       <input
         type="text"
         placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none placeholder:text-pneutral-500"
       />
     </div>
   </FilterField>
 )
 
+interface SelectOption {
+  label: string
+  value: string
+}
+
 const SelectFilterField = ({
   label,
   defaultLabel,
   options,
+  value,
+  onChange,
 }: {
   label: string
   defaultLabel: string
-  options: string[]
+  options: SelectOption[]
+  value: string
+  onChange: (value: string) => void
 }) => (
   <FilterField label={label}>
     <div className={filterFieldBox}>
       <select
-        defaultValue=""
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full min-w-0 flex-1 appearance-none bg-transparent text-p2 text-pneutral-900 outline-none"
       >
         <option value="">{defaultLabel}</option>
         {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -216,26 +257,38 @@ const SelectFilterField = ({
   </FilterField>
 )
 
-const SearchFilterField = ({
-  label,
-  placeholder,
+const DateRangeFilterField = ({
+  from,
+  to,
+  onFromChange,
+  onToChange,
 }: {
-  label: string
-  placeholder: string
+  from: string
+  to: string
+  onFromChange: (value: string) => void
+  onToChange: (value: string) => void
 }) => (
-  <FilterField label={label}>
+  <FilterField label="Date Range">
     <div className={filterFieldBox}>
       <Image
-        src="/warehouseDistribution/transferExplorer/filters/search-gray.svg"
+        src="/warehouseDistribution/transferExplorer/filters/calendar-range.svg"
         alt=""
         width={13}
         height={13}
         className="shrink-0"
       />
       <input
-        type="text"
-        placeholder={placeholder}
-        className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none placeholder:text-pneutral-500"
+        type="date"
+        value={from}
+        onChange={(e) => onFromChange(e.target.value)}
+        className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none"
+      />
+      <span className="shrink-0 text-p2 text-pneutral-500">→</span>
+      <input
+        type="date"
+        value={to}
+        onChange={(e) => onToChange(e.target.value)}
+        className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none"
       />
     </div>
   </FilterField>
@@ -262,15 +315,74 @@ const distributionStatusLabel: Record<DistributionStatus, string> = {
   STOCK_REJECTED: 'Rejected',
 }
 
+// Advanced Filters state — the whole list is fetched up front, so every
+// field here narrows `transferList` client-side rather than re-querying.
+interface TransferFilters {
+  transferNo: string
+  sourceStore: string
+  destinationStore: string
+  status: string
+  dateFrom: string
+  dateTo: string
+}
+
+const emptyTransferFilters: TransferFilters = {
+  transferNo: '',
+  sourceStore: '',
+  destinationStore: '',
+  status: '',
+  dateFrom: '',
+  dateTo: '',
+}
+
+// De-duplicated, sorted {label, value} options for a store dropdown, built
+// from whichever store names/ids actually appear in the fetched list.
+const uniqueStoreOptions = (names: (string | undefined)[]): SelectOption[] =>
+  Array.from(new Set(names.filter((name): name is string => Boolean(name))))
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ label: name, value: name }))
+
+const matchesTransferFilters = (
+  summary: WarehouseDistributionSummaryData,
+  filters: TransferFilters
+): boolean => {
+  if (
+    filters.transferNo &&
+    !summary.allocationNo.toLowerCase().includes(filters.transferNo.toLowerCase())
+  ) {
+    return false
+  }
+  if (filters.sourceStore && (summary.fromStore || summary.fromId) !== filters.sourceStore) {
+    return false
+  }
+  if (
+    filters.destinationStore &&
+    (summary.toStore || summary.toId) !== filters.destinationStore
+  ) {
+    return false
+  }
+  if (filters.status && summary.currentStatus !== filters.status) {
+    return false
+  }
+  const allocationDate = summary.allocationDate?.slice(0, 10)
+  if (filters.dateFrom && (!allocationDate || allocationDate < filters.dateFrom)) {
+    return false
+  }
+  if (filters.dateTo && (!allocationDate || allocationDate > filters.dateTo)) {
+    return false
+  }
+  return true
+}
+
 const toTransferRow = (summary: WarehouseDistributionSummaryData): TransferRow => ({
   transferNo: summary.allocationNo,
-  dateTime: formatDateTime(summary.allocationDate),
+  dateTime: formatDateTimeAmPm(summary.allocationDate),
   fromName: summary.fromStore || summary.fromId,
   fromCode: summary.fromId,
   toName: summary.toStore || summary.toId,
   toCode: summary.toId,
   products: summary.productsCount,
-  qty: `${summary.totalIssueQuantity} PU`,
+  qty: `${summary.totalIssueQuantity}`,
   status: distributionStatusLabel[summary.currentStatus] ?? summary.currentStatus,
 })
 
@@ -291,7 +403,7 @@ const TransferStatusBadge = ({ status }: { status: string }) => (
   </span>
 )
 
-const colTransferNo = 'w-33 shrink-0'
+const colTransferNo = 'w-45 shrink-0'
 const colStore = 'min-w-42 flex-1'
 const colProducts = 'w-24 shrink-0'
 const colQty = 'w-26 shrink-0'
@@ -299,7 +411,7 @@ const colStatus = 'w-40 shrink-0'
 const colActions = 'w-26 shrink-0'
 
 const TransferTableHeader = () => (
-  <div className="flex w-full min-w-233 items-stretch">
+  <div className="flex w-full min-w-245 items-stretch">
     <div
       className={`flex h-18 items-center border-b border-r border-pneutral-200 bg-secondary-600 px-2 py-4 ${colTransferNo}`}
     >
@@ -352,8 +464,14 @@ const TransferTableHeader = () => (
   </div>
 )
 
-const TransferTableRow = ({ row }: { row: TransferRow }) => (
-  <div className="flex w-full min-w-233 items-stretch">
+const TransferTableRow = ({
+  row,
+  onView,
+}: {
+  row: TransferRow
+  onView?: () => void
+}) => (
+  <div className="flex w-full min-w-245 items-stretch">
     <div
       className={`flex h-17 flex-col justify-center gap-1 border-b border-r border-pneutral-200 px-2 py-4 ${colTransferNo}`}
     >
@@ -371,9 +489,6 @@ const TransferTableRow = ({ row }: { row: TransferRow }) => (
       <p className="whitespace-nowrap text-p3 font-medium text-pneutral-900">
         {row.fromName}
       </p>
-      <p className="whitespace-nowrap text-p3 font-normal text-pneutral-600">
-        {row.fromCode}
-      </p>
     </div>
 
     <div
@@ -381,9 +496,6 @@ const TransferTableRow = ({ row }: { row: TransferRow }) => (
     >
       <p className="whitespace-nowrap text-p3 font-medium text-pneutral-900">
         {row.toName}
-      </p>
-      <p className="whitespace-nowrap text-p3 font-normal text-pneutral-600">
-        {row.toCode}
       </p>
     </div>
 
@@ -412,6 +524,7 @@ const TransferTableRow = ({ row }: { row: TransferRow }) => (
     >
       <button
         type="button"
+        onClick={onView}
         className="flex h-7 shrink-0 items-center justify-center gap-1 rounded-lg bg-primary-800 px-3"
       >
         <Image
@@ -467,6 +580,16 @@ const page = () => {
   )
   const [isDispatching, setIsDispatching] = useState(false)
 
+  // The transfer whose "View" button was clicked in the Transfer List table —
+  // drives the Stock Movement Details view.
+  const [selectedTransfer, setSelectedTransfer] =
+    useState<WarehouseDistributionSummaryData | null>(null)
+
+  // True while a "Ready to Dispatch" transfer's full distribution is being
+  // fetched for the summary view (opened from the list's "View" action,
+  // rather than just having been created by the wizard).
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false)
+
   // Transfer Explorer's table — this warehouse's distributions, incoming and
   // outgoing, fetched fresh whenever the list view is shown (so it reflects a
   // just-created or just-dispatched allocation on the way back to it).
@@ -502,6 +625,49 @@ const page = () => {
   }, [view])
 
   const statCards = buildStatCards(kpi)
+
+  // Advanced Filters: the list is fetched in full, so filtering happens
+  // client-side. `filterDraft` holds whatever the user has typed/picked;
+  // `appliedFilters` is what actually narrows the table, and only moves in
+  // step with the draft when Search is clicked (Clear resets both at once).
+  const [filterDraft, setFilterDraft] = useState<TransferFilters>(emptyTransferFilters)
+  const [appliedFilters, setAppliedFilters] = useState<TransferFilters>(emptyTransferFilters)
+
+  const handleSearchFilters = () => setAppliedFilters(filterDraft)
+  const handleClearFilters = () => {
+    setFilterDraft(emptyTransferFilters)
+    setAppliedFilters(emptyTransferFilters)
+  }
+
+  const sourceStoreOptions = useMemo(
+    () => uniqueStoreOptions(transferList.map((t) => t.fromStore || t.fromId)),
+    [transferList]
+  )
+  const destinationStoreOptions = useMemo(
+    () => uniqueStoreOptions(transferList.map((t) => t.toStore || t.toId)),
+    [transferList]
+  )
+  const statusOptions: SelectOption[] = Object.entries(distributionStatusLabel).map(
+    ([value, label]) => ({ value, label })
+  )
+
+  const filteredTransferList = useMemo(
+    () => transferList.filter((summary) => matchesTransferFilters(summary, appliedFilters)),
+    [transferList, appliedFilters]
+  )
+
+  // Transfer List pagination — fetched in full, so pages are sliced client-side.
+  const TRANSFER_LIST_PAGE_SIZE = 5
+  const [transferListPage, setTransferListPage] = useState(1)
+
+  useEffect(() => {
+    setTransferListPage(1)
+  }, [filteredTransferList])
+
+  const pagedTransferList = filteredTransferList.slice(
+    (transferListPage - 1) * TRANSFER_LIST_PAGE_SIZE,
+    transferListPage * TRANSFER_LIST_PAGE_SIZE
+  )
 
   const updateDraft = (patch: Partial<AllocationDraft>) =>
     setDraft((prev) => ({ ...prev, ...patch }))
@@ -541,7 +707,10 @@ const page = () => {
       const created = await createAllocation(buildCreateAllocationRequest(draft))
       setCreatedAllocation(created)
       showToast.success('Allocation created successfully')
-      setView('summary')
+      // A pharmacy transfer has no warehouse-side dispatch step to walk
+      // through next, so it goes straight back to the list instead of the
+      // dispatch summary screen.
+      setView(draft.distributionMode === 'pharmacy' ? 'list' : 'summary')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create allocation.'
       setConfirmError(message)
@@ -579,6 +748,33 @@ const page = () => {
       showToast.error(message)
     } finally {
       setIsDispatching(false)
+    }
+  }
+
+  // The Transfer List's "View" action: a "Ready to Dispatch" transfer hasn't
+  // shipped anything yet, so it opens on the same summary screen the create
+  // wizard ends on (with its own "Dispatch Products" action) rather than the
+  // movement-history screen the other statuses use.
+  const handleViewTransfer = async (summary: WarehouseDistributionSummaryData) => {
+    if (summary.currentStatus !== 'DISTRIBUTION_CREATED') {
+      setSelectedTransfer(summary)
+      setView('details')
+      return
+    }
+
+    setCreatedAllocation(null)
+    setView('summary')
+    setIsLoadingSummary(true)
+    try {
+      const data = await getWarehouseDistribution(summary.warehouseDistributionId)
+      setCreatedAllocation(data)
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to load the allocation.'
+      showToast.error(message)
+      setView('list')
+    } finally {
+      setIsLoadingSummary(false)
     }
   }
 
@@ -631,55 +827,88 @@ const page = () => {
   if (view === 'summary') {
     return (
       <div className="flex w-full flex-col items-start gap-4">
-        <DistributionSummary
-          distributionNo={
-            createdAllocation?.warehouseDistributionId
-              ? `WD${String(createdAllocation.warehouseDistributionId).padStart(6, '0')}`
-              : undefined
-          }
-          sourceType="Stock Allocation"
-          sourceNo={createdAllocation?.allocationNo || draft.allocationNo || undefined}
-          distributionDate={formatDate(createdAllocation?.allocationDate || draft.allocationDate)}
-          sourceWarehouse={resolveSourceLabel(draft)}
-          destinationPharmacy={draft.destinationLabel || '—'}
-          reference={draft.referenceLabel || 'No reference specified'}
-          remarks={draft.remarks || 'No remarks added.'}
-          products={draft.lines.map((line) => ({
-            product: line.productName,
-            genericName: '',
-            batchNo: line.batchNo,
-            purchaseUnit: line.purchaseUnit,
-            dispatchQty: line.issueQuantity,
-          }))}
-          timelineSteps={[
-            {
-              icon: '/warehouseDistribution/document-text-mini-white.svg',
-              label: 'Draft',
-              timestamp: formatDate(createdAllocation?.createdAt),
-              description: 'Allocation created',
-              active: true,
-            },
-            {
-              icon: '/warehouseDistribution/truck-outline-gray.svg',
-              label: 'Pending Receipt',
-              description: 'Waiting for pharmacy to acknowledge receipt',
-            },
-            {
-              icon: '/warehouseDistribution/check-circle-outline-gray.svg',
-              label: 'Received',
-              description: 'Stock received and available at pharmacy',
-            },
-          ]}
-          onBack={() => setView('list')}
-          onDispatchProducts={handleDispatchProducts}
-          isDispatching={isDispatching}
-        />
+        {isLoadingSummary || !createdAllocation ? (
+          <div className="flex w-full items-center justify-center rounded-2xl border border-pneutral-200 bg-white p-8 text-p3 text-pneutral-500">
+            Loading allocation...
+          </div>
+        ) : (
+          <DistributionSummary
+            distributionNo={
+              createdAllocation.warehouseDistributionId
+                ? `WD${String(createdAllocation.warehouseDistributionId).padStart(6, '0')}`
+                : undefined
+            }
+            sourceType="Stock Allocation"
+            sourceNo={createdAllocation.allocationNo || undefined}
+            distributionDate={formatDate(createdAllocation.allocationDate)}
+            sourceWarehouse={
+              createdAllocation.sourceName?.trim() || createdAllocation.sourceId || '—'
+            }
+            destinationPharmacy={
+              createdAllocation.destinationName?.trim() ||
+              createdAllocation.destinationId ||
+              '—'
+            }
+            reference={createdAllocation.reference || 'No reference specified'}
+            remarks={createdAllocation.remarks || 'No remarks added.'}
+            products={(createdAllocation.lines ?? []).map((line) => ({
+              product: line.product?.productName ?? line.productId,
+              genericName: line.product?.brandName ?? '',
+              batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+              purchaseUnit: line.packaging?.purchaseUnit ?? '—',
+              dispatchQty: line.issueQuantity ?? 0,
+            }))}
+            timelineSteps={[
+              {
+                icon: '/warehouseDistribution/document-text-mini-white.svg',
+                label: 'Draft',
+                timestamp: formatDate(createdAllocation.createdAt),
+                description: 'Allocation created',
+                active: true,
+              },
+              {
+                icon: '/warehouseDistribution/truck-outline-gray.svg',
+                label: 'Pending Receipt',
+                description: 'Waiting for pharmacy to acknowledge receipt',
+              },
+              {
+                icon: '/warehouseDistribution/check-circle-outline-gray.svg',
+                label: 'Received',
+                description: 'Stock received and available at pharmacy',
+              },
+            ]}
+            onBack={() => setView('list')}
+            onDispatchProducts={handleDispatchProducts}
+            isDispatching={isDispatching}
+          />
+        )}
       </div>
     )
   }
 
   if (view === 'dispatch') {
-    return <DispatchProducts />
+    return (
+      <DispatchProducts
+        distributionId={createdAllocation?.warehouseDistributionId}
+        onBack={() => setView('list')}
+      />
+    )
+  }
+
+  if (view === 'details' && selectedTransfer) {
+    return (
+      <DispatchProducts
+        distributionId={selectedTransfer.warehouseDistributionId}
+        movementNo={selectedTransfer.allocationNo}
+        movementType="Warehouse Distribution"
+        createdOn={formatDateTime(selectedTransfer.allocationDate)}
+        lastUpdated={formatDateTime(selectedTransfer.allocationDate)}
+        onBack={() => {
+          setSelectedTransfer(null)
+          setView('list')
+        }}
+      />
+    )
   }
 
   return (
@@ -746,95 +975,113 @@ const page = () => {
         </div>
 
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <TextFilterField label="Transfer No." placeholder="Enter transfer no." />
+          <TextFilterField
+            label="Transfer No."
+            placeholder="Enter transfer no."
+            value={filterDraft.transferNo}
+            onChange={(value) => setFilterDraft((prev) => ({ ...prev, transferNo: value }))}
+          />
           <SelectFilterField
             label="Source Store"
             defaultLabel="All Source Stores"
-            options={[]}
+            options={sourceStoreOptions}
+            value={filterDraft.sourceStore}
+            onChange={(value) => setFilterDraft((prev) => ({ ...prev, sourceStore: value }))}
           />
           <SelectFilterField
             label="Destination Store"
             defaultLabel="All Destination Stores"
-            options={[]}
+            options={destinationStoreOptions}
+            value={filterDraft.destinationStore}
+            onChange={(value) => setFilterDraft((prev) => ({ ...prev, destinationStore: value }))}
           />
           <SelectFilterField
             label="Status"
             defaultLabel="All Statuses"
-            options={[]}
+            options={statusOptions}
+            value={filterDraft.status}
+            onChange={(value) => setFilterDraft((prev) => ({ ...prev, status: value }))}
           />
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <SearchFilterField label="Product" placeholder="Search product name" />
-          <SearchFilterField label="Batch No." placeholder="Search batch no." />
-
-          <FilterField label="Date Range">
-            <div className={filterFieldBox}>
-              <Image
-                src="/warehouseDistribution/transferExplorer/filters/calendar-range.svg"
-                alt=""
-                width={13}
-                height={13}
-                className="shrink-0"
-              />
-              <p className="whitespace-nowrap text-p2 font-normal text-pneutral-900">
-                {'01-Aug-2026  →  06-Aug-2026'}
-              </p>
-            </div>
-          </FilterField>
-        </div>
-
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-          <button
-            type="button"
-            className="flex h-12 w-full items-center justify-center rounded-lg border-2 border-secondary-700 px-4 sm:w-35"
-          >
-            <span className="whitespace-nowrap text-label-l4 font-medium text-secondary-700">
-              Clear Filters
-            </span>
-          </button>
-
-          <button
-            type="button"
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 sm:w-30"
-          >
-            <Image
-              src="/warehouseDistribution/transferExplorer/filters/search-white.svg"
-              alt=""
-              width={16.25}
-              height={16.25}
+        <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex w-full flex-col sm:w-1/2 lg:w-1/4">
+            <DateRangeFilterField
+              from={filterDraft.dateFrom}
+              to={filterDraft.dateTo}
+              onFromChange={(value) => setFilterDraft((prev) => ({ ...prev, dateFrom: value }))}
+              onToChange={(value) => setFilterDraft((prev) => ({ ...prev, dateTo: value }))}
             />
-            <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
-              Search
-            </span>
-          </button>
+          </div>
+
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={handleClearFilters}
+              className="flex h-12 w-full items-center justify-center rounded-lg border-2 border-secondary-700 px-4 sm:w-35"
+            >
+              <span className="whitespace-nowrap text-label-l4 font-medium text-secondary-700">
+                Clear Filters
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSearchFilters}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 sm:w-30"
+            >
+              <Image
+                src="/warehouseDistribution/transferExplorer/filters/search-white.svg"
+                alt=""
+                width={16.25}
+                height={16.25}
+              />
+              <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
+                Search
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
         <p className="text-label-l5 font-semibold text-primary-800">
-          Transfer List ({transferList.length})
+          Transfer List ({filteredTransferList.length})
         </p>
 
         <div className="w-full overflow-x-auto rounded-sm border border-pneutral-200">
           <TransferTableHeader />
           {isLoadingTransferList ? (
-            <div className="flex min-w-233 items-center justify-center py-10 text-p3 text-pneutral-500">
+            <div className="flex min-w-245 items-center justify-center py-10 text-p3 text-pneutral-500">
               Loading transfers...
             </div>
-          ) : transferList.length === 0 ? (
-            <div className="flex min-w-233 items-center justify-center py-10 text-p3 text-pneutral-500">
-              No transfers found.
+          ) : filteredTransferList.length === 0 ? (
+            <div className="flex min-w-245 items-center justify-center py-10 text-p3 text-pneutral-500">
+              {transferList.length === 0
+                ? 'No transfers found.'
+                : 'No transfers match the selected filters.'}
             </div>
           ) : (
-            transferList.map((summary) => (
+            pagedTransferList.map((summary) => (
               <TransferTableRow
                 key={summary.warehouseDistributionId}
                 row={toTransferRow(summary)}
+                onView={() => handleViewTransfer(summary)}
               />
             ))
           )}
         </div>
+
+        {!isLoadingTransferList && filteredTransferList.length > 0 && (
+          <div className="w-full">
+            <PaginationFooter
+              page={transferListPage}
+              pageSize={TRANSFER_LIST_PAGE_SIZE}
+              totalItems={filteredTransferList.length}
+              onPageChange={setTransferListPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

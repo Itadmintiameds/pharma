@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Check,
   Printer,
@@ -12,22 +12,43 @@ import {
   X,
   LucideIcon,
 } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
 import type {
   DistributionStatus,
   WarehouseDistributionData,
   WarehouseDistributionLineData,
 } from '@/types/WarehouseDistributionData'
-import { formatDate, formatDateTime } from '@/utils/formatDate'
+import { formatDate } from '@/utils/formatDate'
+import { getUserById } from '@/services/UserManagementService'
+
+const EM_DASH = '—'
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// dd-mmm-yyyy with a 12-hour AM/PM time, matching the format the other
+// transfer/receipt screens show — rather than the app-wide dd-mm-yyyy 24-hour one.
+const formatDateTime = (value?: string | null, fallback = EM_DASH): string => {
+  if (!value) return fallback
+
+  const [datePart, timePart] = value.split('T')
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const dateLabel = iso
+    ? `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+    : datePart
+  if (!timePart) return dateLabel
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${dateLabel} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
 
 interface PendingReceiptProps {
   referenceNo?: string
   fromStore?: string
-  fromCode?: string
   destinationStore?: string
-  toCode?: string
   requestedOn?: string
   requestedBy?: string
   dispatchedOn?: string
@@ -185,9 +206,7 @@ const SummaryItem = ({
 interface TransferSummaryBarProps {
   transferNo: string
   fromStore: string
-  fromCode: string
   toStore: string
-  toCode: string
   requestedOn: string
   requestedBy: string
   dispatchedOn: string
@@ -196,9 +215,7 @@ interface TransferSummaryBarProps {
 const TransferSummaryBar = ({
   transferNo,
   fromStore,
-  fromCode,
   toStore,
-  toCode,
   requestedOn,
   requestedBy,
   dispatchedOn,
@@ -217,7 +234,6 @@ const TransferSummaryBar = ({
       iconColor="text-secondary-700"
       label="From (Sending Store)"
       value={fromStore}
-      subvalue={fromCode}
     />
     <SummaryItem
       Icon={Truck}
@@ -225,7 +241,6 @@ const TransferSummaryBar = ({
       iconColor="text-success-700"
       label="To (Receiving Store)"
       value={toStore}
-      subvalue={toCode}
     />
     <SummaryItem
       Icon={Calendar}
@@ -330,17 +345,25 @@ const ReceiptStatusBadge = ({ status }: { status: LineReceiptStatus }) => (
   </span>
 )
 
-const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
+interface DispatchedProductColumn {
+  header: string
+  width: string
+  align?: 'left' | 'center'
+  render: (row: DispatchedProductRow, index: number) => React.ReactNode
+}
+
+const dispatchedProductColumns: DispatchedProductColumn[] = [
   {
     header: '#',
-    width: 'w-12',
+    width: 'w-[5%]',
     align: 'center',
-    render: (row) => (
-      <span className="text-p3 font-regular text-pneutral-900">{row.id}</span>
+    render: (_row, index) => (
+      <span className="text-p3 font-regular text-pneutral-900">{index + 1}</span>
     ),
   },
   {
     header: 'Product Details',
+    width: 'w-[24%]',
     render: (row) => (
       <div className="flex items-center gap-2">
         <div className="flex size-6.5 shrink-0 items-center justify-center rounded bg-secondary-100">
@@ -363,7 +386,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
   {
     header: 'Batch No.',
-    width: 'w-28',
+    width: 'w-[12%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -373,7 +396,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
   {
     header: 'Dispatched Qty',
-    width: 'w-32',
+    width: 'w-[13%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-medium text-pneutral-900">
@@ -383,7 +406,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
   {
     header: 'Pending Receipt Qty',
-    width: 'w-36',
+    width: 'w-[15%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-medium text-pneutral-900">
@@ -393,7 +416,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
   {
     header: 'Expiry Date',
-    width: 'w-32',
+    width: 'w-[12%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -403,6 +426,7 @@ const dispatchedProductColumns: TableColumn<DispatchedProductRow>[] = [
   },
   {
     header: 'Status',
+    width: 'w-[19%]',
     align: 'center',
     render: (row) => <ReceiptStatusBadge status={row.status} />,
   },
@@ -414,13 +438,46 @@ const DispatchedProductsCard = ({ rows }: { rows: DispatchedProductRow[] }) => (
       Dispatched Products
     </p>
 
-    <TableWithoutGrid
-      columns={dispatchedProductColumns}
-      data={rows}
-      rowKey={(row) => row.id.toString()}
-      headerVariant="primary"
-      container="box"
-    />
+    {rows.length === 0 ? (
+      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+        No dispatched products found.
+      </p>
+    ) : (
+      <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="h-18 bg-secondary-600">
+              {dispatchedProductColumns.map((col) => (
+                <th
+                  key={col.header}
+                  className={`${col.width} border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                    col.align === 'center' ? 'text-center' : 'text-left'
+                  }`}
+                >
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.id}>
+                {dispatchedProductColumns.map((col) => (
+                  <td
+                    key={col.header}
+                    className={`border border-pneutral-200 px-3 py-2.5 ${
+                      col.align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    {col.render(row, index)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>
 )
 
@@ -458,9 +515,7 @@ const PendingReceiptActions = ({
 const PendingReceipt = ({
   referenceNo = 'PT000021',
   fromStore = 'Hebbal Medical Store',
-  fromCode = 'STO0008',
   destinationStore = 'Rajajinagar Medical Store',
-  toCode = 'STO0012',
   requestedOn = '05-Aug-2026 09:15 AM',
   requestedBy = 'Warehouse Admin',
   dispatchedOn = '05-Aug-2026 09:15 AM',
@@ -487,6 +542,30 @@ const PendingReceipt = ({
   const dispatchedAt = distribution?.statuses?.find(
     (entry) => entry.status === 'PRODUCTS_DISPATCHED'
   )?.createdAt
+
+  // createdBy is only ever the requesting user's raw id — resolve it to
+  // their role once the distribution loads, since that's what "Requested By" shows.
+  const creatorId = distribution?.createdBy
+  const [requesterRole, setRequesterRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!creatorId) {
+      setRequesterRole(null)
+      return
+    }
+    let active = true
+    getUserById(creatorId)
+      .then((user) => {
+        if (active) setRequesterRole(user?.pharmaRolesDto?.roleName ?? null)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch the requesting user', error)
+        if (active) setRequesterRole(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [creatorId])
 
   return (
     <div className="flex w-full flex-col items-start gap-4">
@@ -533,19 +612,13 @@ const PendingReceipt = ({
       <TransferSummaryBar
         transferNo={allocationNo}
         fromStore={source || fromStore}
-        fromCode={distribution?.sourceId ?? fromCode}
         toStore={destinationLabel}
-        toCode={distribution?.destinationId ?? toCode}
         requestedOn={
           distribution?.allocationDate
             ? formatDateTime(distribution.allocationDate)
             : requestedOn
         }
-        requestedBy={
-          distribution?.allocationRequestedBy ||
-          distribution?.createdBy ||
-          requestedBy
-        }
+        requestedBy={requesterRole ?? requestedBy}
         dispatchedOn={dispatchedAt ? formatDateTime(dispatchedAt) : dispatchedOn}
       />
 

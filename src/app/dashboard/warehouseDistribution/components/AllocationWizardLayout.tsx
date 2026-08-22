@@ -11,6 +11,13 @@ const STEP_DEFS = [
   { icon: 'number-five', iconWidth: 9, iconHeight: 13, title: 'Review' },
 ] as const
 
+const STEP_SUBTITLES: Record<number, string> = {
+  2: 'Step 2 of 5 – Choose Distribution Type',
+  3: 'Step 3 of 5 – Allocation Details',
+  4: 'Step 4 of 5 – Add Products',
+  5: 'Step 5 of 5 – Review & Confirm',
+}
+
 type AllocationWizardLayoutProps = {
   onCancel?: () => void
   onConfirm?: () => void
@@ -50,7 +57,7 @@ const AllocationWizardLayout = ({
           Create Stock Allocation
         </h1>
         <p className="w-full text-p3 font-normal text-pneutral-700">
-          Choose how you want to create this stock allocation.
+          {STEP_SUBTITLES[currentStep] ?? 'Choose how you want to create this stock allocation.'}
         </p>
       </div>
 

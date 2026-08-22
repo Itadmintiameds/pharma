@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { ReactNode, useCallback, useEffect, useState } from 'react'
 import {
   Download,
   ClipboardList,
@@ -12,9 +12,7 @@ import {
 } from 'lucide-react'
 import Input from '@/app/components/common/Input'
 import Dropdown, { DropdownOption } from '@/app/components/common/Dropdown'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
+import PaginationFooter from '@/app/components/common/table/Pagination'
 import {
   getSourceDistributions,
   getSourceTransferKpi,
@@ -160,25 +158,88 @@ const STATUS_OPTIONS: DropdownOption[] = [
 ]
 
 const DATE_RANGE_OPTIONS: DropdownOption[] = [
+  { label: 'All Time', value: 'all_time' },
   { label: 'Last 7 Days', value: 'last_7_days' },
   { label: 'Last 30 Days', value: 'last_30_days' },
   { label: 'Last 90 Days', value: 'last_90_days' },
   { label: 'Custom Range', value: 'custom_range' },
 ]
 
-const FiltersRow = () => {
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState<string | number>('all')
-  const [dateRange, setDateRange] = useState<string | number>('last_30_days')
+interface TransferFilters {
+  search: string
+  status: string
+  dateRange: string
+  customFrom: string
+  customTo: string
+}
 
-  return (
-    <div className="flex w-full flex-col items-stretch gap-4 rounded-2xl border border-pneutral-200 bg-white p-4 sm:flex-row sm:items-end">
+const emptyTransferFilters: TransferFilters = {
+  search: '',
+  status: 'all',
+  dateRange: 'all_time',
+  customFrom: '',
+  customTo: '',
+}
+
+// `dateRange`/date fields carry ISO yyyy-mm-dd, so plain string comparison
+// stays chronologically correct without parsing.
+const daysAgoIso = (days: number): string => {
+  const date = new Date()
+  date.setDate(date.getDate() - days)
+  return date.toISOString().slice(0, 10)
+}
+
+const matchesTransferFilters = (row: TransferRow, filters: TransferFilters): boolean => {
+  if (filters.search) {
+    const query = filters.search.toLowerCase()
+    const haystack = `${row.ptNo} ${row.from} ${row.toStore}`.toLowerCase()
+    if (!haystack.includes(query)) return false
+  }
+
+  if (filters.status !== 'all' && row.status !== filters.status) {
+    return false
+  }
+
+  const allocationDate = row.allocationDate?.slice(0, 10)
+  if (filters.dateRange === 'custom_range') {
+    if (filters.customFrom && (!allocationDate || allocationDate < filters.customFrom)) {
+      return false
+    }
+    if (filters.customTo && (!allocationDate || allocationDate > filters.customTo)) {
+      return false
+    }
+  } else if (filters.dateRange !== 'all_time') {
+    const sinceDays =
+      filters.dateRange === 'last_7_days'
+        ? 7
+        : filters.dateRange === 'last_30_days'
+          ? 30
+          : filters.dateRange === 'last_90_days'
+            ? 90
+            : null
+    if (sinceDays !== null && (!allocationDate || allocationDate < daysAgoIso(sinceDays))) {
+      return false
+    }
+  }
+
+  return true
+}
+
+const FiltersRow = ({
+  filters,
+  onChange,
+}: {
+  filters: TransferFilters
+  onChange: (patch: Partial<TransferFilters>) => void
+}) => (
+  <div className="flex w-full flex-col items-stretch gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
+    <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row sm:items-end">
       <div className="w-full sm:flex-1">
         <Input
           type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by molecule, Brand or therapeutic area"
+          value={filters.search}
+          onChange={(e) => onChange({ search: e.target.value })}
+          placeholder="Search by transfer no., source or destination store"
           leftIcon={<SearchIcon className="size-5 text-pneutral-500" strokeWidth={2} />}
         />
       </div>
@@ -187,8 +248,8 @@ const FiltersRow = () => {
         <Dropdown
           label="Status"
           options={STATUS_OPTIONS}
-          value={status}
-          onChange={setStatus}
+          value={filters.status}
+          onChange={(value) => onChange({ status: String(value) })}
         />
       </div>
 
@@ -196,13 +257,34 @@ const FiltersRow = () => {
         <Dropdown
           label="Date Range"
           options={DATE_RANGE_OPTIONS}
-          value={dateRange}
-          onChange={setDateRange}
+          value={filters.dateRange}
+          onChange={(value) => onChange({ dateRange: String(value) })}
         />
       </div>
     </div>
-  )
-}
+
+    {filters.dateRange === 'custom_range' && (
+      <div className="flex w-full flex-col items-stretch gap-4 sm:flex-row">
+        <div className="w-full sm:w-51 sm:shrink-0">
+          <Input
+            type="date"
+            label="From"
+            value={filters.customFrom}
+            onChange={(e) => onChange({ customFrom: e.target.value })}
+          />
+        </div>
+        <div className="w-full sm:w-51 sm:shrink-0">
+          <Input
+            type="date"
+            label="To"
+            value={filters.customTo}
+            onChange={(e) => onChange({ customTo: e.target.value })}
+          />
+        </div>
+      </div>
+    )}
+  </div>
+)
 
 type TransferStatus =
   | 'awaiting_acceptance'
@@ -223,6 +305,7 @@ interface TransferRow {
   qty: string
   status: TransferStatus
   action: string
+  allocationDate?: string
 }
 
 // The backend lifecycle only covers the three states below; "awaiting_acceptance"
@@ -259,6 +342,7 @@ const toTransferRow = (
     qty: String(summary.totalIssueQuantity ?? 0),
     status,
     action: ACTION_LABEL[status],
+    allocationDate: summary.allocationDate,
   }
 }
 
@@ -286,12 +370,19 @@ const TransferStatusBadge = ({ status }: { status: TransferStatus }) => (
   </span>
 )
 
+interface TransferColumn {
+  header: string
+  width?: string
+  align?: 'left' | 'center'
+  render: (row: TransferRow) => ReactNode
+}
+
 const buildTransferColumns = (
   onAction: (row: TransferRow) => void
-): TableColumn<TransferRow>[] => [
+): TransferColumn[] => [
   {
     header: '#',
-    width: 'w-12',
+    width: 'w-[4%] min-w-10',
     align: 'center',
     render: (row) => (
       <span className="text-p3 font-semibold text-pneutral-900">
@@ -300,43 +391,38 @@ const buildTransferColumns = (
     ),
   },
   {
-    header: 'PT No.',
-    width: 'w-28',
+    header: 'Transfer No.',
+    width: 'w-[13%] min-w-32.5',
     align: 'center',
     render: (row) => (
-      <span className="text-label-l4 font-semibold text-pneutral-900">
+      <span className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
         {row.ptNo}
       </span>
     ),
   },
   {
     header: 'From',
-    width: 'w-28',
+    width: 'w-[15%] min-w-37.5',
     align: 'center',
     render: (row) => (
-      <span className="text-label-l4 font-semibold text-pneutral-900">
+      <span className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
         {row.from}
       </span>
     ),
   },
   {
     header: 'To',
-    width: 'w-55',
+    width: 'w-[21%] min-w-50',
     align: 'center',
     render: (row) => (
-      <div className="flex flex-col items-start gap-1">
-        <span className="text-label-l4 font-semibold text-pneutral-900">
-          {row.toStore}
-        </span>
-        <span className="text-label-l3 font-regular text-pneutral-900">
-          {row.toCode}
-        </span>
-      </div>
+      <span className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
+        {row.toStore}
+      </span>
     ),
   },
   {
     header: 'Prod.',
-    width: 'w-20',
+    width: 'w-[6%] min-w-15',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-semibold text-pneutral-900">
@@ -346,7 +432,7 @@ const buildTransferColumns = (
   },
   {
     header: 'Qty',
-    width: 'w-24',
+    width: 'w-[7%] min-w-17.5',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -356,18 +442,19 @@ const buildTransferColumns = (
   },
   {
     header: 'Status',
+    width: 'w-[17%] min-w-42.5',
     align: 'center',
     render: (row) => <TransferStatusBadge status={row.status} />,
   },
   {
     header: 'Action',
-    width: 'w-32',
+    width: 'w-[17%] min-w-35',
     align: 'center',
     render: (row) => (
       <button
         type="button"
         onClick={() => onAction(row)}
-        className="flex h-9 min-w-27 items-center justify-center rounded-lg border-[1.5px] border-secondary-700 px-3 text-label-l3 font-medium text-secondary-700"
+        className="mx-auto flex h-9 min-w-27 items-center justify-center rounded-lg border-[1.5px] border-secondary-700 px-3 text-label-l3 font-medium text-secondary-700"
       >
         {row.action}
       </button>
@@ -396,6 +483,12 @@ const TransfersTable = ({
     currentPage * PAGE_SIZE
   )
 
+  // A filter change can leave `currentPage` past the end of the new, smaller
+  // result set — snap back to page 1 whenever the filtered rows change.
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [rows])
+
   return (
     <div className="flex w-full flex-col items-start gap-3">
       <h2 className="text-h6 font-semibold text-pneutral-900">
@@ -406,20 +499,69 @@ const TransfersTable = ({
         <p className="text-label-l4 font-regular text-danger-600">{error}</p>
       )}
 
-      <TableWithoutGrid
-        columns={transferColumns}
-        data={pageRows}
-        rowKey={(row) => row.key}
-        headerVariant="primary"
-        container="card"
-        loading={loading}
-        pagination={{
-          page: currentPage,
-          pageSize: PAGE_SIZE,
-          totalItems: rows.length,
-          onPageChange: setCurrentPage,
-        }}
-      />
+      <div className="w-full overflow-hidden rounded-xl border border-pneutral-100 bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed border-collapse">
+            <thead>
+              <tr className="h-18 bg-secondary-600">
+                {transferColumns.map((col) => (
+                  <th
+                    key={col.header}
+                    className={`border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                      col.width ?? ''
+                    } ${col.align === 'center' ? 'text-center' : 'text-left'}`}
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td
+                    colSpan={transferColumns.length}
+                    className="h-40 text-center text-label-l4 text-pneutral-500"
+                  >
+                    Loading…
+                  </td>
+                </tr>
+              ) : pageRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={transferColumns.length}
+                    className="h-40 text-center text-label-l4 text-pneutral-500"
+                  >
+                    No records found.
+                  </td>
+                </tr>
+              ) : (
+                pageRows.map((row) => (
+                  <tr key={row.key}>
+                    {transferColumns.map((col) => (
+                      <td
+                        key={col.header}
+                        className={`border border-pneutral-200 px-3 py-2.5 ${
+                          col.align === 'center' ? 'text-center' : 'text-left'
+                        }`}
+                      >
+                        {col.render(row)}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <PaginationFooter
+          page={currentPage}
+          pageSize={PAGE_SIZE}
+          totalItems={rows.length}
+          onPageChange={setCurrentPage}
+        />
+      </div>
     </div>
   )
 }
@@ -432,6 +574,7 @@ const page = () => {
     null
   )
   const [rows, setRows] = useState<TransferRow[]>([])
+  const [filters, setFilters] = useState<TransferFilters>(emptyTransferFilters)
   const [kpi, setKpi] = useState<WarehouseDistributionTransferKpi | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -513,7 +656,6 @@ const page = () => {
           referenceNo={activeTransfer.ptNo}
           fromStore={activeTransfer.from}
           destinationStore={activeTransfer.toStore}
-          toCode={activeTransfer.toCode}
           distribution={activeDistribution}
           onBack={backToList}
           onClose={backToList}
@@ -529,7 +671,6 @@ const page = () => {
           transferNo={activeTransfer.ptNo}
           fromStore={activeTransfer.from}
           destinationStore={activeTransfer.toStore}
-          toCode={activeTransfer.toCode}
           status="ready_to_dispatch"
           distribution={activeDistribution}
           loading={detailLoading}
@@ -558,13 +699,18 @@ const page = () => {
     )
   }
 
+  const filteredRows = rows.filter((row) => matchesTransferFilters(row, filters))
+
   return (
     <div className="flex w-full flex-col items-start gap-4">
       <HeaderRow />
       <StatCardsRow kpi={kpi} />
-      <FiltersRow />
+      <FiltersRow
+        filters={filters}
+        onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
+      />
       <TransfersTable
-        rows={rows}
+        rows={filteredRows}
         loading={loading}
         error={error}
         onSelectRow={openTransfer}

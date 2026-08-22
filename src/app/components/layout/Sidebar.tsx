@@ -15,6 +15,9 @@ import {
   Users,
   BarChart3,
   LogOut,
+  ClipboardList,
+  PackageCheck,
+  ArrowLeftRight,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -29,9 +32,19 @@ const Sidebar = () => {
 
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
+  const [isWarehouseManagerRole, setIsWarehouseManagerRole] = React.useState(false);
 
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
+
+  // A Warehouse Manager only operates within warehouse distribution — everything
+  // else in the sidebar is disabled for that role regardless of pharmacy/business state.
+  const WAREHOUSE_MANAGER_ALLOWED_PATHS = [
+    "/dashboard",
+    "/dashboard/purchase",
+    "/dashboard/warehouseDistribution",
+    "/dashboard/products",
+  ];
 
   React.useEffect(() => {
     const checkRegistrationStatus = async () => {
@@ -62,6 +75,12 @@ const Sidebar = () => {
 
         if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
           setHasApprovedPharmacy(true);
+        }
+
+        const normalizeRole = (r?: string) =>
+          (r || "").toLowerCase().replace(/[^a-z]/g, "");
+        if (normalizeRole(userDetails?.pharmaRolesDto?.roleName) === "warehousemanager") {
+          setIsWarehouseManagerRole(true);
         }
       } catch (err) {
         console.error("Failed to check registration status for sidebar:", err);
@@ -135,19 +154,19 @@ const Sidebar = () => {
         },
         {
           name: "Warehouse Distribution",
-          icon: Receipt,
+          icon: ClipboardList,
           path: "/dashboard/warehouseDistribution",
           isLocked: !hasApprovedPharmacy,
         },
         {
           name: "Warehouse Receipt",
-          icon: Receipt,
+          icon: PackageCheck,
           path: "/dashboard/warehouseReceipt",
           isLocked: !hasApprovedPharmacy,
         },
                {
           name: "Inter Store Transfer",
-          icon: Receipt,
+          icon: ArrowLeftRight,
           path: "/dashboard/interStoreTransfer",
           isLocked: !hasApprovedPharmacy,
         },
@@ -210,27 +229,45 @@ const Sidebar = () => {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.path;
+                const isRoleRestricted =
+                  isWarehouseManagerRole &&
+                  !WAREHOUSE_MANAGER_ALLOWED_PATHS.includes(item.path);
+                // Warehouse Distribution is exclusive to the Warehouse Manager role —
+                // every other role sees it locked regardless of pharmacy/business state.
+                const isRestrictedToWarehouseManager =
+                  item.path === "/dashboard/warehouseDistribution" &&
+                  !isWarehouseManagerRole;
+                const isLocked =
+                  item.isLocked || isRoleRestricted || isRestrictedToWarehouseManager;
+                const lockedMessage = isRoleRestricted
+                  ? "Not available for the Warehouse Manager role"
+                  : isRestrictedToWarehouseManager
+                    ? "Only available to the Warehouse Manager role"
+                    : item.isLocked
+                      ? "Complete business setup to unlock this module"
+                      : undefined;
 
                 return (
                   <Link
                     key={item.name}
-                    href={item.isLocked ? "#" : item.path}
+                    href={isLocked ? "#" : item.path}
+                    title={lockedMessage}
                     onClick={(e) => {
-                      if (item.isLocked) {
+                      if (isLocked) {
                         e.preventDefault();
                       }
                     }}
                     className={`flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
                       isActive
                         ? "bg-secondary-50 text-pneutral-800 shadow-sm font-semibold"
-                        : item.isLocked
+                        : isLocked
                           ? "text-pneutral-50 cursor-not-allowed"
                           : "text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer"
                     }`}
                   >
                     <Icon size={18} className="shrink-0" />
                     <span className="truncate">{item.name}</span>
-                    {item.isLocked && (
+                    {isLocked && (
                       <Image
                         src="/sidebar/lock-icon.svg"
                         alt="Locked"

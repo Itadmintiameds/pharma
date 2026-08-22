@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   FileText,
   Truck,
@@ -11,17 +11,41 @@ import {
   ArrowLeft,
   LucideIcon,
 } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
 import type {
   DispatchWarehouseDistributionLineRequest,
   WarehouseDistributionData,
   WarehouseDistributionLineData,
 } from '@/types/WarehouseDistributionData'
 import { dispatchAllocation } from '@/services/WarehouseDistributionService'
-import { formatDate, formatDateTime } from '@/utils/formatDate'
+import { formatDate } from '@/utils/formatDate'
 import { showToast } from '@/app/components/common/Toast'
+import { getUserById } from '@/services/UserManagementService'
+import { ProductService } from '@/services/ProductService'
+
+const EM_DASH = '—'
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// dd-mmm-yyyy with a 12-hour AM/PM time, matching the format the other
+// transfer/receipt screens show — rather than the app-wide dd-mm-yyyy 24-hour one.
+const formatDateTime = (value?: string | null, fallback = EM_DASH): string => {
+  if (!value) return fallback
+
+  const [datePart, timePart] = value.split('T')
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const dateLabel = iso
+    ? `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+    : datePart
+  if (!timePart) return dateLabel
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${dateLabel} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
 
 export type DispatchProductsStatus =
   | 'awaiting_acceptance'
@@ -35,8 +59,6 @@ interface DispatchProductsProps {
   status?: DispatchProductsStatus
   transferNo?: string
   fromStore?: string
-  fromCode?: string
-  toCode?: string
   requestedOn?: string
   requestedBy?: string
   distribution?: WarehouseDistributionData | null
@@ -106,9 +128,7 @@ const SummaryItem = ({
 interface TransferSummaryBarProps {
   transferNo: string
   fromStore: string
-  fromCode: string
   toStore: string
-  toCode: string
   requestedOn: string
   requestedBy: string
 }
@@ -116,9 +136,7 @@ interface TransferSummaryBarProps {
 const TransferSummaryBar = ({
   transferNo,
   fromStore,
-  fromCode,
   toStore,
-  toCode,
   requestedOn,
   requestedBy,
 }: TransferSummaryBarProps) => (
@@ -136,7 +154,6 @@ const TransferSummaryBar = ({
       iconColor="text-secondary-700"
       label="From (Sending Store)"
       value={fromStore}
-      subvalue={fromCode}
     />
     <SummaryItem
       Icon={Truck}
@@ -144,7 +161,6 @@ const TransferSummaryBar = ({
       iconColor="text-success-700"
       label="To (Receiving Store)"
       value={toStore}
-      subvalue={toCode}
     />
     <SummaryItem
       Icon={Calendar}
@@ -171,10 +187,28 @@ interface DispatchProductRow {
   productName: string
   packInfo: string
   batchNo: string
+  batchId: string
   expiryDate: string
   requestedQty: string
+  requestedQtyValue: number
   dispatchQty: string
   remarks: string
+  unit: string
+}
+
+// The dispatch qty can never exceed what was requested; dispatching less
+// than requested is fine (a shortfall) but must be explained.
+const dispatchExceedsRequested = (item: DispatchProductRow) =>
+  Number(item.dispatchQty) > item.requestedQtyValue
+
+const dispatchNeedsRemarks = (item: DispatchProductRow) =>
+  Number(item.dispatchQty) < item.requestedQtyValue && item.remarks.trim() === ''
+
+// Shape of one row returned by GET /product/batches/pharmacy/{id}
+// (ProductService.getBatchesForPharmacy) — only the fields used here.
+interface SourceBatchStockRow {
+  batchId?: string
+  totalStock?: number
 }
 
 // "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
@@ -202,36 +236,51 @@ const mapLineToDispatchRow = (
     packInfo:
       unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    batchId: line.batchId ?? '',
     expiryDate: formatDate(line.batch?.expiryDate),
     requestedQty: unit ? `${issued} ${unit}` : String(issued),
+    requestedQtyValue: issued,
     dispatchQty: String(line.dispatchedQuantity ?? issued),
     remarks: line.dispatchRemarks ?? '',
+    unit,
   }
 }
 
 const dispatchQtyInputClass =
-  'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-success-600 focus:outline-none focus:border-secondary-700'
+  'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
 
 const remarksInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
 
+interface DispatchColumn {
+  header: string
+  width: string
+  align?: 'left' | 'center'
+  render: (row: DispatchProductRow, index: number) => React.ReactNode
+}
+
+// Available stock is live inventory at the source, not something the
+// distribution's own lines carry — resolved separately per batch id.
 const buildDispatchColumns = (
   onFieldChange: (
     id: number,
     field: 'dispatchQty' | 'remarks',
     value: string
-  ) => void
-): TableColumn<DispatchProductRow>[] => [
+  ) => void,
+  availableStockByBatchId: Record<string, number>,
+  showValidation: boolean
+): DispatchColumn[] => [
   {
     header: '#',
-    width: 'w-12',
+    width: 'w-[5%]',
     align: 'center',
-    render: (row) => (
-      <span className="text-p3 font-regular text-pneutral-900">{row.id}</span>
+    render: (_row, index) => (
+      <span className="text-p3 font-regular text-pneutral-900">{index + 1}</span>
     ),
   },
   {
     header: 'Product Details',
+    width: 'w-[20%]',
     render: (row) => (
       <div className="flex items-center gap-2">
         <div className="flex size-6.5 shrink-0 items-center justify-center rounded bg-secondary-100">
@@ -254,7 +303,7 @@ const buildDispatchColumns = (
   },
   {
     header: 'Batch No.',
-    width: 'w-28',
+    width: 'w-[12%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -264,7 +313,7 @@ const buildDispatchColumns = (
   },
   {
     header: 'Expiry Date',
-    width: 'w-32',
+    width: 'w-[12%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -273,8 +322,18 @@ const buildDispatchColumns = (
     ),
   },
   {
+    header: 'Available Stock',
+    width: 'w-[13%]',
+    align: 'center',
+    render: (row) => {
+      const stock = row.batchId ? availableStockByBatchId[row.batchId] : undefined
+      const label = stock === undefined ? '—' : row.unit ? `${stock} ${row.unit}` : String(stock)
+      return <span className="text-label-l4 font-regular text-success-600">{label}</span>
+    },
+  },
+  {
     header: 'Requested Qty',
-    width: 'w-32',
+    width: 'w-[13%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -284,31 +343,49 @@ const buildDispatchColumns = (
   },
   {
     header: 'Dispatch Qty',
-    width: 'w-28',
+    width: 'w-[11%]',
     align: 'center',
-    render: (row) => (
-      <input
-        type="text"
-        inputMode="numeric"
-        value={row.dispatchQty}
-        onChange={(e) => onFieldChange(row.id, 'dispatchQty', e.target.value)}
-        className={dispatchQtyInputClass}
-      />
-    ),
+    render: (row) => {
+      const exceeds = showValidation && dispatchExceedsRequested(row)
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <input
+            type="text"
+            inputMode="numeric"
+            value={row.dispatchQty}
+            onChange={(e) => onFieldChange(row.id, 'dispatchQty', e.target.value)}
+            className={`${dispatchQtyInputClass} ${exceeds ? 'border-warning-600' : ''}`}
+          />
+          {exceeds && (
+            <p className="text-p2 font-normal text-warning-600">
+              Cannot exceed requested qty
+            </p>
+          )}
+        </div>
+      )
+    },
   },
   {
     header: 'Remarks',
-    width: 'w-50',
+    width: 'w-[14%]',
     align: 'center',
-    render: (row) => (
-      <input
-        type="text"
-        placeholder="Something"
-        value={row.remarks}
-        onChange={(e) => onFieldChange(row.id, 'remarks', e.target.value)}
-        className={remarksInputClass}
-      />
-    ),
+    render: (row) => {
+      const showError = showValidation && dispatchNeedsRemarks(row)
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <input
+            type="text"
+            placeholder="Low Stock"
+            value={row.remarks}
+            onChange={(e) => onFieldChange(row.id, 'remarks', e.target.value)}
+            className={`${remarksInputClass} ${showError ? 'border-warning-600' : ''}`}
+          />
+          {showError && (
+            <p className="text-p2 font-normal text-warning-600">Remark is required</p>
+          )}
+        </div>
+      )
+    },
   },
 ]
 
@@ -316,6 +393,8 @@ const ProductsToDispatch = ({
   items,
   onFieldChange,
   loading,
+  availableStockByBatchId,
+  showValidation,
 }: {
   items: DispatchProductRow[]
   onFieldChange: (
@@ -324,8 +403,10 @@ const ProductsToDispatch = ({
     value: string
   ) => void
   loading?: boolean
+  availableStockByBatchId: Record<string, number>
+  showValidation: boolean
 }) => {
-  const columns = buildDispatchColumns(onFieldChange)
+  const columns = buildDispatchColumns(onFieldChange, availableStockByBatchId, showValidation)
 
   return (
     <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
@@ -333,14 +414,50 @@ const ProductsToDispatch = ({
         Products to be Dispatched
       </p>
 
-      <TableWithoutGrid
-        columns={columns}
-        data={items}
-        rowKey={(row) => row.id.toString()}
-        headerVariant="primary"
-        container="box"
-        loading={loading}
-      />
+      {loading ? (
+        <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+          Loading products…
+        </p>
+      ) : items.length === 0 ? (
+        <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+          No products to dispatch.
+        </p>
+      ) : (
+        <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+          <table className="w-full table-fixed border-collapse">
+            <thead>
+              <tr className="h-18 bg-secondary-600">
+                {columns.map((col) => (
+                  <th
+                    key={col.header}
+                    className={`${col.width} border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                      col.align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((row, index) => (
+                <tr key={row.id}>
+                  {columns.map((col) => (
+                    <td
+                      key={col.header}
+                      className={`border border-pneutral-200 px-3 py-2.5 ${
+                        col.align === 'center' ? 'text-center' : 'text-left'
+                      }`}
+                    >
+                      {col.render(row, index)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -388,8 +505,6 @@ const DispatchProducts = ({
   status = 'ready_to_dispatch',
   transferNo = 'PT000021',
   fromStore = 'Hebbal Medical Store',
-  fromCode = 'STO0008',
-  toCode = 'STO0012',
   requestedOn = '05-Aug-2026 09:15 AM',
   requestedBy = 'Warehouse Admin',
   distribution,
@@ -408,6 +523,9 @@ const DispatchProducts = ({
     Record<number, Partial<Pick<DispatchProductRow, 'dispatchQty' | 'remarks'>>>
   >({})
   const [submitting, setSubmitting] = useState(false)
+  // Set once Dispatch Products is clicked while a row is invalid — tells
+  // ProductsToDispatch to show the inline errors.
+  const [validationAttempted, setValidationAttempted] = useState(false)
 
   const items = useMemo(
     () => dispatchRows.map((row) => ({ ...row, ...edits[row.id] })),
@@ -423,6 +541,11 @@ const DispatchProducts = ({
   }
 
   const handleDispatch = async () => {
+    if (items.some((item) => dispatchExceedsRequested(item) || dispatchNeedsRemarks(item))) {
+      setValidationAttempted(true)
+      return
+    }
+
     const distributionId = distribution?.warehouseDistributionId
     if (distributionId == null) {
       showToast.error('Missing distribution reference — cannot dispatch.')
@@ -458,6 +581,62 @@ const DispatchProducts = ({
   const destination =
     distribution?.destinationName?.trim() || distribution?.destinationId
 
+  // createdBy is only ever the requesting user's raw id — resolve it to
+  // their role once the distribution loads, since that's what "Requested By" shows.
+  const creatorId = distribution?.createdBy
+  const [requesterRole, setRequesterRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!creatorId) {
+      setRequesterRole(null)
+      return
+    }
+    let active = true
+    getUserById(creatorId)
+      .then((user) => {
+        if (active) setRequesterRole(user?.pharmaRolesDto?.roleName ?? null)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch the requesting user', error)
+        if (active) setRequesterRole(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [creatorId])
+
+  // Available stock is live inventory at the source pharmacy — not part of
+  // the distribution's own data — fetched separately and matched by batch id.
+  const sourcePharmacyId = distribution?.sourceType === 'PHARMACY' ? distribution.sourceId : ''
+  const [availableStockByBatchId, setAvailableStockByBatchId] = useState<
+    Record<string, number>
+  >({})
+
+  useEffect(() => {
+    if (!sourcePharmacyId) {
+      setAvailableStockByBatchId({})
+      return
+    }
+    let active = true
+    ProductService.getBatchesForPharmacy(sourcePharmacyId)
+      .then((res) => {
+        if (!active) return
+        const rows: SourceBatchStockRow[] = res?.data ?? []
+        const byBatchId: Record<string, number> = {}
+        rows.forEach((row) => {
+          if (row.batchId) byBatchId[row.batchId] = Number(row.totalStock) || 0
+        })
+        setAvailableStockByBatchId(byBatchId)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch source stock', error)
+        if (active) setAvailableStockByBatchId({})
+      })
+    return () => {
+      active = false
+    }
+  }, [sourcePharmacyId])
+
   return (
     <div className="flex w-full flex-1 flex-col items-start gap-4">
       <div className="flex w-full flex-1 flex-col items-start gap-4">
@@ -486,25 +665,21 @@ const DispatchProducts = ({
         <TransferSummaryBar
           transferNo={distribution?.allocationNo ?? transferNo}
           fromStore={source || fromStore}
-          fromCode={distribution?.sourceId ?? fromCode}
           toStore={destination || destinationStore}
-          toCode={distribution?.destinationId ?? toCode}
           requestedOn={
             distribution?.allocationDate
               ? formatDateTime(distribution.allocationDate)
               : requestedOn
           }
-          requestedBy={
-            distribution?.allocationRequestedBy ||
-            distribution?.createdBy ||
-            requestedBy
-          }
+          requestedBy={requesterRole ?? requestedBy}
         />
 
         <ProductsToDispatch
           items={items}
           onFieldChange={handleFieldChange}
           loading={loading}
+          availableStockByBatchId={availableStockByBatchId}
+          showValidation={validationAttempted}
         />
       </div>
 

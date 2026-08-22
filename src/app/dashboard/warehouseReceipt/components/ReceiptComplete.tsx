@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Check,
   Printer,
@@ -12,16 +12,13 @@ import {
   Box,
   BarChart3,
 } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
 import {
   DistributionStatus,
   WarehouseDistributionData,
   WarehouseDistributionLineData,
   WarehouseDistributionStatusData,
 } from '@/types/WarehouseDistributionData'
-import { formatDateTime } from '@/utils/formatDate'
+import { getUserById } from '@/services/UserManagementService'
 
 interface ReceiptCompleteProps {
   referenceNo?: string
@@ -37,6 +34,30 @@ const headerButtonClass =
   'flex h-12 min-w-27 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700'
 
 const EM_DASH = '—'
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// dd-mmm-yyyy, with a 12-hour AM/PM time when the value carries one — this
+// screen shows every date/time this way rather than the app-wide dd-mm-yyyy
+// / 24-hour convention.
+const formatDateTime = (value?: string | null, fallback = EM_DASH): string => {
+  if (!value) return fallback
+
+  const [datePart, timePart] = value.split('T')
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const dateLabel = iso
+    ? `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+    : datePart
+  if (!timePart) return dateLabel
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${dateLabel} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
 
 // First timestamp recorded for a given lifecycle status, if the transfer reached it.
 const statusAt = (
@@ -58,19 +79,44 @@ interface ProgressStep {
   bold?: boolean
 }
 
+// createdBy on a status entry is only ever the acting user's raw id — the
+// timeline instead shows what's actually meaningful per step: the creator's
+// role for the transfer's creation, and which store dispatched/received for
+// the later steps.
 const buildProgressSteps = (
-  distribution?: WarehouseDistributionData | null
+  distribution: WarehouseDistributionData | null | undefined,
+  creatorRole: string | null,
+  sourceLabel: string,
+  destinationLabel: string
 ): ProgressStep[] => {
   const statuses = distribution?.statuses ?? []
   if (statuses.length === 0) {
     return [{ label: 'Receipt Completed', bold: true }]
   }
 
-  return statuses.map((s, index) => ({
-    label: TIMELINE_LABEL[s.status] ?? s.status,
-    timestamp: s.createdAt ? formatDateTime(s.createdAt) : undefined,
-    actor: s.createdBy,
-    bold: index === statuses.length - 1,
+  const steps = statuses.flatMap((s): Omit<ProgressStep, 'bold'>[] => {
+    const timestamp = s.createdAt ? formatDateTime(s.createdAt) : undefined
+
+    switch (s.status) {
+      case 'DISTRIBUTION_CREATED':
+        // The transfer's creation reads as two steps: who created it, then
+        // the receiving store taking it on before dispatch.
+        return [
+          { label: 'Transfer Created', timestamp, actor: creatorRole ?? undefined },
+          { label: 'Accepted', timestamp, actor: destinationLabel },
+        ]
+      case 'PRODUCTS_DISPATCHED':
+        return [{ label: 'Dispatched', timestamp, actor: sourceLabel }]
+      case 'STOCK_RECEIVED':
+        return [{ label: 'Receipt Completed', timestamp, actor: destinationLabel }]
+      default:
+        return [{ label: TIMELINE_LABEL[s.status] ?? s.status, timestamp }]
+    }
+  })
+
+  return steps.map((step, index) => ({
+    ...step,
+    bold: index === steps.length - 1,
   }))
 }
 
@@ -263,13 +309,20 @@ const mapLineToReceivedItem = (
   }
 }
 
-const receivedColumns: TableColumn<ReceivedItem>[] = [
+interface ReceivedColumn {
+  header: string
+  width?: string
+  align?: 'left' | 'center'
+  render: (row: ReceivedItem, index: number) => React.ReactNode
+}
+
+const receivedColumns: ReceivedColumn[] = [
   {
     header: '#',
     width: 'w-12',
     align: 'center',
-    render: (row) => (
-      <span className="text-p3 font-regular text-pneutral-900">{row.id}</span>
+    render: (_row, index) => (
+      <span className="text-p3 font-regular text-pneutral-900">{index + 1}</span>
     ),
   },
   {
@@ -375,13 +428,40 @@ const ProductsReceived = ({ items }: { items: ReceivedItem[] }) => (
         No products recorded.
       </p>
     ) : (
-      <TableWithoutGrid
-        columns={receivedColumns}
-        data={items}
-        rowKey={(row) => row.id.toString()}
-        headerVariant="primary"
-        container="box"
-      />
+      <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-secondary-600">
+              {receivedColumns.map((col) => (
+                <th
+                  key={col.header}
+                  className={`border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                    col.width ?? ''
+                  } ${col.align === 'center' ? 'text-center' : 'text-left'}`}
+                >
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row, index) => (
+              <tr key={row.id}>
+                {receivedColumns.map((col) => (
+                  <td
+                    key={col.header}
+                    className={`border border-pneutral-200 px-3 py-2.5 ${
+                      col.align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    {col.render(row, index)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     )}
   </div>
 )
@@ -427,7 +507,31 @@ const ReceiptComplete = ({
   const dispatchedOn = formatDateTime(statusAt(statuses, 'PRODUCTS_DISPATCHED'), EM_DASH)
   const receivedOn = formatDateTime(statusAt(statuses, 'STOCK_RECEIVED'), EM_DASH)
 
-  const progressSteps = buildProgressSteps(distribution)
+  // The creator's role for the "Transfer Created" step — createdBy is only a
+  // raw user id, so it's resolved to a role name once the distribution loads.
+  const creatorId = statuses?.find((s) => s.status === 'DISTRIBUTION_CREATED')?.createdBy
+  const [creatorRole, setCreatorRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!creatorId) {
+      setCreatorRole(null)
+      return
+    }
+    let active = true
+    getUserById(creatorId)
+      .then((user) => {
+        if (active) setCreatorRole(user?.pharmaRolesDto?.roleName ?? null)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch the transfer creator', error)
+        if (active) setCreatorRole(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [creatorId])
+
+  const progressSteps = buildProgressSteps(distribution, creatorRole, from, to)
   const receivedItems = (distribution?.lines ?? []).map(mapLineToReceivedItem)
 
   return (

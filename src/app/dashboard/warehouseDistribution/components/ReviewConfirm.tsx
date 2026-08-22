@@ -5,6 +5,23 @@ import {
   resolveSourceLabel,
 } from '@/app/dashboard/warehouseDistribution/allocationDraft'
 
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// draft.allocationDate arrives as either the raw yyyy-mm-dd a date input gives
+// (mid-wizard) or an already dd-mm-yyyy string (reviewing an existing
+// allocation) — both become dd-mmm-yyyy here.
+const formatAllocationDate = (value: string): string => {
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (iso) return `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+
+  const dmy = value.match(/^(\d{2})-(\d{2})-(\d{4})$/)
+  if (dmy) return `${dmy[1]}-${MONTH_ABBR[Number(dmy[2]) - 1] ?? dmy[2]}-${dmy[3]}`
+
+  return value
+}
+
 type DetailRowProps = {
   label: string
   value: string
@@ -82,7 +99,10 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
         <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
           <div className="flex w-full flex-col gap-3">
             <DetailRow label="Allocation No" value={draft.allocationNo || '—'} />
-            <DetailRow label="Allocation Date" value={draft.allocationDate || '—'} />
+            <DetailRow
+              label="Allocation Date"
+              value={draft.allocationDate ? formatAllocationDate(draft.allocationDate) : '—'}
+            />
             <DetailRow label="Distribution Type" value={distributionType} />
           </div>
           <div className="flex w-full flex-col gap-3">
@@ -113,15 +133,15 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
               <p className="w-21.25 shrink-0 text-p4 font-semibold text-pneutral-500">
                 Batch No.
               </p>
-              <p className="w-21.25 shrink-0 text-p4 font-semibold text-pneutral-500">
+              <p className="w-27.5 shrink-0 whitespace-nowrap text-p4 font-semibold text-pneutral-500">
                 Purchase Unit
               </p>
               <div className="flex-1" />
               <p className="w-32.5 shrink-0 text-right text-p4 font-semibold text-pneutral-500">
-                Available Qty (Purchase Unit)
+                Available Qty
               </p>
               <p className="w-32.5 shrink-0 text-right text-p4 font-semibold text-pneutral-500">
-                Issue Qty (Purchase Unit)
+                Issue Qty
               </p>
             </div>
 
@@ -145,7 +165,7 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                 <p className="w-21.25 shrink-0 text-p3 font-normal text-pneutral-800">
                   {line.batchNo}
                 </p>
-                <p className="w-21.25 shrink-0 text-p3 font-normal text-pneutral-800">
+                <p className="w-27.5 shrink-0 text-p3 font-normal text-pneutral-800">
                   {line.purchaseUnit}
                 </p>
                 <div className="flex-1" />

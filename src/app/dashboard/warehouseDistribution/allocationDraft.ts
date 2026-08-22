@@ -1,7 +1,9 @@
 import {
   AllocationMode,
   CreateWarehouseDistributionRequest,
+  WarehouseDistributionData,
 } from '@/types/WarehouseDistributionData'
+import { formatDate } from '@/utils/formatDate'
 
 // Which side of the transfer stock moves between. Chosen in DistributionType
 // (step 2) and read by every later step to render the right labels.
@@ -72,6 +74,38 @@ export const defaultSourceLabel = (mode: DistributionMode) =>
 // loaded, else the generic placeholder for the chosen distribution mode.
 export const resolveSourceLabel = (draft: AllocationDraft) =>
   draft.sourceLabel || defaultSourceLabel(draft.distributionMode)
+
+// Reconstructs a review-only draft from an already-created distribution, so
+// ReviewConfirm can show a "Ready to Dispatch" allocation pulled from the
+// Transfer Explorer list instead of one still being built in the wizard.
+export const distributionToAllocationDraft = (
+  distribution: WarehouseDistributionData
+): AllocationDraft => ({
+  allocationMode: distribution.allocationMode ?? 'myself',
+  distributionMode: distribution.sourceType === 'WAREHOUSE' ? 'warehouse' : 'pharmacy',
+  allocationNo: distribution.allocationNo,
+  allocationDate: formatDate(distribution.allocationDate),
+  sourceId: distribution.sourceId,
+  sourceLabel: distribution.sourceName || distribution.sourceId,
+  destinationId: distribution.destinationId,
+  destinationLabel: distribution.destinationName || distribution.destinationId,
+  reference: distribution.reference ?? '',
+  referenceLabel: distribution.reference ?? '',
+  remarks: distribution.remarks ?? '',
+  lines: (distribution.lines ?? []).map((line) => ({
+    id: String(line.warehouseDistributionDetailsId ?? line.productId),
+    productId: line.productId,
+    productName: line.product?.productName ?? line.productId,
+    packagingId: line.packagingId ?? '',
+    batchId: line.batchId ?? '',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    purchaseUnit: line.packaging?.purchaseUnit ?? '—',
+    // The stock-availability snapshot from creation time isn't preserved —
+    // the issued quantity is the closest stand-in for a post-creation review.
+    availableQuantity: line.issueQuantity,
+    issueQuantity: line.issueQuantity,
+  })),
+})
 
 export const buildCreateAllocationRequest = (
   draft: AllocationDraft

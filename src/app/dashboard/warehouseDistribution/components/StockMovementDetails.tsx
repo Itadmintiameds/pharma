@@ -1,7 +1,41 @@
 import Image from 'next/image'
+import { useEffect, useState } from 'react'
 import StatusBadge from '@/app/components/common/table/StatusBadge'
+import { getWarehouseDistribution } from '@/services/WarehouseDistributionService'
+import { getUserById } from '@/services/UserManagementService'
+import {
+  DistributionStatus,
+  WarehouseDistributionData,
+  WarehouseDistributionLineData,
+  WarehouseDistributionStatusData,
+} from '@/types/WarehouseDistributionData'
+import { formatDate, formatDateTime } from '@/utils/formatDate'
+
+// The timeline shows time as 12-hour AM/PM (unlike formatDateTime's 24-hour
+// clock, which the rest of this screen keeps for consistency with the app).
+const formatTimelineTimestamp = (value?: string | null): string | undefined => {
+  if (!value) return undefined
+  const [datePart, timePart] = value.split('T')
+  const date = formatDate(datePart)
+  if (!timePart) return date
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${date} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
+
+// Maps the lifecycle enum to the label this card's status tag shows.
+const distributionStatusLabel: Record<DistributionStatus, string> = {
+  DISTRIBUTION_CREATED: 'Ready to Dispatch',
+  PRODUCTS_DISPATCHED: 'Pending Receipt',
+  STOCK_RECEIVED: 'Received',
+  STOCK_REJECTED: 'Rejected',
+}
 
 interface StockMovementDetailsProps {
+  distributionId?: number
   movementNo?: string
   movementType?: string
   status?: 'Received'
@@ -21,18 +55,44 @@ interface TimelineStepData {
   timestamp?: string
   by?: string
   note?: string
-  highlighted?: boolean
 }
 
-const defaultTimelineSteps: TimelineStepData[] = [
-  { title: 'Create Allocation', timestamp: '05-Aug-2026 09:10 AM', by: 'Super Admin' },
-  { title: 'Warehouse Distribution Created', timestamp: '05-Aug-2026 09:12 AM', by: 'Warehouse Manager' },
-  { title: 'Products Dispatched', timestamp: '05-Aug-2026 10:30 AM', by: 'Warehouse Executive' },
-  { title: 'Pending Receipt', timestamp: '05-Aug-2026 10:31 AM', by: 'System Update' },
-  { title: 'Stock Received', timestamp: '05-Aug-2026 02:15 PM', by: 'Rajajinagar Pharmacy', highlighted: true },
-  { title: 'Inventory Updated', timestamp: '05-Aug-2026 02:15 PM', by: 'System Update' },
-  { title: 'Available for Billing / POS', note: 'Completed' },
-]
+// Each lifecycle status the backend actually records unfolds into the
+// multi-step story the design shows: creating a distribution reads as two
+// steps, dispatching as two, and receiving as three (the last of which —
+// billing availability — is implied, not a status of its own).
+const buildTimelineSteps = (
+  statuses: WarehouseDistributionStatusData[],
+  userNamesById: Record<string, string>,
+  destinationLabel: string
+): TimelineStepData[] =>
+  statuses.flatMap((entry): TimelineStepData[] => {
+    const timestamp = formatTimelineTimestamp(entry.createdAt)
+    const by = entry.createdBy ? userNamesById[entry.createdBy] ?? entry.createdBy : undefined
+
+    switch (entry.status) {
+      case 'DISTRIBUTION_CREATED':
+        return [
+          { title: 'Create Allocation', timestamp, by },
+          { title: 'Warehouse Distribution Created', timestamp, by },
+        ]
+      case 'PRODUCTS_DISPATCHED':
+        return [
+          { title: 'Products Dispatched', timestamp, by },
+          { title: 'Pending Receipt', timestamp, by: 'System Update' },
+        ]
+      case 'STOCK_RECEIVED':
+        return [
+          { title: 'Stock Received', timestamp, by: destinationLabel },
+          { title: 'Inventory Updated', timestamp, by: destinationLabel },
+          { title: 'Available for Billing / POS', note: 'Completed' },
+        ]
+      case 'STOCK_REJECTED':
+        return [{ title: 'Stock Rejected', timestamp, by }]
+      default:
+        return []
+    }
+  })
 
 interface ProductMovementRow {
   product: string
@@ -41,32 +101,31 @@ interface ProductMovementRow {
   unit: string
   dispatchedQty: number
   receivedQty: number
-  diff: number
+  // null until the destination actually confirms receipt — a line simply
+  // pending receipt is not the same as a line received short/over.
+  diff: number | null
+  isReceived: boolean
   remarks: string
 }
 
-const defaultProductMovement: ProductMovementRow[] = [
-  {
-    product: 'Dolo 650 Tablet',
-    genericName: '650 mg Tablet',
-    batchNo: 'B24001',
-    unit: 'Strip',
-    dispatchedQty: 20,
-    receivedQty: 20,
-    diff: 0,
-    remarks: 'Received in good condition',
-  },
-  {
-    product: 'Crocin Syrup',
-    genericName: 'Paracetamol Syrup',
-    batchNo: 'C12001',
-    unit: 'Bottle',
-    dispatchedQty: 15,
-    receivedQty: 15,
-    diff: 0,
-    remarks: 'OK',
-  },
-]
+// Maps one API line (product/packaging/batch info nested) to the row shape the
+// Product Movement table renders.
+const toProductMovementRow = (line: WarehouseDistributionLineData): ProductMovementRow => {
+  const dispatchedQty = line.dispatchedQuantity ?? line.issueQuantity ?? 0
+  const isReceived = line.receivedQuantity != null
+  const receivedQty = line.receivedQuantity ?? 0
+  return {
+    product: line.product?.productName ?? line.productId,
+    genericName: line.product?.brandName ?? '',
+    batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    unit: line.packaging?.purchaseUnit ?? '—',
+    dispatchedQty,
+    receivedQty,
+    diff: isReceived ? dispatchedQty - receivedQty : null,
+    isReceived,
+    remarks: line.receiveRemarks || line.dispatchRemarks || line.remarks || '—',
+  }
+}
 
 const cardShadow =
   'shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)]'
@@ -74,21 +133,34 @@ const cardShadow =
 const tightCardShadow =
   'shadow-[0px_1px_1px_rgba(0,0,0,0.16),0px_3px_3px_rgba(0,0,0,0.12),0px_5px_6px_rgba(0,0,0,0.09)]'
 
-const MovementTimeline = ({ steps }: { steps: TimelineStepData[] }) => (
+const MovementTimeline = ({
+  steps,
+  isLoading,
+}: {
+  steps: TimelineStepData[]
+  isLoading?: boolean
+}) => (
   <div className={`flex w-full flex-1 flex-col items-start gap-4.5 rounded-xl bg-white p-5 ${cardShadow}`}>
     <p className="whitespace-nowrap text-label-l5 font-semibold text-secondary-700">
       Movement Timeline
     </p>
 
-    {steps.map((step, index) => {
+    {isLoading ? (
+      <p className="w-full py-8 text-center text-p3 text-pneutral-500">
+        Loading movement timeline...
+      </p>
+    ) : steps.length === 0 ? (
+      <p className="w-full py-8 text-center text-p3 text-pneutral-500">
+        No movement history found for this distribution.
+      </p>
+    ) : (
+    steps.map((step, index) => {
       const isLast = index === steps.length - 1
 
       return (
         <div
-          key={step.title}
-          className={`flex w-full items-start gap-3 ${
-            step.highlighted ? 'rounded-lg bg-success-50 px-2.5 py-2' : ''
-          }`}
+          key={`${step.title}-${index}`}
+          className="flex w-full items-start gap-3"
         >
           <div className="flex shrink-0 flex-col items-center">
             <Image
@@ -126,7 +198,8 @@ const MovementTimeline = ({ steps }: { steps: TimelineStepData[] }) => (
           </div>
         </div>
       )
-    })}
+    })
+    )}
   </div>
 )
 
@@ -154,12 +227,31 @@ interface AuditLogEntryData {
   description: string
 }
 
-const defaultAuditLog: AuditLogEntryData[] = [
-  { timestamp: '05-Aug-2026  09:10 AM', by: 'Super Admin', description: 'Allocation created' },
-  { timestamp: '05-Aug-2026  09:25 AM', by: 'Warehouse Manager', description: 'Distribution reviewed' },
-  { timestamp: '05-Aug-2026  10:30 AM', by: 'Warehouse Executive', description: 'Products dispatched' },
-  { timestamp: '05-Aug-2026  02:15 PM', by: 'Rajajinagar Pharmacy', description: 'Receipt confirmed' },
-]
+// One audit row per status the distribution actually went through, in the
+// same order as its history — the receipt-side entry credits the receiving
+// pharmacy, everything else credits whichever user performed the action.
+const auditLogDescription: Record<DistributionStatus, string> = {
+  DISTRIBUTION_CREATED: 'Allocation created',
+  PRODUCTS_DISPATCHED: 'Products dispatched',
+  STOCK_RECEIVED: 'Receipt confirmed',
+  STOCK_REJECTED: 'Receipt rejected',
+}
+
+const buildAuditLog = (
+  statuses: WarehouseDistributionStatusData[],
+  userNamesById: Record<string, string>,
+  destinationLabel: string
+): AuditLogEntryData[] =>
+  statuses.map((entry) => ({
+    timestamp: formatTimelineTimestamp(entry.createdAt) ?? '—',
+    by:
+      entry.status === 'STOCK_RECEIVED'
+        ? destinationLabel
+        : entry.createdBy
+          ? userNamesById[entry.createdBy] ?? entry.createdBy
+          : '—',
+    description: auditLogDescription[entry.status] ?? entry.status,
+  }))
 
 interface TransactionSummaryProps {
   products: number
@@ -236,37 +328,53 @@ const TransactionSummary = ({
   </div>
 )
 
-const AuditLog = ({ entries }: { entries: AuditLogEntryData[] }) => (
+const AuditLog = ({
+  entries,
+  isLoading,
+}: {
+  entries: AuditLogEntryData[]
+  isLoading?: boolean
+}) => (
   <div className={`flex w-full flex-col items-start gap-4 rounded-xl bg-white p-4 ${tightCardShadow}`}>
     <p className="whitespace-nowrap text-label-l5 font-semibold text-secondary-700">
       Audit Log
     </p>
 
-    {entries.map((entry, index) => {
-      const isLast = index === entries.length - 1
+    {isLoading ? (
+      <p className="w-full py-8 text-center text-p3 text-pneutral-500">
+        Loading audit log...
+      </p>
+    ) : entries.length === 0 ? (
+      <p className="w-full py-8 text-center text-p3 text-pneutral-500">
+        No audit history found for this distribution.
+      </p>
+    ) : (
+      entries.map((entry, index) => {
+        const isLast = index === entries.length - 1
 
-      return (
-        <div key={entry.timestamp} className="flex w-full items-start gap-3">
-          <div className="flex shrink-0 flex-col items-center">
-            <div className="size-2.5 shrink-0 rounded bg-secondary-700" />
-            {!isLast && <div className="h-10 w-0.5 shrink-0 bg-pneutral-200" />}
-          </div>
-
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <p className="whitespace-pre text-label-l2 font-semibold text-pneutral-900">
-              {entry.timestamp}
-            </p>
-            <div className="flex items-start gap-1 text-label-l2">
-              <p className="font-normal text-pneutral-500">By</p>
-              <p className="font-medium text-pneutral-900">{entry.by}</p>
+        return (
+          <div key={`${entry.timestamp}-${index}`} className="flex w-full items-start gap-3">
+            <div className="flex shrink-0 flex-col items-center">
+              <div className="size-2.5 shrink-0 rounded bg-secondary-700" />
+              {!isLast && <div className="h-10 w-0.5 shrink-0 bg-pneutral-200" />}
             </div>
-            <p className="whitespace-nowrap text-label-l2 font-normal text-pneutral-500">
-              {entry.description}
-            </p>
+
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <p className="whitespace-pre text-label-l2 font-semibold text-pneutral-900">
+                {entry.timestamp}
+              </p>
+              <div className="flex items-start gap-1 text-label-l2">
+                <p className="font-normal text-pneutral-500">By</p>
+                <p className="font-medium text-pneutral-900">{entry.by}</p>
+              </div>
+              <p className="whitespace-nowrap text-label-l2 font-normal text-pneutral-500">
+                {entry.description}
+              </p>
+            </div>
           </div>
-        </div>
-      )
-    })}
+        )
+      })
+    )}
   </div>
 )
 
@@ -418,7 +526,17 @@ const MovementInformation = ({
   </div>
 )
 
-const ProductMovement = ({ rows }: { rows: ProductMovementRow[] }) => (
+const ProductMovement = ({
+  rows,
+  isLoading,
+}: {
+  rows: ProductMovementRow[]
+  isLoading?: boolean
+}) => {
+  const allReceived = rows.length > 0 && rows.every((row) => row.isReceived)
+  const hasDifference = rows.some((row) => row.isReceived && row.diff !== 0)
+
+  return (
   <div className={`flex w-full flex-col items-start gap-4 rounded-xl bg-white p-4 ${tightCardShadow}`}>
     <p className="whitespace-nowrap text-label-l5 font-semibold text-secondary-700">
       Product Movement
@@ -426,7 +544,7 @@ const ProductMovement = ({ rows }: { rows: ProductMovementRow[] }) => (
 
     <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
       <div className="min-w-165">
-        <div className="flex w-full items-center gap-2 bg-pneutral-50 px-3.5 py-2.5">
+        <div className="flex w-full items-center gap-4 bg-pneutral-50 px-3.5 py-2.5">
           <p className="w-5 shrink-0 text-p3 font-semibold text-pneutral-500">#</p>
           <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-500">
             Product
@@ -446,77 +564,115 @@ const ProductMovement = ({ rows }: { rows: ProductMovementRow[] }) => (
           <p className="w-12.5 shrink-0 text-right text-p3 font-semibold text-pneutral-500">
             Diff.
           </p>
-          <div className="flex-1" />
-          <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-500">
+          <p className="min-w-32.5 flex-1 text-p3 font-semibold text-pneutral-500">
             Remarks
           </p>
         </div>
 
-        {rows.map((row, index) => (
-          <div
-            key={row.batchNo}
-            className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3.5 py-2.5"
-          >
-            <p className="w-5 shrink-0 text-p3 font-normal text-pneutral-900">
-              {index + 1}
-            </p>
-            <div className="flex w-32.5 shrink-0 items-center gap-2">
-              <div className="flex size-7 shrink-0 items-center justify-center rounded bg-secondary-50">
-                <Image
-                  src="/warehouseDistribution/pill-icon-dark.svg"
-                  alt=""
-                  width={16}
-                  height={16}
-                />
-              </div>
-              <div className="flex min-w-0 flex-col gap-px">
-                <p className="truncate text-p3 font-semibold text-pneutral-900">
-                  {row.product}
-                </p>
-                <p className="truncate text-p3 font-normal text-pneutral-500">
-                  {row.genericName}
-                </p>
-              </div>
-            </div>
-            <p className="w-18.75 shrink-0 text-p3 font-normal text-pneutral-900">
-              {row.batchNo}
-            </p>
-            <p className="w-13.75 shrink-0 text-p3 font-normal text-pneutral-900">
-              {row.unit}
-            </p>
-            <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
-              {row.dispatchedQty}
-            </p>
-            <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
-              {row.receivedQty}
-            </p>
-            <p className="w-12.5 shrink-0 text-right text-p3 font-semibold text-success-600">
-              {row.diff}
-            </p>
-            <div className="flex-1" />
-            <p className="w-32.5 shrink-0 text-p3 font-normal text-pneutral-900">
-              {row.remarks}
-            </p>
+        {isLoading ? (
+          <div className="flex w-full items-center justify-center py-8 text-p3 text-pneutral-500">
+            Loading product movement...
           </div>
-        ))}
+        ) : rows.length === 0 ? (
+          <div className="flex w-full items-center justify-center py-8 text-p3 text-pneutral-500">
+            No products found for this distribution.
+          </div>
+        ) : (
+          rows.map((row, index) => (
+            <div
+              key={row.batchNo}
+              className="flex w-full items-center gap-4 border-t border-pneutral-200 px-3.5 py-2.5"
+            >
+              <p className="w-5 shrink-0 text-p3 font-normal text-pneutral-900">
+                {index + 1}
+              </p>
+              <div className="flex w-32.5 shrink-0 items-center gap-2">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded bg-secondary-50">
+                  <Image
+                    src="/warehouseDistribution/pill-icon-dark.svg"
+                    alt=""
+                    width={16}
+                    height={16}
+                  />
+                </div>
+                <div className="flex min-w-0 flex-col gap-px">
+                  <p className="truncate text-p3 font-semibold text-pneutral-900">
+                    {row.product}
+                  </p>
+                  <p className="truncate text-p3 font-normal text-pneutral-500">
+                    {row.genericName}
+                  </p>
+                </div>
+              </div>
+              <p className="w-18.75 shrink-0 text-p3 font-normal text-pneutral-900">
+                {row.batchNo}
+              </p>
+              <p className="w-13.75 shrink-0 text-p3 font-normal text-pneutral-900">
+                {row.unit}
+              </p>
+              <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
+                {row.dispatchedQty}
+              </p>
+              <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
+                {row.isReceived ? row.receivedQty : '—'}
+              </p>
+              <p
+                className={`w-12.5 shrink-0 text-right text-p3 font-semibold ${
+                  !row.isReceived
+                    ? 'text-pneutral-500'
+                    : row.diff !== 0
+                      ? 'text-warning-600'
+                      : 'text-success-600'
+                }`}
+              >
+                {row.isReceived ? row.diff : '—'}
+              </p>
+              <p className="min-w-32.5 flex-1 text-p3 font-normal text-pneutral-900">
+                {row.remarks}
+              </p>
+            </div>
+          ))
+        )}
       </div>
     </div>
 
-    <div className="flex w-full items-center gap-2.5 rounded-lg bg-success-50 px-4 py-3">
-      <Image
-        src="/warehouseDistribution/check-circle-solid.svg"
-        alt=""
-        width={20}
-        height={20}
-      />
-      <p className="text-label-l4 font-semibold text-success-800">
-        No difference found. All items received as dispatched.
-      </p>
-    </div>
+    {!isLoading && rows.length > 0 && (
+      <div
+        className={`flex w-full items-center gap-2.5 rounded-lg px-4 py-3 ${
+          !allReceived ? 'bg-secondary-50' : hasDifference ? 'bg-warning-50' : 'bg-success-50'
+        }`}
+      >
+        {allReceived && !hasDifference && (
+          <Image
+            src="/warehouseDistribution/check-circle-solid.svg"
+            alt=""
+            width={20}
+            height={20}
+          />
+        )}
+        <p
+          className={`text-label-l4 font-semibold ${
+            !allReceived
+              ? 'text-secondary-700'
+              : hasDifference
+                ? 'text-warning-800'
+                : 'text-success-800'
+          }`}
+        >
+          {!allReceived
+            ? 'Awaiting receipt confirmation for one or more dispatched products.'
+            : hasDifference
+              ? 'Difference found between dispatched and received quantities.'
+              : 'No difference found. All items received as dispatched.'}
+        </p>
+      </div>
+    )}
   </div>
-)
+  )
+}
 
 const StockMovementDetails = ({
+  distributionId,
   movementNo = 'WD000245',
   movementType = 'Warehouse Distribution',
   status = 'Received',
@@ -526,6 +682,130 @@ const StockMovementDetails = ({
   onPrintTimeline,
   onDownloadPdf,
 }: StockMovementDetailsProps) => {
+  const [distribution, setDistribution] = useState<WarehouseDistributionData | null>(null)
+  const [isLoadingLines, setIsLoadingLines] = useState(Boolean(distributionId))
+
+  useEffect(() => {
+    if (!distributionId) {
+      setDistribution(null)
+      setIsLoadingLines(false)
+      return
+    }
+    let active = true
+    const fetchLines = async () => {
+      setIsLoadingLines(true)
+      try {
+        const data = await getWarehouseDistribution(distributionId)
+        if (active) {
+          setDistribution(data)
+        }
+      } catch (err) {
+        console.error('Failed to fetch the distribution details', err)
+        if (active) setDistribution(null)
+      } finally {
+        if (active) setIsLoadingLines(false)
+      }
+    }
+    fetchLines()
+    return () => {
+      active = false
+    }
+  }, [distributionId])
+
+  const productMovementRows = (distribution?.lines ?? []).map(toProductMovementRow)
+
+  const receivedStatusEntry = distribution?.statuses?.find(
+    (entry) => entry.status === 'STOCK_RECEIVED'
+  )
+  const confirmedByUserId = receivedStatusEntry?.createdBy
+
+  // Every status entry's createdBy is the acting user's raw id, not a display
+  // name — resolve the whole history's actors in one pass.
+  const [userNamesById, setUserNamesById] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const userIds = Array.from(
+      new Set(
+        (distribution?.statuses ?? [])
+          .map((entry) => entry.createdBy)
+          .filter((id): id is string => Boolean(id))
+      )
+    )
+    if (userIds.length === 0) {
+      setUserNamesById({})
+      return
+    }
+    let active = true
+    const fetchUserNames = async () => {
+      const resolved = await Promise.all(
+        userIds.map(async (id) => {
+          try {
+            const user = await getUserById(id)
+            return [id, user?.fullName ?? id] as const
+          } catch (err) {
+            console.error('Failed to fetch a status history actor', err)
+            return [id, id] as const
+          }
+        })
+      )
+      if (active) setUserNamesById(Object.fromEntries(resolved))
+    }
+    fetchUserNames()
+    return () => {
+      active = false
+    }
+  }, [distribution])
+
+  const destinationLabel = distribution?.destinationName ?? distribution?.destinationId ?? '—'
+  const timelineSteps = buildTimelineSteps(
+    distribution?.statuses ?? [],
+    userNamesById,
+    destinationLabel
+  )
+  const auditLogEntries = buildAuditLog(distribution?.statuses ?? [], userNamesById, destinationLabel)
+
+  const movementInfo = {
+    allocationNo: distribution?.allocationNo ?? '—',
+    distributionNo: distribution?.warehouseDistributionId
+      ? `WD${String(distribution.warehouseDistributionId).padStart(6, '0')}`
+      : '—',
+    source: distribution?.sourceName ?? distribution?.sourceId ?? '—',
+    destination: destinationLabel,
+    transferType: distribution?.distributionType ?? '—',
+    status: distribution?.currentStatus
+      ? distributionStatusLabel[distribution.currentStatus]
+      : '—',
+    receiptConfirmedOn: receivedStatusEntry?.createdAt
+      ? formatDateTime(receivedStatusEntry.createdAt)
+      : '—',
+    confirmedBy: confirmedByUserId ? userNamesById[confirmedByUserId] ?? '—' : '—',
+  }
+
+  const distributionLines = distribution?.lines ?? []
+  const totalIssueQuantity = distributionLines.reduce(
+    (sum, line) => sum + (line.issueQuantity ?? 0),
+    0
+  )
+  const totalDispatchedQuantity = distributionLines.reduce(
+    (sum, line) => sum + (line.dispatchedQuantity ?? line.issueQuantity ?? 0),
+    0
+  )
+  const totalReceivedQuantity = distributionLines.reduce(
+    (sum, line) => sum + (line.receivedQuantity ?? 0),
+    0
+  )
+  const isStockReceived = distribution?.currentStatus === 'STOCK_RECEIVED'
+
+  const transactionSummary = {
+    products: distributionLines.length,
+    totalQuantity: `${totalIssueQuantity} Purchase Units`,
+    dispatchedQuantity: `${totalDispatchedQuantity} Purchase Units`,
+    receivedQuantity: `${totalReceivedQuantity} Purchase Units`,
+    difference: `${totalDispatchedQuantity - totalReceivedQuantity} Purchase Units`,
+    inventoryStatus: isStockReceived ? 'Updated' : 'Pending',
+    billingStatus: isStockReceived ? 'Available' : 'Pending',
+  }
+
   return (
     <div className="flex w-full flex-col gap-5">
       <div className="text-h5 font-semibold text-pneutral-900">
@@ -611,34 +891,34 @@ const StockMovementDetails = ({
       <div className="flex w-full flex-col items-start gap-5 xl:flex-row">
         <div className="flex w-full min-w-0 flex-col gap-5 xl:flex-[2_0_0]">
           <div className="flex w-full flex-col items-stretch gap-5 lg:flex-row">
-            <MovementTimeline steps={defaultTimelineSteps} />
+            <MovementTimeline steps={timelineSteps} isLoading={isLoadingLines} />
             <MovementInformation
-              allocationNo="ALO000124"
-              distributionNo="WD000245"
-              source="Central Warehouse"
-              destination="Rajajinagar Medical Store"
-              transferType="Warehouse Distribution"
-              status="Received"
-              receiptConfirmedOn="05-Aug-2026  02:15 PM"
-              confirmedBy="Rajajinagar Pharmacy"
+              allocationNo={movementInfo.allocationNo}
+              distributionNo={movementInfo.distributionNo}
+              source={movementInfo.source}
+              destination={movementInfo.destination}
+              transferType={movementInfo.transferType}
+              status={movementInfo.status}
+              receiptConfirmedOn={movementInfo.receiptConfirmedOn}
+              confirmedBy={movementInfo.confirmedBy}
             />
           </div>
 
-          <ProductMovement rows={defaultProductMovement} />
+          <ProductMovement rows={productMovementRows} isLoading={isLoadingLines} />
         </div>
 
         <div className="flex w-full flex-col gap-4 xl:w-90 xl:shrink-0">
           <TransactionSummary
-            products={2}
-            totalQuantity="35 Purchase Units"
-            dispatchedQuantity="35 Purchase Units"
-            receivedQuantity="35 Purchase Units"
-            difference="0 Purchase Units"
-            inventoryStatus="Updated"
-            billingStatus="Available"
+            products={transactionSummary.products}
+            totalQuantity={transactionSummary.totalQuantity}
+            dispatchedQuantity={transactionSummary.dispatchedQuantity}
+            receivedQuantity={transactionSummary.receivedQuantity}
+            difference={transactionSummary.difference}
+            inventoryStatus={transactionSummary.inventoryStatus}
+            billingStatus={transactionSummary.billingStatus}
           />
 
-          <AuditLog entries={defaultAuditLog} />
+          <AuditLog entries={auditLogEntries} isLoading={isLoadingLines} />
         </div>
       </div>
 

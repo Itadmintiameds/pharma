@@ -3,9 +3,7 @@
 import { ReactNode, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClipboardList, CheckCircle2, Package } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
+import PaginationFooter from '@/app/components/common/table/Pagination'
 import StockReceiptView from './components/StockReceipt'
 import ReceiptCompleteView from './components/ReceiptComplete'
 import {
@@ -29,7 +27,7 @@ interface StatCardProps {
 }
 
 const StatCard = ({ icon, iconBg, label, value }: StatCardProps) => (
-  <div className="flex h-[108px] w-55 flex-col gap-0.5 rounded-xl border border-pneutral-100 bg-white p-4">
+  <div className="flex h-[108px] w-72 flex-col gap-0.5 rounded-xl border border-pneutral-100 bg-white p-4">
     <div className="flex w-full items-center gap-2">
       <div
         className={`flex size-[52px] shrink-0 items-center justify-center rounded-full ${iconBg}`}
@@ -38,7 +36,9 @@ const StatCard = ({ icon, iconBg, label, value }: StatCardProps) => (
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
-        <p className="text-label-l4 font-medium text-pneutral-900">{label}</p>
+        <p className="whitespace-nowrap text-label-l4 font-medium text-pneutral-900">
+          {label}
+        </p>
         <p className="text-h4 font-medium text-pneutral-900">{value}</p>
       </div>
     </div>
@@ -69,7 +69,10 @@ const mapSummaryToReceipt = (
   transferNo: summary.allocationNo,
   from: summary.fromStore ?? '—',
   products: summary.productsCount,
-  quantity: summary.totalDispatchedQuantity ?? summary.totalIssueQuantity,
+  // totalDispatchedQuantity is legitimately 0 before dispatch happens — fall
+  // back to what was issued so the row shows the expected quantity instead
+  // of a confusing "0 PU".
+  quantity: summary.totalDispatchedQuantity || summary.totalIssueQuantity,
   date: formatDate(summary.allocationDate),
   status: summary.currentStatus === 'STOCK_RECEIVED' ? 'Completed' : 'Pending Receipt',
 })
@@ -86,13 +89,20 @@ const ReceiptStatusBadge = ({ status }: { status: ReceiptStatus }) => (
   </span>
 )
 
+interface ReceiptColumn {
+  header: string
+  width?: string
+  align?: 'left' | 'center'
+  render: (row: StockReceipt) => ReactNode
+}
+
 const buildReceiptColumns = (
   onReceiveNow: (row: StockReceipt) => void,
   onView: (row: StockReceipt) => void
-): TableColumn<StockReceipt>[] => [
+): ReceiptColumn[] => [
   {
     header: '#',
-    width: 'w-12',
+    width: 'w-[4%] min-w-10',
     align: 'center',
     render: (row) => (
       <span className="text-p3 font-semibold text-pneutral-900">{row.id}</span>
@@ -100,26 +110,27 @@ const buildReceiptColumns = (
   },
   {
     header: 'Transfer No.',
-    width: 'w-28',
+    width: 'w-[13%] min-w-35',
     align: 'center',
     render: (row) => (
-      <span className="text-label-l4 font-semibold text-pneutral-900">
+      <span className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
         {row.transferNo}
       </span>
     ),
   },
   {
     header: 'From',
+    width: 'w-[15%] min-w-35',
     align: 'center',
     render: (row) => (
-      <span className="text-label-l4 font-semibold text-pneutral-900">
+      <span className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
         {row.from}
       </span>
     ),
   },
   {
     header: 'Products',
-    width: 'w-20',
+    width: 'w-[8%] min-w-17.5',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-semibold text-pneutral-900">
@@ -129,7 +140,7 @@ const buildReceiptColumns = (
   },
   {
     header: 'Quantity (Purchase Units)',
-    width: 'w-36',
+    width: 'w-[14%] min-w-27.5',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-semibold text-pneutral-900">
@@ -139,30 +150,30 @@ const buildReceiptColumns = (
   },
   {
     header: 'Date',
-    width: 'w-24',
+    width: 'w-[11%] min-w-27.5',
     align: 'center',
     render: (row) => (
-      <span className="text-label-l4 font-regular text-pneutral-900">
+      <span className="whitespace-nowrap text-label-l4 font-regular text-pneutral-900">
         {row.date}
       </span>
     ),
   },
   {
     header: 'Status',
-    width: 'w-40',
+    width: 'w-[16%] min-w-37.5',
     align: 'center',
     render: (row) => <ReceiptStatusBadge status={row.status} />,
   },
   {
     header: 'Action',
-    width: 'w-40',
+    width: 'w-[19%] min-w-32.5',
     align: 'center',
     render: (row) =>
       row.status === 'Pending Receipt' ? (
         <button
           type="button"
           onClick={() => onReceiveNow(row)}
-          className="flex h-9 min-w-27 items-center justify-center rounded-lg bg-secondary-700 px-3 text-label-l3 font-medium text-pneutral-50"
+          className="mx-auto flex h-9 min-w-27 items-center justify-center rounded-lg bg-secondary-700 px-3 text-label-l3 font-medium text-pneutral-50"
         >
           Receive Now
         </button>
@@ -170,7 +181,7 @@ const buildReceiptColumns = (
         <button
           type="button"
           onClick={() => onView(row)}
-          className="flex h-9 min-w-27 items-center justify-center rounded-lg border-[1.5px] border-secondary-700 px-3 text-label-l3 font-medium text-secondary-700"
+          className="mx-auto flex h-9 min-w-27 items-center justify-center rounded-lg border-[1.5px] border-secondary-700 px-3 text-label-l3 font-medium text-secondary-700"
         >
           View
         </button>
@@ -330,22 +341,51 @@ const page = () => {
             No stock receipts found.
           </p>
         ) : (
-          <TableWithoutGrid
-            columns={receiptColumns}
-            data={receipts.slice(
-              (currentPage - 1) * PAGE_SIZE,
-              currentPage * PAGE_SIZE
-            )}
-            rowKey={(row) => row.id.toString()}
-            headerVariant="primary"
-            container="card"
-            pagination={{
-              page: currentPage,
-              pageSize: PAGE_SIZE,
-              totalItems: receipts.length,
-              onPageChange: setCurrentPage,
-            }}
-          />
+          <div className="w-full overflow-hidden rounded-xl border border-pneutral-100 bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed border-collapse">
+                <thead>
+                  <tr className="bg-secondary-600">
+                    {receiptColumns.map((col) => (
+                      <th
+                        key={col.header}
+                        className={`border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                          col.width ?? ''
+                        } ${col.align === 'center' ? 'text-center' : 'text-left'}`}
+                      >
+                        {col.header}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {receipts
+                    .slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+                    .map((row) => (
+                      <tr key={row.id}>
+                        {receiptColumns.map((col) => (
+                          <td
+                            key={col.header}
+                            className={`border border-pneutral-200 px-3 py-2.5 ${
+                              col.align === 'center' ? 'text-center' : 'text-left'
+                            }`}
+                          >
+                            {col.render(row)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            <PaginationFooter
+              page={currentPage}
+              pageSize={PAGE_SIZE}
+              totalItems={receipts.length}
+              onPageChange={setCurrentPage}
+            />
+          </div>
         )}
       </div>
     </div>

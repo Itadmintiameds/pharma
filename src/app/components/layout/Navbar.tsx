@@ -12,9 +12,10 @@ interface NavbarProps {
   userRole?: string;
 }
 
-const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
+const Navbar = ({ userRole }: NavbarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState("");
   // A Warehouse Manager operates on warehouses, not pharmacies — the top-right
   // control switches warehouse for them instead of pharmacy.
   const [isWarehouseUser, setIsWarehouseUser] = useState(false);
@@ -73,6 +74,10 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
         ) {
           setIsWarehouseUser(true);
         }
+
+        if (details?.pharmaRolesDto?.roleName) {
+          setRole(details.pharmaRolesDto.roleName);
+        }
       } catch (error) {
         console.error("Failed to fetch user for Navbar", error);
       }
@@ -108,7 +113,7 @@ const Navbar = ({ userRole = "Super Admin" }: NavbarProps) => {
             className="text-[11.5px] font-normal leading-none"
             style={{ color: "#969793" }}
           >
-            {userRole}
+            {userRole || role}
           </p>
         </div>
       </div>

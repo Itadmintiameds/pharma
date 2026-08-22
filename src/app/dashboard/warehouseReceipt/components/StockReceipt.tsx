@@ -2,9 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { Check, Pill, Box, ArrowLeft, CheckCircle2 } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
 import {
   DistributionStatus,
   ReceiveWarehouseDistributionLineRequest,
@@ -206,19 +203,32 @@ const mapLineToReceiveItem = (
 const receiveInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
 
+// A damaged/not-received quantity without a remark leaves no record of why —
+// require one before the row can be treated as valid.
+const rowNeedsRemarks = (item: ReceiveItem) =>
+  Number(item.damagedQty) > 0 && item.remarks.trim() === ''
+
+interface ReceiveColumn {
+  header: string
+  width?: string
+  align?: 'left' | 'center'
+  render: (row: ReceiveItem, index: number) => React.ReactNode
+}
+
 const buildReceiveColumns = (
   onFieldChange: (
     id: number,
     field: 'receivedQty' | 'damagedQty' | 'remarks',
     value: string
-  ) => void
-): TableColumn<ReceiveItem>[] => [
+  ) => void,
+  showValidation: boolean
+): ReceiveColumn[] => [
   {
     header: '#',
     width: 'w-12',
     align: 'center',
-    render: (row) => (
-      <span className="text-p3 font-regular text-pneutral-900">{row.id}</span>
+    render: (_row, index) => (
+      <span className="text-p3 font-regular text-pneutral-900">{index + 1}</span>
     ),
   },
   {
@@ -303,14 +313,22 @@ const buildReceiveColumns = (
     header: 'Remarks',
     width: 'w-50',
     align: 'center',
-    render: (row) => (
-      <input
-        type="text"
-        value={row.remarks}
-        onChange={(e) => onFieldChange(row.id, 'remarks', e.target.value)}
-        className={receiveInputClass}
-      />
-    ),
+    render: (row) => {
+      const showError = showValidation && rowNeedsRemarks(row)
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <input
+            type="text"
+            value={row.remarks}
+            onChange={(e) => onFieldChange(row.id, 'remarks', e.target.value)}
+            className={`${receiveInputClass} ${showError ? 'border-warning-600' : ''}`}
+          />
+          {showError && (
+            <p className="text-p2 font-normal text-warning-600">Remark is required</p>
+          )}
+        </div>
+      )
+    },
   },
 ]
 
@@ -318,6 +336,7 @@ const ProductsToReceive = ({
   items,
   onFieldChange,
   loading,
+  showValidation,
 }: {
   items: ReceiveItem[]
   onFieldChange: (
@@ -326,8 +345,9 @@ const ProductsToReceive = ({
     value: string
   ) => void
   loading?: boolean
+  showValidation: boolean
 }) => {
-  const columns = buildReceiveColumns(onFieldChange)
+  const columns = buildReceiveColumns(onFieldChange, showValidation)
 
   return (
     <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
@@ -344,13 +364,40 @@ const ProductsToReceive = ({
           No products to receive.
         </p>
       ) : (
-        <TableWithoutGrid
-          columns={columns}
-          data={items}
-          rowKey={(row) => row.id.toString()}
-          headerVariant="primary"
-          container="box"
-        />
+        <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-secondary-600">
+                {columns.map((col) => (
+                  <th
+                    key={col.header}
+                    className={`border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                      col.width ?? ''
+                    } ${col.align === 'center' ? 'text-center' : 'text-left'}`}
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((row, index) => (
+                <tr key={row.id}>
+                  {columns.map((col) => (
+                    <td
+                      key={col.header}
+                      className={`border border-pneutral-200 px-3 py-2.5 ${
+                        col.align === 'center' ? 'text-center' : 'text-left'
+                      }`}
+                    >
+                      {col.render(row, index)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
@@ -408,6 +455,9 @@ const StockReceipt = ({
 
   const [items, setItems] = useState<ReceiveItem[]>(receiveItems)
   const [submitting, setSubmitting] = useState(false)
+  // Set once Confirm Receipt is clicked while a damaged qty is missing its
+  // remark — tells ProductsToReceive to show the inline errors.
+  const [validationAttempted, setValidationAttempted] = useState(false)
 
   // Re-seed the editable rows whenever a different distribution is loaded.
   useEffect(() => {
@@ -430,6 +480,11 @@ const StockReceipt = ({
   }
 
   const handleConfirm = async () => {
+    if (items.some(rowNeedsRemarks)) {
+      setValidationAttempted(true)
+      return
+    }
+
     const distributionId = distribution?.warehouseDistributionId
     if (distributionId == null) {
       showToast.error('Missing distribution reference — cannot confirm receipt.')
@@ -490,6 +545,7 @@ const StockReceipt = ({
         items={items}
         onFieldChange={handleFieldChange}
         loading={loading}
+        showValidation={validationAttempted}
       />
 
       <StockReceiptActions

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Users,
   CalendarRange,
@@ -11,14 +11,38 @@ import {
   Box,
   LucideIcon,
 } from 'lucide-react'
-import TableWithoutGrid, {
-  TableColumn,
-} from '@/app/components/common/table/TableWithoutGrid'
 import type {
   WarehouseDistributionData,
   WarehouseDistributionLineData,
 } from '@/types/WarehouseDistributionData'
-import { formatDate, formatDateTime } from '@/utils/formatDate'
+import { formatDate } from '@/utils/formatDate'
+import { getUserById } from '@/services/UserManagementService'
+import { ProductService } from '@/services/ProductService'
+
+const EM_DASH = '—'
+
+const MONTH_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+]
+
+// dd-mmm-yyyy with a 12-hour AM/PM time, matching the format the other
+// transfer/receipt screens show — rather than the app-wide dd-mm-yyyy 24-hour one.
+const formatDateTime = (value?: string | null, fallback = EM_DASH): string => {
+  if (!value) return fallback
+
+  const [datePart, timePart] = value.split('T')
+  const iso = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const dateLabel = iso
+    ? `${iso[3]}-${MONTH_ABBR[Number(iso[2]) - 1] ?? iso[2]}-${iso[1]}`
+    : datePart
+  if (!timePart) return dateLabel
+
+  const [hourStr, minuteStr] = timePart.split(':')
+  const hour24 = parseInt(hourStr, 10)
+  const period = hour24 >= 12 ? 'PM' : 'AM'
+  const hour12 = hour24 % 12 || 12
+  return `${dateLabel} ${String(hour12).padStart(2, '0')}:${minuteStr} ${period}`
+}
 
 export type TransferDetailsStatus =
   | 'awaiting_acceptance'
@@ -86,7 +110,6 @@ interface StoreBlockProps {
   Icon: LucideIcon
   iconColor: string
   name: string
-  code: string
 }
 
 const StoreBlock = ({
@@ -95,7 +118,6 @@ const StoreBlock = ({
   Icon,
   iconColor,
   name,
-  code,
 }: StoreBlockProps) => (
   <div className="flex w-full flex-col items-start gap-1 md:w-64">
     <p className="text-p3 font-regular text-pneutral-600">{label}</p>
@@ -105,7 +127,6 @@ const StoreBlock = ({
       </div>
       <div className="flex min-w-0 flex-col items-start gap-1">
         <p className="text-label-l4 font-semibold text-pneutral-900">{name}</p>
-        <p className="text-p3 font-regular text-pneutral-600">{code}</p>
       </div>
     </div>
   </div>
@@ -115,17 +136,13 @@ const TransferInformationCard = ({
   requestedBy,
   requestedOn,
   sourceName,
-  sourceCode,
   destinationName,
-  destinationCode,
   destinationIsWarehouse,
 }: {
   requestedBy: string
   requestedOn: string
   sourceName: string
-  sourceCode: string
   destinationName: string
-  destinationCode: string
   destinationIsWarehouse: boolean
 }) => (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
@@ -134,7 +151,7 @@ const TransferInformationCard = ({
     </p>
 
     <div className="flex w-full flex-col gap-4 lg:flex-row lg:items-start">
-      <div className="flex w-full flex-col gap-4 border-pneutral-200 lg:w-auto lg:shrink-0 lg:border-r lg:pr-8">
+      <div className="flex w-full flex-col gap-4 border-pneutral-200 lg:w-72 lg:shrink-0 lg:border-r lg:pr-8">
         <InfoRow
           Icon={Users}
           label="Requested By"
@@ -155,7 +172,6 @@ const TransferInformationCard = ({
           Icon={Warehouse}
           iconColor="text-secondary-700"
           name={sourceName}
-          code={sourceCode}
         />
 
         <div className="flex shrink-0 items-center justify-center self-center rounded-full bg-pneutral-50 p-3">
@@ -168,7 +184,6 @@ const TransferInformationCard = ({
           Icon={destinationIsWarehouse ? Warehouse : Store}
           iconColor="text-success-700"
           name={destinationName}
-          code={destinationCode}
         />
       </div>
     </div>
@@ -183,8 +198,10 @@ interface RequestedProductRow {
   productName: string
   packInfo: string
   batchNo: string
+  batchId: string
   expiryDate: string
   requestedQty: string
+  unit: string
 }
 
 // "Strip"/"Tablet" packs read as pills; anything else (Bottle, Box, …) gets the box icon.
@@ -211,24 +228,45 @@ const mapLineToRequestedRow = (
     packInfo:
       unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+    batchId: line.batchId ?? '',
     expiryDate: formatDate(line.batch?.expiryDate),
     requestedQty: unit
       ? `${line.issueQuantity ?? 0} ${unit}`
       : String(line.issueQuantity ?? 0),
+    unit,
   }
 }
 
-const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
+// Shape of one row returned by GET /product/batches/pharmacy/{id}
+// (ProductService.getBatchesForPharmacy) — only the fields used here.
+interface SourceBatchStockRow {
+  batchId?: string
+  totalStock?: number
+}
+
+interface RequestedProductColumn {
+  header: string
+  width: string
+  align?: 'left' | 'center'
+  render: (row: RequestedProductRow, index: number) => React.ReactNode
+}
+
+// Available stock is live inventory at the source, not something the
+// distribution's own lines carry — resolved separately per batch id.
+const buildRequestedProductColumns = (
+  availableStockByBatchId: Record<string, number>
+): RequestedProductColumn[] => [
   {
     header: '#',
-    width: 'w-12',
+    width: 'w-[6%]',
     align: 'center',
-    render: (row) => (
-      <span className="text-p3 font-regular text-pneutral-900">{row.id}</span>
+    render: (_row, index) => (
+      <span className="text-p3 font-regular text-pneutral-900">{index + 1}</span>
     ),
   },
   {
     header: 'Product Details',
+    width: 'w-[22%]',
     render: (row) => (
       <div className="flex items-center gap-2">
         <div className="flex size-6.5 shrink-0 items-center justify-center rounded bg-secondary-100">
@@ -251,7 +289,7 @@ const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
   },
   {
     header: 'Batch No.',
-    width: 'w-32',
+    width: 'w-[18%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -261,7 +299,7 @@ const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
   },
   {
     header: 'Expiry Date',
-    width: 'w-32',
+    width: 'w-[18%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -271,7 +309,7 @@ const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
   },
   {
     header: 'Requested Qty',
-    width: 'w-32',
+    width: 'w-[18%]',
     align: 'center',
     render: (row) => (
       <span className="text-label-l4 font-regular text-pneutral-900">
@@ -279,30 +317,82 @@ const requestedProductColumns: TableColumn<RequestedProductRow>[] = [
       </span>
     ),
   },
+  {
+    header: 'Available Stock',
+    width: 'w-[18%]',
+    align: 'center',
+    render: (row) => {
+      const stock = row.batchId ? availableStockByBatchId[row.batchId] : undefined
+      const label = stock === undefined ? '—' : row.unit ? `${stock} ${row.unit}` : String(stock)
+      return <span className="text-label-l4 font-regular text-success-600">{label}</span>
+    },
+  },
 ]
 
 const RequestedProductsCard = ({
   rows,
   loading,
+  availableStockByBatchId,
 }: {
   rows: RequestedProductRow[]
   loading?: boolean
-}) => (
+  availableStockByBatchId: Record<string, number>
+}) => {
+  const requestedProductColumns = buildRequestedProductColumns(availableStockByBatchId)
+
+  return (
   <div className="flex w-full flex-col items-start gap-4 rounded-2xl border border-pneutral-200 bg-white p-4">
     <p className="text-label-l5 font-semibold text-secondary-700">
       Requested Products
     </p>
 
-    <TableWithoutGrid
-      columns={requestedProductColumns}
-      data={rows}
-      rowKey={(row) => row.id.toString()}
-      headerVariant="primary"
-      container="box"
-      loading={loading}
-    />
+    {loading ? (
+      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+        Loading products…
+      </p>
+    ) : rows.length === 0 ? (
+      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+        No products found.
+      </p>
+    ) : (
+      <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="bg-secondary-600">
+              {requestedProductColumns.map((col) => (
+                <th
+                  key={col.header}
+                  className={`${col.width} border border-secondary-500 px-3 py-3 text-p3 font-semibold text-pneutral-50 ${
+                    col.align === 'center' ? 'text-center' : 'text-left'
+                  }`}
+                >
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.id}>
+                {requestedProductColumns.map((col) => (
+                  <td
+                    key={col.header}
+                    className={`border border-pneutral-200 px-3 py-2.5 ${
+                      col.align === 'center' ? 'text-center' : 'text-left'
+                    }`}
+                  >
+                    {col.render(row, index)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>
-)
+  )
+}
 
 const actionButtonClass =
   'flex h-12 min-w-27 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-label-l4 font-medium sm:flex-none'
@@ -352,11 +442,64 @@ const TransferDetails = ({
     [distribution]
   )
 
-  // Who asked for the transfer: the requesting store if the API recorded one,
-  // otherwise the user who created the allocation.
-  const requestedBy =
-    distribution?.allocationRequestedBy || distribution?.createdBy || assignedBy
+  // createdBy is only ever the requesting user's raw id — resolve it to their
+  // role once the distribution loads, since that's what "Requested By" shows.
+  const creatorId = distribution?.createdBy
+  const [requesterRole, setRequesterRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!creatorId) {
+      setRequesterRole(null)
+      return
+    }
+    let active = true
+    getUserById(creatorId)
+      .then((user) => {
+        if (active) setRequesterRole(user?.pharmaRolesDto?.roleName ?? null)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch the requesting user', error)
+        if (active) setRequesterRole(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [creatorId])
+
+  const requestedBy = requesterRole ?? assignedBy
   const allocationNo = distribution?.allocationNo ?? referenceNo
+
+  // Available stock is live inventory at the source pharmacy — not part of
+  // the distribution's own data — fetched separately and matched by batch id.
+  const sourcePharmacyId = distribution?.sourceType === 'PHARMACY' ? distribution.sourceId : ''
+  const [availableStockByBatchId, setAvailableStockByBatchId] = useState<
+    Record<string, number>
+  >({})
+
+  useEffect(() => {
+    if (!sourcePharmacyId) {
+      setAvailableStockByBatchId({})
+      return
+    }
+    let active = true
+    ProductService.getBatchesForPharmacy(sourcePharmacyId)
+      .then((res) => {
+        if (!active) return
+        const rows: SourceBatchStockRow[] = res?.data ?? []
+        const byBatchId: Record<string, number> = {}
+        rows.forEach((row) => {
+          if (row.batchId) byBatchId[row.batchId] = Number(row.totalStock) || 0
+        })
+        setAvailableStockByBatchId(byBatchId)
+      })
+      .catch((error) => {
+        console.error('Failed to fetch source stock', error)
+        if (active) setAvailableStockByBatchId({})
+      })
+    return () => {
+      active = false
+    }
+  }, [sourcePharmacyId])
 
   return (
     <div className="flex w-full flex-col items-start gap-4">
@@ -392,14 +535,16 @@ const TransferDetails = ({
         requestedBy={requestedBy}
         requestedOn={formatDateTime(distribution?.allocationDate)}
         sourceName={distribution?.sourceName?.trim() || distribution?.sourceId || '—'}
-        sourceCode={distribution?.sourceId ?? '—'}
         destinationName={
           distribution?.destinationName?.trim() || distribution?.destinationId || '—'
         }
-        destinationCode={distribution?.destinationId ?? '—'}
         destinationIsWarehouse={distribution?.destinationType === 'WAREHOUSE'}
       />
-      <RequestedProductsCard rows={productRows} loading={loading} />
+      <RequestedProductsCard
+        rows={productRows}
+        loading={loading}
+        availableStockByBatchId={availableStockByBatchId}
+      />
       <TransferDetailsActions
         onBack={onBack}
         onAccept={onAccept}
