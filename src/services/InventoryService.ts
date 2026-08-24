@@ -1,6 +1,8 @@
 import type {
   AddBatchPayload,
   AddPackagePayload,
+  BatchExpiryKpi,
+  BatchExpiryKpiResponse,
   ProductDetails,
   ProductDetailsResponse,
   ProductExpiryKpi,
@@ -34,6 +36,16 @@ export const getProductExpiryKpi = async (): Promise<ProductExpiryKpi> => {
     return res.data.data;
   } catch (error) {
     throw handleApiError(error, "Failed to load product expiry KPIs.");
+  }
+};
+
+// GET /batch-expiry-kpi -> aggregate batch-level counts for the stat cards.
+export const getBatchExpiryKpi = async (): Promise<BatchExpiryKpi> => {
+  try {
+    const res = await api.get<BatchExpiryKpiResponse>("product/batch-expiry-kpi");
+    return res.data.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to load batch expiry KPIs.");
   }
 };
 
