@@ -825,6 +825,15 @@ const page = () => {
   }
 
   if (view === 'summary') {
+    // A pharmacy transfer has no dispatch/receipt step to walk through (see
+    // handleConfirmAllocation), so a pharmacy-sourced allocation is done the
+    // moment it's created — "Ready to Dispatch" on the list is really just
+    // its only status, and viewing it here should read as Completed rather
+    // than offer a dispatch action that doesn't apply to it.
+    const isCompletedPharmacyTransfer =
+      createdAllocation?.sourceType === 'PHARMACY' &&
+      createdAllocation?.currentStatus === 'DISTRIBUTION_CREATED'
+
     return (
       <div className="flex w-full flex-col items-start gap-4">
         {isLoadingSummary || !createdAllocation ? (
@@ -858,27 +867,51 @@ const page = () => {
               purchaseUnit: line.packaging?.purchaseUnit ?? '—',
               dispatchQty: line.issueQuantity ?? 0,
             }))}
-            timelineSteps={[
-              {
-                icon: '/warehouseDistribution/document-text-mini-white.svg',
-                label: 'Draft',
-                timestamp: formatDate(createdAllocation.createdAt),
-                description: 'Allocation created',
-                active: true,
-              },
-              {
-                icon: '/warehouseDistribution/truck-outline-gray.svg',
-                label: 'Pending Receipt',
-                description: 'Waiting for pharmacy to acknowledge receipt',
-              },
-              {
-                icon: '/warehouseDistribution/check-circle-outline-gray.svg',
-                label: 'Received',
-                description: 'Stock received and available at pharmacy',
-              },
-            ]}
+            timelineSteps={
+              isCompletedPharmacyTransfer
+                ? [
+                    {
+                      icon: '/warehouseDistribution/document-text-mini-white.svg',
+                      label: 'Draft',
+                      timestamp: formatDate(createdAllocation.createdAt),
+                      description: 'Allocation created',
+                      active: true,
+                    },
+                    {
+                      icon: '/warehouseDistribution/truck-outline-white.svg',
+                      label: 'Pending Receipt',
+                      description: 'Transferred to pharmacy',
+                      active: true,
+                    },
+                    {
+                      icon: '/warehouseDistribution/check-circle-outline-white.svg',
+                      label: 'Received',
+                      description: 'Stock received and available at pharmacy',
+                      active: true,
+                    },
+                  ]
+                : [
+                    {
+                      icon: '/warehouseDistribution/document-text-mini-white.svg',
+                      label: 'Draft',
+                      timestamp: formatDate(createdAllocation.createdAt),
+                      description: 'Allocation created',
+                      active: true,
+                    },
+                    {
+                      icon: '/warehouseDistribution/truck-outline-gray.svg',
+                      label: 'Pending Receipt',
+                      description: 'Waiting for pharmacy to acknowledge receipt',
+                    },
+                    {
+                      icon: '/warehouseDistribution/check-circle-outline-gray.svg',
+                      label: 'Received',
+                      description: 'Stock received and available at pharmacy',
+                    },
+                  ]
+            }
             onBack={() => setView('list')}
-            onDispatchProducts={handleDispatchProducts}
+            onDispatchProducts={isCompletedPharmacyTransfer ? undefined : handleDispatchProducts}
             isDispatching={isDispatching}
           />
         )}

@@ -374,22 +374,24 @@ const DistributionFooter = ({
       </span>
     </button>
 
-    <button
-      type="button"
-      onClick={onDispatchProducts}
-      disabled={isDispatching}
-      className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
-    >
-      <Image
-        src="/warehouseDistribution/truck-outline-white.svg"
-        alt=""
-        width={20}
-        height={20}
-      />
-      <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
-        {isDispatching ? "Dispatching..." : "Dispatch Products"}
-      </span>
-    </button>
+    {onDispatchProducts && (
+      <button
+        type="button"
+        onClick={onDispatchProducts}
+        disabled={isDispatching}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+      >
+        <Image
+          src="/warehouseDistribution/truck-outline-white.svg"
+          alt=""
+          width={20}
+          height={20}
+        />
+        <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
+          {isDispatching ? "Dispatching..." : "Dispatch Products"}
+        </span>
+      </button>
+    )}
   </div>
 );
 
