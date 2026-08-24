@@ -22,6 +22,7 @@ import {
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
+import { useOrgInventoryGuard } from "@/hooks/useOrgInventoryGuard";
 import toast from "react-hot-toast";
 
 /** One row of the tax-invoice table. */
@@ -259,6 +260,15 @@ const PurchaseContent = () => {
   // (a ref so rapid clicks can't slip through before a re-render).
   const isBusyRef = useRef(false);
 
+  // Route guard: in a centralized multi-store org, purchasing happens at the
+  // warehouse, so pharmacy-side roles (Super Admin, Admin, Desk) are kept out of
+  // this page even via a direct URL. Only the Warehouse Manager may purchase.
+  const { checking: accessChecking } = useOrgInventoryGuard({
+    deny: ({ isCentralizedMultiOrg, isWarehouseManager }) =>
+      isCentralizedMultiOrg && !isWarehouseManager,
+    message: "Purchasing is handled at the warehouse for centralized inventory.",
+  });
+
   const openInvoice = async (purchase: PurchaseData, print: boolean) => {
     if (isBusyRef.current) return;
     isBusyRef.current = true;
@@ -414,6 +424,16 @@ const PurchaseContent = () => {
       setInvoice((current) => (current && !current.print ? null : current));
     }
   }, [view]);
+
+  // Hold the page blank until the access check resolves, so pharmacy-side roles
+  // in a centralized multi-store org never see the list before being redirected.
+  if (accessChecking) {
+    return (
+      <div className="text-p3 font-normal text-pneutral-500 py-8 text-center">
+        Loading purchases...
+      </div>
+    );
+  }
 
   // Viewing takes over the page. Downloading leaves the list on screen and
   // renders an off-screen copy that only the printer sees.

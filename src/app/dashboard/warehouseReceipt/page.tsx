@@ -18,6 +18,7 @@ import {
 } from '@/types/WarehouseDistributionData'
 import { formatDate } from '@/utils/formatDate'
 import { showToast } from '@/app/components/common/Toast'
+import { useOrgInventoryGuard } from '@/hooks/useOrgInventoryGuard'
 
 interface StatCardProps {
   icon: ReactNode
@@ -195,6 +196,14 @@ type View = 'list' | 'receipt' | 'complete'
 
 const page = () => {
   const router = useRouter()
+
+  // Warehouse Receipt only exists with centralized inventory — block direct-URL
+  // access when the organization's inventory is decentralized.
+  const { checking: accessChecking } = useOrgInventoryGuard({
+    deny: ({ isDecentralizedInventory }) => isDecentralizedInventory,
+    message: 'Warehouse Receipt is available only with centralized inventory.',
+  })
+
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useState<View>('list')
 
@@ -256,6 +265,16 @@ const page = () => {
     setActiveReceipt(null)
     setActiveDistribution(null)
     loadList()
+  }
+
+  // Hold the page blank until the guard resolves, so a decentralized-inventory
+  // user never sees the dashboard before being redirected.
+  if (accessChecking) {
+    return (
+      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
+        Loading…
+      </p>
+    )
   }
 
   if (view === 'complete') {

@@ -33,6 +33,14 @@ const Sidebar = () => {
 
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
   const [isWarehouseManagerRole, setIsWarehouseManagerRole] = React.useState(false);
+  // When the organization runs multiple stores with a centralized inventory, all
+  // purchasing is done at the warehouse. Pharmacy-side roles (Super Admin, Admin,
+  // Desk) then have Purchase locked — only the Warehouse Manager may purchase.
+  const [isCentralizedMultiOrg, setIsCentralizedMultiOrg] = React.useState(false);
+  // Warehouse Receipt and Inter Store Transfer only make sense with centralized
+  // inventory; when inventory is decentralized (centralizedInventory === false)
+  // they are locked regardless of Single/Multiple organization type.
+  const [isDecentralizedInventory, setIsDecentralizedInventory] = React.useState(false);
 
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
@@ -54,14 +62,15 @@ const Sidebar = () => {
         const { userId } = await userRes.json();
         if (!userId) return;
 
-        const [{ getUserPharmacyKPIs }, { getUserById }] = await Promise.all([
+        const [{ getUserPharmacyKPIs, getUserOrganization }, { getUserById }] = await Promise.all([
           import("@/services/SetupBusinessService"),
           import("@/services/UserManagementService"),
         ]);
 
-        const [kpiResponse, userDetails] = await Promise.all([
+        const [kpiResponse, userDetails, organization] = await Promise.all([
           getUserPharmacyKPIs(String(userId)).catch(() => null),
           getUserById(userId).catch(() => null),
+          getUserOrganization().catch(() => null),
         ]);
 
         // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
@@ -81,6 +90,22 @@ const Sidebar = () => {
           (r || "").toLowerCase().replace(/[^a-z]/g, "");
         if (normalizeRole(userDetails?.pharmaRolesDto?.roleName) === "warehousemanager") {
           setIsWarehouseManagerRole(true);
+        }
+
+        // Multiple-store org + centralized inventory => purchasing is warehouse-only.
+        const normalizeType = (t?: string) =>
+          (t || "").toLowerCase().replace(/[^a-z]/g, "");
+        if (
+          normalizeType(organization?.organizationType) === "multiple" &&
+          organization?.centralizedInventory === true
+        ) {
+          setIsCentralizedMultiOrg(true);
+        }
+
+        // Only flag decentralized once an organization actually loaded, so a
+        // failed/missing org lookup doesn't wrongly lock these modules.
+        if (organization && organization.centralizedInventory === false) {
+          setIsDecentralizedInventory(true);
         }
       } catch (err) {
         console.error("Failed to check registration status for sidebar:", err);
@@ -237,15 +262,35 @@ const Sidebar = () => {
                 const isRestrictedToWarehouseManager =
                   item.path === "/dashboard/warehouseDistribution" &&
                   !isWarehouseManagerRole;
+                // In a centralized multi-store org, Purchase is warehouse-only: locked
+                // for every pharmacy-side role (Super Admin, Admin, Desk).
+                const isPurchaseCentralizedLocked =
+                  item.path === "/dashboard/purchase" &&
+                  isCentralizedMultiOrg &&
+                  !isWarehouseManagerRole;
+                // Warehouse Receipt / Inter Store Transfer require centralized
+                // inventory — locked for everyone when inventory is decentralized.
+                const isDecentralizedLocked =
+                  isDecentralizedInventory &&
+                  (item.path === "/dashboard/warehouseReceipt" ||
+                    item.path === "/dashboard/interStoreTransfer");
                 const isLocked =
-                  item.isLocked || isRoleRestricted || isRestrictedToWarehouseManager;
+                  item.isLocked ||
+                  isRoleRestricted ||
+                  isRestrictedToWarehouseManager ||
+                  isPurchaseCentralizedLocked ||
+                  isDecentralizedLocked;
                 const lockedMessage = isRoleRestricted
                   ? "Not available for the Warehouse Manager role"
                   : isRestrictedToWarehouseManager
                     ? "Only available to the Warehouse Manager role"
-                    : item.isLocked
-                      ? "Complete business setup to unlock this module"
-                      : undefined;
+                    : isPurchaseCentralizedLocked
+                      ? "Purchasing is handled at the warehouse for centralized inventory"
+                      : isDecentralizedLocked
+                        ? "Available only with centralized inventory"
+                        : item.isLocked
+                          ? "Complete business setup to unlock this module"
+                          : undefined;
 
                 return (
                   <Link
