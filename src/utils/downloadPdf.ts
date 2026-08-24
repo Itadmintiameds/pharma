@@ -72,10 +72,7 @@ const bandDataUrl = (
  * gets them redrawn on each sheet; one that doesn't, like the purchase invoice,
  * simply flows.
  */
-export const downloadElementAsPdf = async (
-  element: HTMLElement,
-  fileName: string
-): Promise<void> => {
+const buildElementPdf = async (element: HTMLElement): Promise<jsPDF> => {
   const canvas = await rasterise(element);
 
   // Canvas pixels per CSS pixel, so DOM geometry can be read in canvas terms.
@@ -194,5 +191,45 @@ export const downloadElementAsPdf = async (
     page += 1;
   }
 
+  return pdf;
+};
+
+export const downloadElementAsPdf = async (
+  element: HTMLElement,
+  fileName: string
+): Promise<void> => {
+  const pdf = await buildElementPdf(element);
   pdf.save(fileName);
+};
+
+/**
+ * Prints the very document `downloadElementAsPdf` would save, rather than
+ * re-laying the element out for the printer.
+ *
+ * The alternative — cloning the markup into an iframe (see printElement) — hands
+ * the browser a fresh layout at paper width, so a wide dashboard reflows and
+ * paginates differently from the PDF. Here the pages are already decided: the
+ * built PDF is handed to the viewer with its print action set, so what comes out
+ * of the printer is byte-for-byte the downloaded file.
+ */
+export const printElementAsPdf = async (element: HTMLElement): Promise<void> => {
+  const pdf = await buildElementPdf(element);
+  pdf.autoPrint();
+
+  const url = String(pdf.output("bloburl"));
+
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText =
+    "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+  // The dialog reads from the iframe, so it cannot be torn down immediately;
+  // the blob URL is released with it.
+  iframe.onload = () => {
+    window.setTimeout(() => {
+      iframe.remove();
+      URL.revokeObjectURL(url);
+    }, 60_000);
+  };
+  iframe.src = url;
+  document.body.appendChild(iframe);
 };

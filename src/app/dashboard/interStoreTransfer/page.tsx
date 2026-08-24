@@ -44,13 +44,7 @@ const HeaderRow = () => (
       </p>
     </div>
 
-    <button
-      type="button"
-      className="flex h-12 w-full min-w-27 shrink-0 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700 sm:w-auto sm:min-w-35"
-    >
-      <Download className="size-5" strokeWidth={2} />
-      Export
-    </button>
+
   </div>
 )
 

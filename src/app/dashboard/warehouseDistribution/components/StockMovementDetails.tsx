@@ -1,5 +1,5 @@
 import Image from 'next/image'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import StatusBadge from '@/app/components/common/table/StatusBadge'
 import { getWarehouseDistribution } from '@/services/WarehouseDistributionService'
 import { getUserById } from '@/services/UserManagementService'
@@ -10,6 +10,14 @@ import {
   WarehouseDistributionStatusData,
 } from '@/types/WarehouseDistributionData'
 import { formatDate, formatDateTime } from '@/utils/formatDate'
+import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
+import { showToast } from '@/app/components/common/Toast'
+
+// Both the printout and the PDF are this screen as it stands — no separate
+// document design. Printing goes through the same PDF the download produces
+// (printElementAsPdf), so the two agree on layout and pagination instead of the
+// printer reflowing the markup at paper width.
+const PRINT_ROOT_ID = 'stock-movement-print'
 
 // The timeline shows time as 12-hour AM/PM (unlike formatDateTime's 24-hour
 // clock, which the rest of this screen keeps for consistency with the app).
@@ -382,10 +390,14 @@ const StockMovementFooter = ({
   onBack,
   onPrintTimeline,
   onDownloadPdf,
+  isPrinting,
+  isDownloading,
 }: {
   onBack?: () => void
   onPrintTimeline?: () => void
   onDownloadPdf?: () => void
+  isPrinting?: boolean
+  isDownloading?: boolean
 }) => (
   <div className="flex w-full flex-col gap-3 border-t border-pneutral-200  py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -402,7 +414,8 @@ const StockMovementFooter = ({
       <button
         type="button"
         onClick={onPrintTimeline}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 sm:w-auto"
+        disabled={isPrinting}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 disabled:opacity-50 sm:w-auto"
       >
         <Image
           src="/warehouseDistribution/printer-mini.svg"
@@ -411,14 +424,15 @@ const StockMovementFooter = ({
           height={20}
         />
         <span className="whitespace-nowrap text-label-l4 font-medium text-secondary-700">
-          Print Timeline
+          {isPrinting ? 'Preparing…' : 'Print Timeline'}
         </span>
       </button>
 
       <button
         type="button"
         onClick={onDownloadPdf}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 sm:w-auto"
+        disabled={isDownloading}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary-800 px-4 disabled:opacity-50 sm:w-auto"
       >
         <Image
           src="/warehouseDistribution/arrow-down-tray-white.svg"
@@ -427,7 +441,7 @@ const StockMovementFooter = ({
           height={20}
         />
         <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
-          Download PDF
+          {isDownloading ? 'Preparing…' : 'Download PDF'}
         </span>
       </button>
     </div>
@@ -580,7 +594,7 @@ const ProductMovement = ({
         ) : (
           rows.map((row, index) => (
             <div
-              key={row.batchNo}
+              key={`${row.product}-${row.batchNo}-${index}`}
               className="flex w-full items-center gap-4 border-t border-pneutral-200 px-3.5 py-2.5"
             >
               <p className="w-5 shrink-0 text-p3 font-normal text-pneutral-900">
@@ -684,6 +698,41 @@ const StockMovementDetails = ({
 }: StockMovementDetailsProps) => {
   const [distribution, setDistribution] = useState<WarehouseDistributionData | null>(null)
   const [isLoadingLines, setIsLoadingLines] = useState(Boolean(distributionId))
+  // Everything above the action bar — what both the printout and the PDF capture.
+  const printRef = useRef<HTMLDivElement>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isPrinting, setIsPrinting] = useState(false)
+
+  const fileLabel = movementNo.replace(/[^a-zA-Z0-9-_]+/g, '-')
+
+  const handlePrint = async () => {
+    if (!printRef.current || isPrinting) return
+    setIsPrinting(true)
+    try {
+      await printElementAsPdf(printRef.current)
+    } catch (err) {
+      console.error('Failed to open the print view', err)
+      showToast.error('Could not open the print dialog.')
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
+  // Captures the live element rather than an off-screen copy, so the file shows
+  // exactly what is on screen.
+  const handleDownloadPdf = async () => {
+    if (!printRef.current || isDownloading) return
+    setIsDownloading(true)
+    try {
+      await downloadElementAsPdf(printRef.current, `stock-movement-${fileLabel}.pdf`)
+      showToast.success('Stock movement details downloaded.')
+    } catch (err) {
+      console.error('Failed to generate the stock movement PDF', err)
+      showToast.error('Could not generate the PDF.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
 
   useEffect(() => {
     if (!distributionId) {
@@ -808,9 +857,17 @@ const StockMovementDetails = ({
 
   return (
     <div className="flex w-full flex-col gap-5">
-      <div className="text-h5 font-semibold text-pneutral-900">
-        Stock Movement Details
-      </div>
+      {/* bg-secondary-50 is the colour <main> already paints, so this is invisible
+          on screen — but the PDF capture and the printout only get a background
+          if the captured element paints one itself, or the white cards vanish. */}
+      <div
+        id={PRINT_ROOT_ID}
+        ref={printRef}
+        className="flex w-full flex-col gap-5 bg-secondary-50"
+      >
+        <div className="text-h5 font-semibold text-pneutral-900">
+          Stock Movement Details
+        </div>
 
       <div className="flex w-full flex-col gap-5 rounded-xl bg-white px-6 py-4.5 shadow-[0px_1px_2px_-2px_rgba(0,0,0,0.16),0px_3px_6px_0px_rgba(0,0,0,0.12),0px_5px_12px_4px_rgba(0,0,0,0.09)] sm:flex-row sm:items-center sm:gap-5">
         <div className="flex min-w-0 items-center gap-3 sm:flex-1">
@@ -922,10 +979,14 @@ const StockMovementDetails = ({
         </div>
       </div>
 
+      </div>
+
       <StockMovementFooter
         onBack={onBack}
-        onPrintTimeline={onPrintTimeline}
-        onDownloadPdf={onDownloadPdf}
+        onPrintTimeline={onPrintTimeline ?? handlePrint}
+        onDownloadPdf={onDownloadPdf ?? handleDownloadPdf}
+        isPrinting={isPrinting}
+        isDownloading={isDownloading}
       />
     </div>
   )

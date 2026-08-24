@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Check,
   Printer,
@@ -19,6 +19,8 @@ import type {
 } from '@/types/WarehouseDistributionData'
 import { formatDate } from '@/utils/formatDate'
 import { getUserById } from '@/services/UserManagementService'
+import { printElementAsPdf } from '@/utils/downloadPdf'
+import { showToast } from '@/app/components/common/Toast'
 
 const EM_DASH = '—'
 
@@ -491,7 +493,10 @@ const PendingReceiptActions = ({
   onBack?: () => void
   onClose?: () => void
 }) => (
-  <div className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
+  <div
+    data-html2canvas-ignore
+    className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between"
+  >
     <button
       type="button"
       onClick={onBack}
@@ -567,8 +572,32 @@ const PendingReceipt = ({
     }
   }, [creatorId])
 
+  // The dispatch note is this screen as it stands, printed through the same PDF
+  // path the other export screens use so the pages are laid out once.
+  const dispatchNoteRef = useRef<HTMLDivElement>(null)
+  const [isPrinting, setIsPrinting] = useState(false)
+
+  const handlePrintDispatchNote = async () => {
+    if (!dispatchNoteRef.current || isPrinting) return
+    setIsPrinting(true)
+    try {
+      await printElementAsPdf(dispatchNoteRef.current)
+    } catch (error) {
+      console.error('Failed to open the print view', error)
+      showToast.error('Could not open the print dialog.')
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
   return (
-    <div className="flex w-full flex-col items-start gap-4">
+    // bg-secondary-50 is the colour <main> already paints, so this is invisible on
+    // screen — but the capture only gets a background if the element paints one,
+    // and without it the white cards vanish into a white page.
+    <div
+      ref={dispatchNoteRef}
+      className="flex w-full flex-col items-start gap-4 bg-secondary-50"
+    >
       <div className="flex w-full flex-col items-start gap-5 sm:flex-row">
         <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
           <div className="flex flex-wrap items-center gap-3">
@@ -589,11 +618,13 @@ const PendingReceipt = ({
 
         <button
           type="button"
-          onClick={onPrintDispatchNote}
-          className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700 sm:w-auto sm:min-w-50"
+          data-html2canvas-ignore
+          onClick={onPrintDispatchNote ?? handlePrintDispatchNote}
+          disabled={isPrinting}
+          className="flex h-12 w-full shrink-0 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700 disabled:opacity-50 sm:w-auto sm:min-w-50"
         >
           <Printer className="size-5" strokeWidth={2} />
-          Print Dispatch Note
+          {isPrinting ? 'Preparing…' : 'Print Dispatch Note'}
         </button>
       </div>
 

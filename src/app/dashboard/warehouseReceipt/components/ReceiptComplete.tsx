@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   Check,
   Printer,
@@ -19,6 +19,8 @@ import {
   WarehouseDistributionStatusData,
 } from '@/types/WarehouseDistributionData'
 import { getUserById } from '@/services/UserManagementService'
+import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
+import { showToast } from '@/app/components/common/Toast'
 
 interface ReceiptCompleteProps {
   referenceNo?: string
@@ -474,7 +476,10 @@ const ReceiptCompleteActions = ({
 }: {
   onGoToDashboard?: () => void
 }) => (
-  <div className="flex w-full items-center justify-end border-t border-pneutral-200 bg-white py-4">
+  <div
+    data-html2canvas-ignore
+    className="flex w-full items-center justify-end border-t border-pneutral-200 bg-white py-4"
+  >
     <button
       type="button"
       onClick={onGoToDashboard}
@@ -534,8 +539,49 @@ const ReceiptComplete = ({
   const progressSteps = buildProgressSteps(distribution, creatorRole, from, to)
   const receivedItems = (distribution?.lines ?? []).map(mapLineToReceivedItem)
 
+  // The receipt is printed and downloaded as this screen stands. Printing goes
+  // through the same PDF as the download, so the two agree on layout and
+  // pagination rather than the printer reflowing the markup at paper width.
+  const receiptRef = useRef<HTMLDivElement>(null)
+  const [isPrinting, setIsPrinting] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  const handlePrint = async () => {
+    if (!receiptRef.current || isPrinting) return
+    setIsPrinting(true)
+    try {
+      await printElementAsPdf(receiptRef.current)
+    } catch (error) {
+      console.error('Failed to open the print view', error)
+      showToast.error('Could not open the print dialog.')
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
+  const handleDownload = async () => {
+    if (!receiptRef.current || isDownloading) return
+    setIsDownloading(true)
+    try {
+      const label = reference.replace(/[^a-zA-Z0-9-_]+/g, '-')
+      await downloadElementAsPdf(receiptRef.current, `stock-receipt-${label}.pdf`)
+      showToast.success('Stock receipt downloaded.')
+    } catch (error) {
+      console.error('Failed to generate the stock receipt PDF', error)
+      showToast.error('Could not generate the PDF.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   return (
-    <div className="flex w-full flex-col items-start gap-4">
+    // bg-secondary-50 is the colour <main> already paints, so this is invisible on
+    // screen — but the capture only gets a background if the element paints one,
+    // and without it the white cards vanish into a white page.
+    <div
+      ref={receiptRef}
+      className="flex w-full flex-col items-start gap-4 bg-secondary-50"
+    >
       <div className="flex w-full flex-col items-start gap-4 lg:flex-row lg:items-center">
         <div className="flex flex-1 flex-col items-start gap-1">
           <div className="flex flex-wrap items-center gap-3">
@@ -552,23 +598,25 @@ const ReceiptComplete = ({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-stretch gap-4">
+        <div data-html2canvas-ignore className="flex flex-wrap items-stretch gap-4">
           <button
             type="button"
-            onClick={onPrintReceipt}
-            className={headerButtonClass}
+            onClick={onPrintReceipt ?? handlePrint}
+            disabled={isPrinting}
+            className={`${headerButtonClass} disabled:opacity-50`}
           >
             <Printer className="size-5" strokeWidth={2} />
-            Print Receipt
+            {isPrinting ? 'Preparing…' : 'Print Receipt'}
           </button>
 
           <button
             type="button"
-            onClick={onDownload}
-            className={headerButtonClass}
+            onClick={onDownload ?? handleDownload}
+            disabled={isDownloading}
+            className={`${headerButtonClass} disabled:opacity-50`}
           >
             <Download className="size-5" strokeWidth={2} />
-            Download
+            {isDownloading ? 'Preparing…' : 'Download'}
           </button>
         </div>
       </div>

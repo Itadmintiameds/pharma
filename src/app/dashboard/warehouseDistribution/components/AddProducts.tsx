@@ -40,7 +40,12 @@ type BatchApiRow = {
   totalStock?: number
 }
 
-const batchKey = (productId: string, batchId: string) => `${productId}-${batchId}`
+// A row of the batch list is a batch *within a packaging*, so the packaging has to
+// be part of its identity: the same batch can come back once per packaging, and
+// keying on the batch alone made those rows share a React key, an issue-qty box
+// and a cart line.
+const batchKey = (productId: string, batchId: string, packagingId: string) =>
+  `${productId}-${batchId}-${packagingId}`
 
 type AddProductsProps = {
   draft: AllocationDraft
@@ -112,8 +117,14 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
   // every row) — group them into a searchable per-product list.
   const products = useMemo(() => {
     const byProduct = new Map<string, Product>()
+    // Guards against the catalog repeating a row: the same batch and packaging
+    // listed twice is one stock position, not two.
+    const seen = new Set<string>()
     batchCatalog.forEach((row) => {
       if (!row.productId || !row.batchId) return
+      const identity = batchKey(row.productId, row.batchId, row.packagingId || '')
+      if (seen.has(identity)) return
+      seen.add(identity)
       const batch: Batch = {
         batchId: row.batchId,
         batchNo: row.batchNumber || 'N/A',
@@ -212,12 +223,12 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
   }
 
   const handleAddToCart = (product: Product, batch: Batch) => {
-    const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId)] || ''
+    const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId, batch.packagingId)] || ''
     const qty = Number(rawQty)
     if (!qty || issueQtyError(batch, rawQty)) return
 
     const line: AllocationDraftLine = {
-      id: batchKey(product.id, batch.batchId),
+      id: batchKey(product.id, batch.batchId, batch.packagingId),
       productId: product.id,
       productName: product.name,
       packagingId: batch.packagingId,
@@ -381,13 +392,13 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
               </div>
 
               {product.batches.map((batch) => {
-                const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId)] ?? ''
+                const rawQty = issueQtyByBatch[batchKey(product.id, batch.batchId, batch.packagingId)] ?? ''
                 const qtyError = issueQtyError(batch, rawQty)
                 const isAddDisabled = !rawQty || Number(rawQty) <= 0 || Boolean(qtyError)
 
                 return (
                   <div
-                    key={batch.batchId}
+                    key={batchKey(product.id, batch.batchId, batch.packagingId)}
                     className="grid w-full grid-cols-5 items-start gap-2 border-t border-pneutral-200 px-3 py-2"
                   >
                     <p className="pt-3 text-p4 font-medium text-pneutral-900">{batch.batchNo}</p>
@@ -406,7 +417,7 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                       onChange={(e) =>
                         setIssueQtyByBatch((prev) => ({
                           ...prev,
-                          [batchKey(product.id, batch.batchId)]: e.target.value,
+                          [batchKey(product.id, batch.batchId, batch.packagingId)]: e.target.value,
                         }))
                       }
                     />

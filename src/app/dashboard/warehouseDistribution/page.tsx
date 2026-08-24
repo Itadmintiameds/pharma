@@ -965,26 +965,13 @@ const page = () => {
         </div>
 
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start lg:shrink-0">
-          <OutlineActionButton label="Export Excel" />
+          
           <OutlineActionButton
             label="Create Allocation"
             onClick={handleStartWizard}
           />
 
-          <button
-            type="button"
-            className="flex h-12 w-full min-w-27 items-center justify-center gap-2 rounded-lg bg-pneutral-900 px-4 sm:w-auto"
-          >
-            <Image
-              src="/warehouseDistribution/transferExplorer/printer-mini-white.svg"
-              alt=""
-              width={16}
-              height={18}
-            />
-            <span className="whitespace-nowrap text-label-l4 font-medium text-pneutral-50">
-              Print
-            </span>
-          </button>
+
         </div>
       </div>
 
