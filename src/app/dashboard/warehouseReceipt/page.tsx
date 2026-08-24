@@ -46,7 +46,7 @@ const StatCard = ({ icon, iconBg, label, value }: StatCardProps) => (
   </div>
 )
 
-type ReceiptStatus = 'Pending Receipt' | 'Completed'
+type ReceiptStatus = 'Awaiting Dispatch' | 'Pending Receipt' | 'Completed'
 
 interface StockReceipt {
   id: number
@@ -59,8 +59,10 @@ interface StockReceipt {
   status: ReceiptStatus
 }
 
-// A distribution is "Completed" once its stock has been received; anything still
-// in flight (dispatched, awaiting receipt) shows as a pending receipt to action.
+// Receipt-side view of the distribution lifecycle:
+//   DISTRIBUTION_CREATED  -> Awaiting Dispatch (not yet sent — nothing to receive)
+//   PRODUCTS_DISPATCHED   -> Pending Receipt   (in flight — ready to action)
+//   STOCK_RECEIVED        -> Completed
 const mapSummaryToReceipt = (
   summary: WarehouseDistributionSummary,
   index: number
@@ -75,16 +77,23 @@ const mapSummaryToReceipt = (
   // of a confusing "0 PU".
   quantity: summary.totalDispatchedQuantity || summary.totalIssueQuantity,
   date: formatDate(summary.allocationDate),
-  status: summary.currentStatus === 'STOCK_RECEIVED' ? 'Completed' : 'Pending Receipt',
+  status:
+    summary.currentStatus === 'STOCK_RECEIVED'
+      ? 'Completed'
+      : summary.currentStatus === 'PRODUCTS_DISPATCHED'
+        ? 'Pending Receipt'
+        : 'Awaiting Dispatch',
 })
+
+const RECEIPT_STATUS_CLASS: Record<ReceiptStatus, string> = {
+  'Awaiting Dispatch': 'border-warning-600 bg-warning-50 text-warning-600',
+  'Pending Receipt': 'border-danger-600 bg-danger-50 text-danger-600',
+  Completed: 'border-success-600 bg-success-50 text-success-800',
+}
 
 const ReceiptStatusBadge = ({ status }: { status: ReceiptStatus }) => (
   <span
-    className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-label-l3 font-medium ${
-      status === 'Completed'
-        ? 'border-success-600 bg-success-50 text-success-800'
-        : 'border-danger-600 bg-danger-50 text-danger-600'
-    }`}
+    className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-full border px-3 py-1 text-label-l3 font-medium ${RECEIPT_STATUS_CLASS[status]}`}
   >
     {status}
   </span>
@@ -178,7 +187,7 @@ const buildReceiptColumns = (
         >
           Receive Now
         </button>
-      ) : (
+      ) : row.status === 'Completed' ? (
         <button
           type="button"
           onClick={() => onView(row)}
@@ -186,6 +195,10 @@ const buildReceiptColumns = (
         >
           View
         </button>
+      ) : (
+        // Awaiting Dispatch — nothing has been sent yet, so there's nothing to
+        // receive or view.
+        <span className="text-label-l4 font-regular text-pneutral-500">—</span>
       ),
   },
 ]
