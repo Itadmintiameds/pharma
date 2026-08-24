@@ -60,10 +60,29 @@ const bandDataUrl = (
   return band.toDataURL("image/png");
 };
 
+/** One image placed on a sheet. Offsets are in points, from the margin box. */
+interface PagePlacement {
+  dataUrl: string;
+  top: number;
+  height: number;
+}
+
 /**
- * Saves a document as a portrait A4 PDF, scaled to the page width, that survives
- * running onto a second sheet: pages break between rows rather than through
- * them, and the grid's column headings repeat so no page is a wall of
+ * The paginated document, decided once and rendered either as a PDF file or as
+ * printable HTML — which is what keeps the printout and the download identical.
+ */
+interface PlannedDocument {
+  pages: PagePlacement[][];
+  pageWidth: number;
+  pageHeight: number;
+  margin: number;
+  imageWidth: number;
+}
+
+/**
+ * Lays a document out as portrait A4 sheets, scaled to the page width, so it
+ * survives running onto a second sheet: pages break between rows rather than
+ * through them, and the grid's column headings repeat so no page is a wall of
  * unlabelled numbers. What is captured is what the screen shows.
  *
  * What repeats on every page is decided by the markup, not by a flag. A document
@@ -72,7 +91,7 @@ const bandDataUrl = (
  * gets them redrawn on each sheet; one that doesn't, like the purchase invoice,
  * simply flows.
  */
-const buildElementPdf = async (element: HTMLElement): Promise<jsPDF> => {
+const planDocument = async (element: HTMLElement): Promise<PlannedDocument> => {
   const canvas = await rasterise(element);
 
   // Canvas pixels per CSS pixel, so DOM geometry can be read in canvas terms.
@@ -108,10 +127,12 @@ const buildElementPdf = async (element: HTMLElement): Promise<jsPDF> => {
     .filter((y) => y > bodyStart && y < bodyEnd)
     .sort((a, b) => a - b);
 
-  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  // A4 portrait in points, the same geometry jsPDF would report.
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
   const margin = 18;
-  const usableWidth = pdf.internal.pageSize.getWidth() - margin * 2;
-  const usableHeight = pdf.internal.pageSize.getHeight() - margin * 2;
+  const usableWidth = pageWidth - margin * 2;
+  const usableHeight = pageHeight - margin * 2;
   // Points per canvas pixel: the whole bill is scaled to the page width, which
   // is what shrinks the wide desktop layout onto portrait A4.
   const scale = usableWidth / canvas.width;
@@ -135,26 +156,27 @@ const buildElementPdf = async (element: HTMLElement): Promise<jsPDF> => {
       : null;
   const theadHeight = (theadBottom - theadTop) * scale;
 
+  const pages: PagePlacement[][] = [];
   let cursor = bodyStart;
   let page = 0;
 
   while (cursor < bodyEnd) {
-    if (page > 0) pdf.addPage();
-    let top = margin;
+    const placements: PagePlacement[] = [];
+    let top = 0;
 
     if (headerImage) {
-      pdf.addImage(headerImage, "PNG", margin, top, usableWidth, headerHeight);
+      placements.push({ dataUrl: headerImage, top, height: headerHeight });
       top += headerHeight;
     }
 
     // Only once the grid itself has been left behind — before that the headings
     // are still in the slice.
     if (page > 0 && theadImage && cursor >= theadBottom) {
-      pdf.addImage(theadImage, "PNG", margin, top, usableWidth, theadHeight);
+      placements.push({ dataUrl: theadImage, top, height: theadHeight });
       top += theadHeight;
     }
 
-    const budget = Math.floor((usableHeight - (top - margin) - footerHeight) / scale);
+    const budget = Math.floor((usableHeight - top - footerHeight) / scale);
     if (budget < 1) throw new Error("The page has no room left for the bill.");
 
     let end = Math.min(bodyEnd, cursor + budget);
@@ -165,71 +187,130 @@ const buildElementPdf = async (element: HTMLElement): Promise<jsPDF> => {
       if (fits.length > 0) end = fits[fits.length - 1];
     }
 
-    pdf.addImage(
-      bandDataUrl(canvas, cursor, end),
-      "PNG",
-      margin,
+    placements.push({
+      dataUrl: bandDataUrl(canvas, cursor, end),
       top,
-      usableWidth,
-      (end - cursor) * scale
-    );
+      height: (end - cursor) * scale,
+    });
 
     // Pinned to the foot of the sheet rather than trailing the content, so it
     // reads as the bill's footer on every page.
     if (footerImage) {
-      pdf.addImage(
-        footerImage,
-        "PNG",
-        margin,
-        margin + usableHeight - footerHeight,
-        usableWidth,
-        footerHeight
-      );
+      placements.push({
+        dataUrl: footerImage,
+        top: usableHeight - footerHeight,
+        height: footerHeight,
+      });
     }
 
+    pages.push(placements);
     cursor = end;
     page += 1;
   }
 
-  return pdf;
+  return { pages, pageWidth, pageHeight, margin, imageWidth: usableWidth };
 };
 
 export const downloadElementAsPdf = async (
   element: HTMLElement,
   fileName: string
 ): Promise<void> => {
-  const pdf = await buildElementPdf(element);
+  const { pages, margin, imageWidth } = await planDocument(element);
+
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  pages.forEach((placements, index) => {
+    if (index > 0) pdf.addPage();
+    placements.forEach(({ dataUrl, top, height }) => {
+      pdf.addImage(dataUrl, "PNG", margin, margin + top, imageWidth, height);
+    });
+  });
+
   pdf.save(fileName);
 };
 
 /**
- * Prints the very document `downloadElementAsPdf` would save, rather than
- * re-laying the element out for the printer.
+ * Prints the very document `downloadElementAsPdf` would save.
  *
- * The alternative — cloning the markup into an iframe (see printElement) — hands
- * the browser a fresh layout at paper width, so a wide dashboard reflows and
- * paginates differently from the PDF. Here the pages are already decided: the
- * built PDF is handed to the viewer with its print action set, so what comes out
- * of the printer is byte-for-byte the downloaded file.
+ * The pages come from the same `planDocument` pass, so the printout matches the
+ * downloaded file sheet for sheet — but they are rendered as HTML and printed
+ * through an iframe rather than handed to the browser's PDF viewer with an
+ * auto-print action. Chrome honours that action inside an iframe; Edge ignores
+ * it, so the dialog never opened there. `iframe.contentWindow.print()` is what
+ * the rest of the app (the bill) already relies on and works everywhere.
  */
 export const printElementAsPdf = async (element: HTMLElement): Promise<void> => {
-  const pdf = await buildElementPdf(element);
-  pdf.autoPrint();
+  const { pages, pageWidth, pageHeight, margin, imageWidth } =
+    await planDocument(element);
 
-  const url = String(pdf.output("bloburl"));
+  // Each sheet is a box of the exact paper size with the bands placed inside it,
+  // so nothing reflows: @page carries no margin of its own because the margin is
+  // already part of the placement.
+  const pagesHtml = pages
+    .map((placements, index) => {
+      const images = placements
+        .map(
+          ({ dataUrl, top, height }) =>
+            `<img src="${dataUrl}" style="position:absolute;left:${margin}pt;top:${
+              margin + top
+            }pt;width:${imageWidth}pt;height:${height}pt;">`
+        )
+        .join("");
+
+      return (
+        `<div class="sheet"${index === pages.length - 1 ? ' data-last="true"' : ""}>` +
+        `${images}</div>`
+      );
+    })
+    .join("");
 
   const iframe = document.createElement("iframe");
   iframe.setAttribute("aria-hidden", "true");
   iframe.style.cssText =
     "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
-  // The dialog reads from the iframe, so it cannot be torn down immediately;
-  // the blob URL is released with it.
-  iframe.onload = () => {
-    window.setTimeout(() => {
-      iframe.remove();
-      URL.revokeObjectURL(url);
-    }, 60_000);
-  };
-  iframe.src = url;
   document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  if (!doc) {
+    iframe.remove();
+    throw new Error("Could not open the print view.");
+  }
+
+  doc.open();
+  doc.write(
+    `<!doctype html><html><head><meta charset="utf-8"><style>` +
+    `@page{size:A4 portrait;margin:0;}` +
+    `html,body{margin:0;padding:0;background:#fff;}` +
+    `*{-webkit-print-color-adjust:exact;print-color-adjust:exact;}` +
+    `.sheet{position:relative;width:${pageWidth}pt;height:${pageHeight}pt;` +
+    `overflow:hidden;page-break-after:always;break-after:page;}` +
+    `.sheet[data-last="true"]{page-break-after:auto;break-after:auto;}` +
+    `</style></head><body>${pagesHtml}</body></html>`
+  );
+  doc.close();
+
+  // Printing before the band images have decoded sends blank sheets. The iframe
+  // is 0x0 by design, so nothing would ever enter a viewport — each image is
+  // forced eager rather than left to lazy loading.
+  const images = Array.from(doc.images);
+  images.forEach((img) => {
+    img.loading = "eager";
+  });
+
+  await Promise.all(
+    images
+      .filter((img) => !img.complete)
+      .map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            img.addEventListener("load", () => resolve(), { once: true });
+            img.addEventListener("error", () => resolve(), { once: true });
+          })
+      )
+  );
+
+  iframe.contentWindow?.focus();
+  iframe.contentWindow?.print();
+  // The dialog reads from the iframe, so it cannot be torn down until the
+  // browser has taken the document.
+  window.setTimeout(() => iframe.remove(), 60_000);
 };
