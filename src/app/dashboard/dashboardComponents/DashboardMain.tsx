@@ -1,5 +1,6 @@
 "use client";
 
+import Button from "@/app/components/common/Button";
 import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import { showToast } from "@/app/components/common/Toast";
 import { deletePharmacyRegistration, getPharmacyRegistrationDetails, getUserOrganization, getUserPharmacyKPIs, getUserPharmacyRegistrations } from "@/services/SetupBusinessService";
@@ -8,7 +9,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import PharmacyDetailsModal from "./PharmacyDetailsModal";
 
-export default function DashboardMain() {
+interface DashboardMainProps {
+  onCreateBusinessSetup?: () => void;
+}
+
+export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainProps) {
   /*
   // PREVIOUS REDESIGNED CODE PRESERVED:
   const complianceStatus = 'Not Submitted'; 
@@ -471,8 +476,15 @@ export default function DashboardMain() {
     <>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <div className="text-h4 font-semibold text-pneutral-900">
-            Welcome to TiaMeds
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-h4 font-semibold text-pneutral-900">
+              Welcome to TiaMeds
+            </div>
+            {onCreateBusinessSetup && (
+              <Button variant="primary" className="w-52" onClick={onCreateBusinessSetup}>
+                Create Business Setup
+              </Button>
+            )}
           </div>
           <div className="text-p4 font-normal text-pneutral-900 font-noto-sans">
             Complete your Business setup to start using <br /> TiaMeds Inventory

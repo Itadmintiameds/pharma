@@ -601,3 +601,18 @@
 .animate-slideFromLeft {
   animation: slideFromLeft 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Rocket zooming around in a circular orbit */
+@keyframes rocketOrbit {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-rocketOrbit {
+  animation: rocketOrbit 1.8s linear infinite;
+}
