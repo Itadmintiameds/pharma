@@ -307,3 +307,21 @@ export interface ProductExpiryKpiResponse {
   data: ProductExpiryKpi;
   message: string;
 }
+
+/**
+ * GET /api/v1/batch-expiry-kpi
+ * Aggregate batch-level expiry counts for the products page stat cards.
+ */
+export interface BatchExpiryKpi {
+  expiredBatches: number;
+  expiring0To30DaysBatches: number;
+  expiring31To60DaysBatches: number;
+  healthyAbove60DaysBatches: number;
+  totalBatches: number;
+  totalProducts: number;
+}
+
+export interface BatchExpiryKpiResponse {
+  data: BatchExpiryKpi;
+  message: string;
+}

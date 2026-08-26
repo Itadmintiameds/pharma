@@ -14,13 +14,15 @@ import TableWithoutGrid, {
 } from "@/app/components/common/table/TableWithoutGrid";
 import {
   getProductDetails,
-  getProductExpiryKpi,
+  // getProductExpiryKpi, // old product-level expiry KPI (kept for reference)
+  getBatchExpiryKpi,
   getProductStockSummary,
 } from "@/services/InventoryService";
 import { packageSmallestUnitName } from "@/types/ProductData";
 import type {
+  // ProductExpiryKpi, // old product-level expiry KPI type (kept for reference)
+  BatchExpiryKpi,
   ProductBatchDetails,
-  ProductExpiryKpi,
   ProductPackageDetails,
   ProductStockSummary,
   StockStatus,
@@ -29,8 +31,8 @@ import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 
 interface StatCard {
-  /** Field on the expiry-KPI payload that supplies this card's count. */
-  key: keyof ProductExpiryKpi;
+  /** Field on the batch expiry-KPI payload that supplies this card's count. */
+  key: keyof BatchExpiryKpi;
   label: string;
   sublabel: string;
   icon?: string;
@@ -38,35 +40,77 @@ interface StatCard {
   iconColor?: string;
 }
 
+// Previous product-level stat cards, kept for reference. These were driven by
+// getProductExpiryKpi() / ProductExpiryKpi (product/expiry-kpi):
+// const statCards: StatCard[] = [
+//   {
+//     key: "expired",
+//     label: "Expired (Cannot Sell)",
+//     sublabel: "Products",
+//     icon: "/ProductManagement/Clock.svg",
+//     iconBg: "bg-warning-50",
+//     iconColor: "text-warning-500",
+//   },
+//   {
+//     key: "expiring0To30Days",
+//     label: "Expiring in 0-30 Days",
+//     sublabel: "Products",
+//     icon: "/ProductManagement/Calendar.svg",
+//     iconBg: "bg-danger-50",
+//     iconColor: "text-secondary-700",
+//   },
+//   {
+//     key: "expiring31To60Days",
+//     label: "Expiring in 31-60 Days",
+//     sublabel: "Products",
+//     icon: "/ProductManagement/Calendar.svg",
+//     iconBg: "bg-danger-50",
+//     iconColor: "text-secondary-700",
+//   },
+//   {
+//     key: "healthyAbove60Days",
+//     label: "Healthy (> 60 Days)",
+//     sublabel: "Products",
+//     icon: "/ProductManagement/ShieldCheck.svg",
+//     iconBg: "bg-success-50",
+//     iconColor: "text-success-900",
+//   },
+//   {
+//     key: "totalProducts",
+//     label: "Total Products",
+//     sublabel: "Across All Variants",
+//   },
+// ];
+
 const statCards: StatCard[] = [
   {
-    key: "expired",
+    key: "expiredBatches",
     label: "Expired (Cannot Sell)",
-    sublabel: "Products",
+    sublabel: "Batches",
     icon: "/ProductManagement/Clock.svg",
     iconBg: "bg-warning-50",
     iconColor: "text-warning-500",
   },
   {
-    key: "expiring0To30Days",
+    key: "expiring0To30DaysBatches",
     label: "Expiring in 0-30 Days",
-    sublabel: "Products",
+    sublabel: "Batches",
     icon: "/ProductManagement/Calendar.svg",
     iconBg: "bg-danger-50",
     iconColor: "text-secondary-700",
   },
   {
-    key: "expiring31To60Days",
+    key: "expiring31To60DaysBatches",
     label: "Expiring in 31-60 Days",
-    sublabel: "Products",
+    sublabel: "Batches",
     icon: "/ProductManagement/Calendar.svg",
     iconBg: "bg-danger-50",
     iconColor: "text-secondary-700",
   },
   {
-    key: "healthyAbove60Days",
+    key: "healthyAbove60DaysBatches",
     label: "Healthy (> 60 Days)",
-    sublabel: "Products",
+    sublabel: "Batches",
     icon: "/ProductManagement/ShieldCheck.svg",
     iconBg: "bg-success-50",
     iconColor: "text-success-900",
@@ -472,7 +516,7 @@ const Page = () => {
 
   const [products, setProducts] = useState<ProductStockSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [kpi, setKpi] = useState<ProductExpiryKpi | null>(null);
+  const [kpi, setKpi] = useState<BatchExpiryKpi | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -493,10 +537,12 @@ const Page = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const data = await getProductExpiryKpi();
+        // Previous product-level KPI call, kept for reference:
+        // const data = await getProductExpiryKpi();
+        const data = await getBatchExpiryKpi();
         setKpi(data);
       } catch (error) {
-        console.error("Unable to fetch product expiry KPIs", error);
+        console.error("Unable to fetch batch expiry KPIs", error);
       }
     };
 
