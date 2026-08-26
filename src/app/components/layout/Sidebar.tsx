@@ -23,6 +23,8 @@ import { logout } from "@/services/AuthService";
 import Image from "next/image";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
+import { useAccess } from "@/app/components/providers/AccessProvider";
+import { ModuleKey } from "@/access/accessControl";
 
 const Sidebar = () => {
   const pathname = usePathname();
@@ -31,28 +33,16 @@ const Sidebar = () => {
   const { clearWarehouse } = useWarehouseStore.getState();
 
 
+  // Which modules this role and organization may reach, and what the token
+  // grants inside them. Both come from the access context, which the dashboard
+  // layout seeds from the JWT — so role and organization are no longer looked up
+  // here, and the sidebar cannot disagree with the route guards.
+  const { moduleRoutes, isModuleAvailable, organizationLoaded } = useAccess();
+
   const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
-  const [isWarehouseManagerRole, setIsWarehouseManagerRole] = React.useState(false);
-  // When the organization runs multiple stores with a centralized inventory, all
-  // purchasing is done at the warehouse. Pharmacy-side roles (Super Admin, Admin,
-  // Desk) then have Purchase locked — only the Warehouse Manager may purchase.
-  const [isCentralizedMultiOrg, setIsCentralizedMultiOrg] = React.useState(false);
-  // Warehouse Receipt and Inter Store Transfer only make sense with centralized
-  // inventory; when inventory is decentralized (centralizedInventory === false)
-  // they are locked regardless of Single/Multiple organization type.
-  const [isDecentralizedInventory, setIsDecentralizedInventory] = React.useState(false);
 
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
-
-  // A Warehouse Manager only operates within warehouse distribution — everything
-  // else in the sidebar is disabled for that role regardless of pharmacy/business state.
-  const WAREHOUSE_MANAGER_ALLOWED_PATHS = [
-    "/dashboard",
-    "/dashboard/purchase",
-    "/dashboard/warehouseDistribution",
-    "/dashboard/products",
-  ];
 
   React.useEffect(() => {
     const checkRegistrationStatus = async () => {
@@ -62,15 +52,14 @@ const Sidebar = () => {
         const { userId } = await userRes.json();
         if (!userId) return;
 
-        const [{ getUserPharmacyKPIs, getUserOrganization }, { getUserById }] = await Promise.all([
+        const [{ getUserPharmacyKPIs }, { getUserById }] = await Promise.all([
           import("@/services/SetupBusinessService"),
           import("@/services/UserManagementService"),
         ]);
 
-        const [kpiResponse, userDetails, organization] = await Promise.all([
+        const [kpiResponse, userDetails] = await Promise.all([
           getUserPharmacyKPIs(String(userId)).catch(() => null),
           getUserById(userId).catch(() => null),
-          getUserOrganization().catch(() => null),
         ]);
 
         // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
@@ -84,28 +73,6 @@ const Sidebar = () => {
 
         if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
           setHasApprovedPharmacy(true);
-        }
-
-        const normalizeRole = (r?: string) =>
-          (r || "").toLowerCase().replace(/[^a-z]/g, "");
-        if (normalizeRole(userDetails?.pharmaRolesDto?.roleName) === "warehousemanager") {
-          setIsWarehouseManagerRole(true);
-        }
-
-        // Multiple-store org + centralized inventory => purchasing is warehouse-only.
-        const normalizeType = (t?: string) =>
-          (t || "").toLowerCase().replace(/[^a-z]/g, "");
-        if (
-          normalizeType(organization?.organizationType) === "multiple" &&
-          organization?.centralizedInventory === true
-        ) {
-          setIsCentralizedMultiOrg(true);
-        }
-
-        // Only flag decentralized once an organization actually loaded, so a
-        // failed/missing org lookup doesn't wrongly lock these modules.
-        if (organization && organization.centralizedInventory === false) {
-          setIsDecentralizedInventory(true);
         }
       } catch (err) {
         console.error("Failed to check registration status for sidebar:", err);
@@ -143,6 +110,7 @@ const Sidebar = () => {
         },
         {
           name: "Setup Business",
+          moduleKey: "SET_UP_BUSINESS" as ModuleKey,
           icon: ShieldAlert,
           path: "/dashboard/setupBusiness",
           isLocked: false,
@@ -161,6 +129,7 @@ const Sidebar = () => {
       items: [
         {
           name: "Purchase",
+          moduleKey: "PURCHASE" as ModuleKey,
           icon: ShoppingCart,
           path: "/dashboard/purchase",
           isLocked: !hasApprovedPharmacy,
@@ -173,24 +142,28 @@ const Sidebar = () => {
         },
         {
           name: "Sales / Billing",
+          moduleKey: "SALES" as ModuleKey,
           icon: Receipt,
           path: "/dashboard/salesBilling",
           isLocked: !hasApprovedPharmacy,
         },
         {
           name: "Warehouse Distribution",
+          moduleKey: "WAREHOUSE_DISTRIBUTION" as ModuleKey,
           icon: ClipboardList,
           path: "/dashboard/warehouseDistribution",
           isLocked: !hasApprovedPharmacy,
         },
         {
           name: "Warehouse Receipt",
+          moduleKey: "WAREHOUSE_RECEIPT" as ModuleKey,
           icon: PackageCheck,
           path: "/dashboard/warehouseReceipt",
           isLocked: !hasApprovedPharmacy,
         },
                {
           name: "Inter Store Transfer",
+          moduleKey: "INTER_STORE_TRANSFER" as ModuleKey,
           icon: ArrowLeftRight,
           path: "/dashboard/interStoreTransfer",
           isLocked: !hasApprovedPharmacy,
@@ -203,6 +176,7 @@ const Sidebar = () => {
       items: [
         {
           name: "Products",
+          moduleKey: "PRODUCTS" as ModuleKey,
           icon: Box,
           path: "/dashboard/products",
           isLocked: !hasApprovedPharmacy,
@@ -215,6 +189,7 @@ const Sidebar = () => {
         },
         {
           name: "User Management",
+          moduleKey: "USER_MANAGEMENT" as ModuleKey,
           icon: Users,
           path: "/dashboard/userManagement",
           isLocked: !hasApprovedPharmacy,
@@ -235,13 +210,30 @@ const Sidebar = () => {
     },
   ];
 
+  // A module the role or organization rules out is left out entirely rather than
+  // shown with a padlock: the lock means "finish setting up to unlock this",
+  // which is a promise that does not apply to an inapplicable module.
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => {
+        if (!item.moduleKey) return true;
+        const route = moduleRoutes.find((r) => r.moduleKey === item.moduleKey);
+        if (!route) return true;
+        // Modules hinging on centralizedInventory stay hidden until the
+        // organization resolves — briefly missing beats briefly wrong.
+        return organizationLoaded && isModuleAvailable(route);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
     <aside className="w-[244px] h-full bg-secondary-600 text-pneutral-50 px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
       {/* Top Section: Navigation */}
       <div className="flex flex-col gap-8">
         {/* Navigation Menu */}
         <nav className="w-[204px] flex flex-col gap-[8px]">
-          {navGroups.map((group) => (
+          {visibleGroups.map((group) => (
             <div
               key={group.category}
               className={`w-[204px] flex flex-col gap-[2px]`}
@@ -254,43 +246,13 @@ const Sidebar = () => {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.path;
-                const isRoleRestricted =
-                  isWarehouseManagerRole &&
-                  !WAREHOUSE_MANAGER_ALLOWED_PATHS.includes(item.path);
-                // Warehouse Distribution is exclusive to the Warehouse Manager role —
-                // every other role sees it locked regardless of pharmacy/business state.
-                const isRestrictedToWarehouseManager =
-                  item.path === "/dashboard/warehouseDistribution" &&
-                  !isWarehouseManagerRole;
-                // In a centralized multi-store org, Purchase is warehouse-only: locked
-                // for every pharmacy-side role (Super Admin, Admin, Desk).
-                const isPurchaseCentralizedLocked =
-                  item.path === "/dashboard/purchase" &&
-                  isCentralizedMultiOrg &&
-                  !isWarehouseManagerRole;
-                // Warehouse Receipt / Inter Store Transfer require centralized
-                // inventory — locked for everyone when inventory is decentralized.
-                const isDecentralizedLocked =
-                  isDecentralizedInventory &&
-                  (item.path === "/dashboard/warehouseReceipt" ||
-                    item.path === "/dashboard/interStoreTransfer");
-                const isLocked =
-                  item.isLocked ||
-                  isRoleRestricted ||
-                  isRestrictedToWarehouseManager ||
-                  isPurchaseCentralizedLocked ||
-                  isDecentralizedLocked;
-                const lockedMessage = isRoleRestricted
-                  ? "Not available for the Warehouse Manager role"
-                  : isRestrictedToWarehouseManager
-                    ? "Only available to the Warehouse Manager role"
-                    : isPurchaseCentralizedLocked
-                      ? "Purchasing is handled at the warehouse for centralized inventory"
-                      : isDecentralizedLocked
-                        ? "Available only with centralized inventory"
-                        : item.isLocked
-                          ? "Complete business setup to unlock this module"
-                          : undefined;
+                // Role and organization rules now decide whether an item is
+                // listed at all, so the only lock left is the original one:
+                // the module exists for this user but business setup is not done.
+                const isLocked = item.isLocked;
+                const lockedMessage = isLocked
+                  ? "Complete business setup to unlock this module"
+                  : undefined;
 
                 return (
                   <Link

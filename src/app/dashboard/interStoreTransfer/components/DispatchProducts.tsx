@@ -19,6 +19,7 @@ import type {
 import { dispatchAllocation } from '@/services/WarehouseDistributionService'
 import { formatDate } from '@/utils/formatDate'
 import { showToast } from '@/app/components/common/Toast'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import { getUserById } from '@/services/UserManagementService'
 import { ProductService } from '@/services/ProductService'
 
@@ -470,11 +471,13 @@ const DispatchProductsActions = ({
   onDispatch,
   submitting,
   disabled,
+  canDispatch = true,
 }: {
   onBack?: () => void
   onDispatch?: () => void
   submitting?: boolean
   disabled?: boolean
+  canDispatch?: boolean
 }) => (
   <div className="sticky bottom-0 z-10 flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -488,6 +491,7 @@ const DispatchProductsActions = ({
     </button>
 
     <div className="flex w-full flex-col items-stretch gap-4 sm:w-auto sm:flex-row">
+      {canDispatch && (
       <button
         type="button"
         onClick={onDispatch}
@@ -496,6 +500,7 @@ const DispatchProductsActions = ({
       >
         {submitting ? 'Dispatching…' : 'Dispatch Products'}
       </button>
+      )}
     </div>
   </div>
 )
@@ -512,6 +517,8 @@ const DispatchProducts = ({
   onBack,
   onDispatched,
 }: DispatchProductsProps) => {
+  // Dispatching moves stock out of this store, so it answers to CREATE.
+  const { canCreate } = useModulePermissions('INTER_STORE_TRANSFER')
   const dispatchRows = useMemo(
     () => (distribution?.lines ?? []).map(mapLineToDispatchRow),
     [distribution]
@@ -688,6 +695,7 @@ const DispatchProducts = ({
         onDispatch={handleDispatch}
         submitting={submitting}
         disabled={loading || items.length === 0}
+        canDispatch={canCreate}
       />
     </div>
   )

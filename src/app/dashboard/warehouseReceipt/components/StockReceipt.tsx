@@ -11,6 +11,7 @@ import {
 import { formatDate } from '@/utils/formatDate'
 import { receiveAllocation } from '@/services/WarehouseDistributionService'
 import { showToast } from '@/app/components/common/Toast'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 
 interface StockReceiptProps {
   referenceNo?: string
@@ -411,11 +412,13 @@ const StockReceiptActions = ({
   onConfirmReceipt,
   submitting,
   disabled,
+  canConfirm = true,
 }: {
   onBack?: () => void
   onConfirmReceipt?: () => void
   submitting?: boolean
   disabled?: boolean
+  canConfirm?: boolean
 }) => (
   <div className="flex w-full flex-col items-stretch gap-4 border-t border-pneutral-200 bg-white py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -428,15 +431,17 @@ const StockReceiptActions = ({
       Back
     </button>
 
-    <button
-      type="button"
-      onClick={onConfirmReceipt}
-      disabled={submitting || disabled}
-      className={`${actionButtonClass} bg-primary-800 text-pneutral-50 disabled:opacity-50`}
-    >
-      <CheckCircle2 className="size-5" strokeWidth={2} />
-      {submitting ? 'Confirming…' : 'Confirm Receipt'}
-    </button>
+    {canConfirm && (
+      <button
+        type="button"
+        onClick={onConfirmReceipt}
+        disabled={submitting || disabled}
+        className={`${actionButtonClass} bg-primary-800 text-pneutral-50 disabled:opacity-50`}
+      >
+        <CheckCircle2 className="size-5" strokeWidth={2} />
+        {submitting ? 'Confirming…' : 'Confirm Receipt'}
+      </button>
+    )}
   </div>
 )
 
@@ -453,6 +458,9 @@ const StockReceipt = ({
     [distribution]
   )
 
+  // Confirming a receipt writes stock into the destination, so it answers to
+  // CREATE; without it the rows stay readable but nothing can be committed.
+  const { canCreate } = useModulePermissions('WAREHOUSE_RECEIPT')
   const [items, setItems] = useState<ReceiveItem[]>(receiveItems)
   const [submitting, setSubmitting] = useState(false)
   // Set once Confirm Receipt is clicked while a damaged qty is missing its
@@ -553,6 +561,7 @@ const StockReceipt = ({
         onConfirmReceipt={handleConfirm}
         submitting={submitting}
         disabled={loading || items.length === 0}
+        canConfirm={canCreate}
       />
     </div>
   )

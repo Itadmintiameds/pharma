@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useModulePermissions } from '@/hooks/useModulePermissions';
 import Image from "next/image";
 import Table from "@/app/components/common/table/Table";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
@@ -12,6 +13,9 @@ import { UserData, warehouseLabel } from "@/types/UserData";
 import { getAllUsers } from "@/services/UserManagementService";
 
 const page = () => {
+  // CREATE opens the add-user wizard; EXPORT covers the user list export.
+  // Activating/deactivating an account is gated inside the user detail screen.
+  const { canCreate, canExport } = useModulePermissions('USER_MANAGEMENT');
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [showAddUser, setShowAddUser] = useState(false);
   /** The user code being edited, e.g. "USR-2026-00003". */
@@ -221,6 +225,7 @@ const page = () => {
           <div className="flex justify-between">
             <div className="text-h4 font-semibold text-pneutral-900">Users</div>
             <div className="flex gap-4">
+              {canExport && (
               <button 
                 onClick={handleExport}
                 className="w-27 h-9 bg-white border border-pneutral-50 rounded-lg shadow-sm hover:shadow-md transition-shadow flex items-center justify-center gap-2 text-label-l3 font-medium text-pneutral-900">
@@ -232,7 +237,9 @@ const page = () => {
                 />
                 <span>Export</span>
               </button>
+              )}
 
+              {canCreate && (
               <button
                 onClick={() => setShowAddUser(true)}
                 className="w-27.75 h-9 bg-primary-800 rounded-lg flex items-center justify-center gap-2 text-pneutral-50 text-label-l3 font-medium"
@@ -245,6 +252,7 @@ const page = () => {
                 />
                 <span>Add User</span>
               </button>
+              )}
             </div>
           </div>
 

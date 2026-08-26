@@ -5,6 +5,7 @@ import AssignedLocation from "./AssignedLocation";
 import RolesPermissions from "./RolesPermissions";
 import AuditLogs from "./AuditLogs";
 import UnlockAccount from "./UnlockAccount";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import DeactivateUser from "./DeactivateUser";
 import { UserData } from "@/types/UserData";
 import { getUserById, updateUserStatus } from "@/services/UserManagementService";
@@ -119,10 +120,17 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
     (!!currentUserEmail &&
       !!user?.userEmail &&
       currentUserEmail.toLowerCase() === user.userEmail.toLowerCase());
-  const canManageActions = ["superadmin", "admin"].includes(normalizeRole(currentUserRole));
+  // Unlock / Deactivate answer to ACTIVATE_DEACTIVATE on top of the existing
+  // role rule; editing a user answers to EDIT. Both keep the original checks —
+  // a permission grants an action, it does not override who may be acted upon.
+  const { canEdit: hasEditPermission, canActivateDeactivate } =
+    useModulePermissions("USER_MANAGEMENT");
+  const canManageActions =
+    canActivateDeactivate &&
+    ["superadmin", "admin"].includes(normalizeRole(currentUserRole));
   // Nobody edits their own profile — a user could grant themselves permissions
   // or move their own role. A super admin is the exception.
-  const canEdit = !isOwnAccount || isSuperAdmin;
+  const canEdit = hasEditPermission && (!isOwnAccount || isSuperAdmin);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -271,7 +279,7 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
               <span>Back</span>
             </button>
 
-            {onEdit && (
+            {onEdit && hasEditPermission && (
               <button
                 onClick={() => onEdit(String(user?.userId ?? userId))}
                 disabled={!canEdit || !user}
@@ -291,6 +299,7 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
                 <span>Edit</span>
               </button>
             )}
+            {canActivateDeactivate && (
             <div className="relative" ref={actionsRef}>
               <button
                 onClick={() => setActionsOpen((prev) => !prev)}
@@ -332,6 +341,7 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
 

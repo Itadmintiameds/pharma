@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Eye, EyeOff } from 'lucide-react';
 import UserDetails from './UserDetails';
@@ -12,6 +12,8 @@ import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService'
 import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
 import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
+import { availableModuleKeys, isSuperAdminRole } from '@/access/accessControl';
+import { useAccess } from '@/app/components/providers/AccessProvider';
 
 interface AddUserWizardProps {
   onBack: () => void;
@@ -104,6 +106,59 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     };
     fetchInitialData();
   }, []);
+
+  // What the account being created may ever be granted: the role picked in step 1
+  // combined with this organization's inventory model. A Warehouse Manager is
+  // therefore offered Warehouse Distribution but not Sales or Warehouse Receipt,
+  // and the reverse for store-side roles — the same rule the sidebar and the
+  // route guards use, so a grant that could never take effect cannot be made.
+  const { organization } = useAccess();
+
+  const selectedRoleName = roles.find(
+    r => String(r.roleId) === String(formData.designation)
+  )?.roleName ?? null;
+
+  // Super Admin is not an assignable designation — the role owns the
+  // organization, so it is not something a user is given from this screen. It
+  // stays out of the dropdown while still resolving for an account that
+  // already holds it (see selectedRoleName above).
+  // The one exception is an account that already holds it: editing such a user
+  // would otherwise show an empty Designation, reading as though the role had
+  // been cleared.
+  const assignableRoles = useMemo(
+    () =>
+      roles.filter(
+        r =>
+          !isSuperAdminRole(r.roleName) ||
+          String(r.roleId) === String(formData.designation)
+      ),
+    [roles, formData.designation]
+  );
+
+  const allowedModuleNames = useMemo(
+    () =>
+      formData.designation
+        ? Array.from(availableModuleKeys(selectedRoleName, organization))
+        : null,
+    [formData.designation, selectedRoleName, organization]
+  );
+
+  // Switching to a role with a different module surface invalidates whatever was
+  // ticked, so those grants are dropped rather than silently submitted for
+  // modules the picker no longer shows. Same surface (a rename, or a swap
+  // between two store-side roles) keeps the selections.
+  const allowedSignature = (allowedModuleNames ?? []).slice().sort().join(',');
+  const previousAllowedSignature = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (previousAllowedSignature.current === null) {
+      previousAllowedSignature.current = allowedSignature;
+      return;
+    }
+    if (previousAllowedSignature.current === allowedSignature) return;
+    previousAllowedSignature.current = allowedSignature;
+    setRolePermissions({});
+  }, [allowedSignature]);
 
   // With only one warehouse in the org there is nothing for a Warehouse Manager
   // to choose, so pre-select it. Unlike before it stays editable: the field is a
@@ -921,7 +976,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           label="Designation"
           required
           placeholder="Select Designation"
-          options={roles.map(r => ({ label: r.roleName, value: r.roleId }))}
+          options={assignableRoles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
           onChange={(val) => {
             // Switching into/out of Warehouse Manager changes the location
@@ -1026,6 +1081,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           mode="assign"
           assignedPermissions={isEdit ? rolePermissions : undefined}
           onPermissionsChange={setRolePermissions}
+          allowedModuleNames={allowedModuleNames}
         />
       </div>
     );

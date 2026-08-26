@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ColumnDef } from "@tanstack/react-table";
 import Image from "next/image";
 import { Plus } from "lucide-react";
@@ -263,6 +264,10 @@ const EMPTY_DRAFT: BillDraft = {
 const PAGE_SIZE = 10;
 
 const Page = () => {
+  // CREATE starts a new bill; EXPORT covers the per-row invoice download.
+  // Settling a pending bill is part of creating/collecting a sale, so it rides
+  // on CREATE too. Viewing an invoice needs only VIEW, already guarded.
+  const { canCreate, canExport } = useModulePermissions("SALES");
   const [step, setStep] = useState<Step>("list");
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -480,13 +485,18 @@ const Page = () => {
         return (
           <button
             type="button"
-            // A pending bill opens the payment screen to settle the balance.
-            disabled={!isPending}
+            // A pending bill opens the payment screen to settle the balance —
+            // taking payment is part of creating a sale, so CREATE gates it.
+            disabled={!isPending || !canCreate}
             title={isPending ? "Settle this bill" : undefined}
             onClick={() => openSettlePayment(row.original.billId)}
             className={`inline-flex h-8 items-center justify-center rounded-full border px-3 text-label-l3 font-medium ${
               STATUS_STYLES[row.original.status]
-            } ${isPending ? "cursor-pointer hover:opacity-80 transition-opacity" : "cursor-default"}`}
+            } ${
+              isPending && canCreate
+                ? "cursor-pointer hover:opacity-80 transition-opacity"
+                : "cursor-default"
+            }`}
           >
             {row.original.status}
           </button>
@@ -525,21 +535,23 @@ const Page = () => {
             />
           </button>
 
-          <button
-            type="button"
-            aria-label={`Download invoice ${row.original.invoiceNo}`}
-            title="Download invoice"
-            disabled={!!downloading}
-            onClick={() => openSavedBill(row.original.billId, "download")}
-          >
-            <Image
-              src="/Purchase/DownloadIcon.svg"
-              alt="Download"
-              width={25}
-              height={19}
-              className="shrink-0"
-            />
-          </button>
+          {canExport && (
+            <button
+              type="button"
+              aria-label={`Download invoice ${row.original.invoiceNo}`}
+              title="Download invoice"
+              disabled={!!downloading}
+              onClick={() => openSavedBill(row.original.billId, "download")}
+            >
+              <Image
+                src="/Purchase/DownloadIcon.svg"
+                alt="Download"
+                width={25}
+                height={19}
+                className="shrink-0"
+              />
+            </button>
+          )}
         </div>
       ),
     },
@@ -773,14 +785,16 @@ const Page = () => {
           />
         </div>
 
-        <button
-          type="button"
-          onClick={startNewBill}
-          className="w-52 h-12 flex items-center justify-center gap-2 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
-        >
-          <Plus size={18} />
-          Billing
-        </button>
+        {canCreate && (
+          <button
+            type="button"
+            onClick={startNewBill}
+            className="w-52 h-12 flex items-center justify-center gap-2 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
+          >
+            <Plus size={18} />
+            Billing
+          </button>
+        )}
       </div>
 
       <DataTable

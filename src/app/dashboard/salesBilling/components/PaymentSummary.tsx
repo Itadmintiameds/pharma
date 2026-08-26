@@ -10,6 +10,7 @@ import BillingSuccessModal from "./BillingSuccessModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
 import { formatDateTime, formatMonthYear } from "@/utils/formatDate";
 import { printElement } from "@/utils/printElement";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { BACK_BUTTON, PRIMARY_BUTTON } from "./billingButtons";
 import { BILL_PRINT_CSS } from "./billPrintStyles";
 import {
@@ -288,6 +289,8 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   onSave,
   pharmacy: pharmacyProp,
 }) => {
+  // PRINT covers the printed bill; CREATE covers saving one.
+  const { canCreate, canPrint } = useModulePermissions("SALES");
   const [currentMode] = useState<"create" | "view" | "download">(mode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedBillNo, setSavedBillNo] = useState<string | null>(null);
@@ -350,6 +353,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   /** Hands the invoice to the browser's print dialog — a real printer, not a
    *  silent PDF download. */
   const handlePrint = () => {
+    if (!canPrint) return;
     if (!printRef.current) return;
     try {
       // The print sheet is its own design — compressed and monochrome. Only the
@@ -744,17 +748,21 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           Back
         </button>
 
-        {/* Viewing a saved bill prints it; the create flow saves it. */}
-        <button
-          type="button"
-          onClick={currentMode === "view" ? handlePrint : handleSave}
-          disabled={isSubmitting}
-          className={`${PRIMARY_BUTTON} ${
-            currentMode === "view" ? "w-[128px]" : "w-[108px]"
-          } shrink-0`}
-        >
-          {currentMode === "view" ? "Print" : isSubmitting ? "Saving..." : "Save"}
-        </button>
+        {/* Viewing a saved bill prints it; the create flow saves it. Each side
+            answers to its own permission, so the button is dropped only when
+            the action it would perform is not allowed. */}
+        {(currentMode === "view" ? canPrint : canCreate) && (
+          <button
+            type="button"
+            onClick={currentMode === "view" ? handlePrint : handleSave}
+            disabled={isSubmitting}
+            className={`${PRIMARY_BUTTON} ${
+              currentMode === "view" ? "w-[128px]" : "w-[108px]"
+            } shrink-0`}
+          >
+            {currentMode === "view" ? "Print" : isSubmitting ? "Saving..." : "Save"}
+          </button>
+        )}
       </div>
 
       <BillingSuccessModal
@@ -763,7 +771,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
         totalItems={lines.length}
         netAmount={totals.netAmount}
         onSendToWhatsapp={handleSendToWhatsapp}
-        onPrint={handlePrint}
+        onPrint={canPrint ? handlePrint : undefined}
         onBackToDashboard={() => {
           setSavedBillNo(null);
           if (onDone) onDone();

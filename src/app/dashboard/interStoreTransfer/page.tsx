@@ -25,7 +25,6 @@ import type {
   WarehouseDistributionTransferKpi,
 } from '@/types/WarehouseDistributionData'
 import { showToast } from '@/app/components/common/Toast'
-import { useOrgInventoryGuard } from '@/hooks/useOrgInventoryGuard'
 import TransferDetails from './components/TransferDetails'
 import DispatchProducts from './components/DispatchProducts'
 import PendingReceipt from './components/PendingReceipt'
@@ -564,13 +563,6 @@ const TransfersTable = ({
 type PageView = 'list' | 'details' | 'dispatch' | 'pending_receipt'
 
 const page = () => {
-  // Inter-Store Transfer only exists with centralized inventory — block
-  // direct-URL access when the organization's inventory is decentralized.
-  const { checking: accessChecking } = useOrgInventoryGuard({
-    deny: ({ isDecentralizedInventory }) => isDecentralizedInventory,
-    message: 'Inter-Store Transfer is available only with centralized inventory.',
-  })
-
   const [view, setView] = useState<PageView>('list')
   const [activeTransfer, setActiveTransfer] = useState<TransferRow | null>(
     null
@@ -649,16 +641,6 @@ const page = () => {
     setActiveTransfer(null)
     setActiveDistribution(null)
     fetchTransfers()
-  }
-
-  // Hold the page blank until the guard resolves, so a decentralized-inventory
-  // user never sees the dashboard before being redirected.
-  if (accessChecking) {
-    return (
-      <p className="w-full py-8 text-center text-label-l4 font-regular text-pneutral-500">
-        Loading…
-      </p>
-    )
   }
 
   if (view === 'pending_receipt' && activeTransfer) {

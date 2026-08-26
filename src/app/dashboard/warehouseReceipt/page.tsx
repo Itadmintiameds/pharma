@@ -18,7 +18,7 @@ import {
 } from '@/types/WarehouseDistributionData'
 import { formatDate } from '@/utils/formatDate'
 import { showToast } from '@/app/components/common/Toast'
-import { useOrgInventoryGuard } from '@/hooks/useOrgInventoryGuard'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 
 interface StatCardProps {
   icon: ReactNode
@@ -108,7 +108,9 @@ interface ReceiptColumn {
 
 const buildReceiptColumns = (
   onReceiveNow: (row: StockReceipt) => void,
-  onView: (row: StockReceipt) => void
+  onView: (row: StockReceipt) => void,
+  /** Receiving stock writes it into this store, so CREATE gates the action. */
+  canReceive = true
 ): ReceiptColumn[] => [
   {
     header: '#',
@@ -179,7 +181,7 @@ const buildReceiptColumns = (
     width: 'w-[19%] min-w-32.5',
     align: 'center',
     render: (row) =>
-      row.status === 'Pending Receipt' ? (
+      row.status === 'Pending Receipt' && canReceive ? (
         <button
           type="button"
           onClick={() => onReceiveNow(row)}
@@ -187,7 +189,7 @@ const buildReceiptColumns = (
         >
           Receive Now
         </button>
-      ) : row.status === 'Completed' ? (
+      ) : row.status === 'Completed' || row.status === 'Pending Receipt' ? (
         <button
           type="button"
           onClick={() => onView(row)}
@@ -209,13 +211,8 @@ type View = 'list' | 'receipt' | 'complete'
 
 const page = () => {
   const router = useRouter()
-
-  // Warehouse Receipt only exists with centralized inventory — block direct-URL
-  // access when the organization's inventory is decentralized.
-  const { checking: accessChecking } = useOrgInventoryGuard({
-    deny: ({ isDecentralizedInventory }) => isDecentralizedInventory,
-    message: 'Warehouse Receipt is available only with centralized inventory.',
-  })
+  // CREATE gates receiving stock; the receipt screens gate their own PRINT/EXPORT.
+  const { canCreate } = useModulePermissions('WAREHOUSE_RECEIPT')
 
   const [currentPage, setCurrentPage] = useState(1)
   const [view, setView] = useState<View>('list')
@@ -280,16 +277,6 @@ const page = () => {
     loadList()
   }
 
-  // Hold the page blank until the guard resolves, so a decentralized-inventory
-  // user never sees the dashboard before being redirected.
-  if (accessChecking) {
-    return (
-      <p className="w-full py-8 text-center text-p3 font-regular text-pneutral-500">
-        Loading…
-      </p>
-    )
-  }
-
   if (view === 'complete') {
     return (
       <ReceiptCompleteView
@@ -322,7 +309,8 @@ const page = () => {
 
   const receiptColumns = buildReceiptColumns(
     (row) => openDetail(row, 'receipt'),
-    (row) => openDetail(row, 'complete')
+    (row) => openDetail(row, 'complete'),
+    canCreate
   )
 
   const pad2 = (n: number) => String(n).padStart(2, '0')

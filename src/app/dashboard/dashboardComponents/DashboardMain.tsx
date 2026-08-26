@@ -4,6 +4,7 @@ import Button from "@/app/components/common/Button";
 import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import { showToast } from "@/app/components/common/Toast";
 import { deletePharmacyRegistration, getPharmacyRegistrationDetails, getUserOrganization, getUserPharmacyKPIs, getUserPharmacyRegistrations } from "@/services/SetupBusinessService";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -14,6 +15,10 @@ interface DashboardMainProps {
 }
 
 export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainProps) {
+  // Amending or withdrawing a registration both change it, so both answer to
+  // EDIT on Setup Business. The modal drops each control when its handler is
+  // absent, which is how a missing permission reads here.
+  const { canEdit } = useModulePermissions("SET_UP_BUSINESS");
   /*
   // PREVIOUS REDESIGNED CODE PRESERVED:
   const complianceStatus = 'Not Submitted'; 
@@ -691,8 +696,8 @@ export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainPr
         }}
         data={selectedDetails}
         status={selectedCard?.status}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
+        onEdit={canEdit ? handleEdit : undefined}
+        onDelete={canEdit ? handleDelete : undefined}
         deleting={deleting}
       />
 

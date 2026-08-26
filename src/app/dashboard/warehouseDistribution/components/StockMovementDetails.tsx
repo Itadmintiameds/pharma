@@ -12,6 +12,7 @@ import {
 import { formatDate, formatDateTime } from '@/utils/formatDate'
 import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
 import { showToast } from '@/app/components/common/Toast'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 
 // Both the printout and the PDF are this screen as it stands — no separate
 // document design. Printing goes through the same PDF the download produces
@@ -392,12 +393,16 @@ const StockMovementFooter = ({
   onDownloadPdf,
   isPrinting,
   isDownloading,
+  canPrint = true,
+  canExport = true,
 }: {
   onBack?: () => void
   onPrintTimeline?: () => void
   onDownloadPdf?: () => void
   isPrinting?: boolean
   isDownloading?: boolean
+  canPrint?: boolean
+  canExport?: boolean
 }) => (
   <div className="flex w-full flex-col gap-3 border-t border-pneutral-200  py-4 sm:flex-row sm:items-center sm:justify-between">
     <button
@@ -411,6 +416,7 @@ const StockMovementFooter = ({
     </button>
 
     <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+      {canPrint && (
       <button
         type="button"
         onClick={onPrintTimeline}
@@ -427,7 +433,9 @@ const StockMovementFooter = ({
           {isPrinting ? 'Preparing…' : 'Print Timeline'}
         </span>
       </button>
+      )}
 
+      {canExport && (
       <button
         type="button"
         onClick={onDownloadPdf}
@@ -444,6 +452,7 @@ const StockMovementFooter = ({
           {isDownloading ? 'Preparing…' : 'Download PDF'}
         </span>
       </button>
+      )}
     </div>
   </div>
 )
@@ -698,6 +707,8 @@ const StockMovementDetails = ({
 }: StockMovementDetailsProps) => {
   const [distribution, setDistribution] = useState<WarehouseDistributionData | null>(null)
   const [isLoadingLines, setIsLoadingLines] = useState(Boolean(distributionId))
+  // Printing the timeline is PRINT; saving it as a PDF is EXPORT.
+  const { canPrint, canExport } = useModulePermissions('WAREHOUSE_DISTRIBUTION')
   // Everything above the action bar — what both the printout and the PDF capture.
   const printRef = useRef<HTMLDivElement>(null)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -987,6 +998,8 @@ const StockMovementDetails = ({
         onDownloadPdf={onDownloadPdf ?? handleDownloadPdf}
         isPrinting={isPrinting}
         isDownloading={isDownloading}
+        canPrint={canPrint}
+        canExport={canExport}
       />
     </div>
   )

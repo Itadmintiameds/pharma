@@ -21,6 +21,7 @@ import {
 import { getUserById } from '@/services/UserManagementService'
 import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
 import { showToast } from '@/app/components/common/Toast'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 
 interface ReceiptCompleteProps {
   referenceNo?: string
@@ -542,6 +543,8 @@ const ReceiptComplete = ({
   // The receipt is printed and downloaded as this screen stands. Printing goes
   // through the same PDF as the download, so the two agree on layout and
   // pagination rather than the printer reflowing the markup at paper width.
+  // Printing the receipt is PRINT; saving it as a PDF is EXPORT.
+  const { canPrint, canExport } = useModulePermissions('WAREHOUSE_RECEIPT')
   const receiptRef = useRef<HTMLDivElement>(null)
   const [isPrinting, setIsPrinting] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
@@ -599,6 +602,7 @@ const ReceiptComplete = ({
         </div>
 
         <div data-html2canvas-ignore className="flex flex-wrap items-stretch gap-4">
+          {canPrint && (
           <button
             type="button"
             onClick={onPrintReceipt ?? handlePrint}
@@ -608,7 +612,9 @@ const ReceiptComplete = ({
             <Printer className="size-5" strokeWidth={2} />
             {isPrinting ? 'Preparing…' : 'Print Receipt'}
           </button>
+          )}
 
+          {canExport && (
           <button
             type="button"
             onClick={onDownload ?? handleDownload}
@@ -618,6 +624,7 @@ const ReceiptComplete = ({
             <Download className="size-5" strokeWidth={2} />
             {isDownloading ? 'Preparing…' : 'Download'}
           </button>
+          )}
         </div>
       </div>
 

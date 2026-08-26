@@ -20,9 +20,9 @@ import {
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
-import { useOrgInventoryGuard } from "@/hooks/useOrgInventoryGuard";
 import toast from "react-hot-toast";
 
 /** One row of the tax-invoice table. */
@@ -114,7 +114,9 @@ export const buildColumns = (
   onDownload: (purchase: PurchaseData) => void,
   busy = false,
   /** How many rows precede this page, so Sl. No. keeps counting across pages. */
-  rowOffset = 0
+  rowOffset = 0,
+  /** Downloading an invoice is the EXPORT permission on this module. */
+  canExport = true
 ): ColumnDef<PurchaseData>[] => [
   {
     header: "Sl. No.",
@@ -207,22 +209,24 @@ export const buildColumns = (
           />
         </button>
 
-        <button
-          type="button"
-          aria-label="Download tax invoice"
-          title="Download tax invoice"
-          onClick={() => onDownload(row.original)}
-          disabled={busy}
-          className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
-        >
-          <Image
-            src="/Purchase/DownloadIcon.svg"
-            alt="Download"
-            width={25}
-            height={19}
-            className="shrink-0"
-          />
-        </button>
+        {canExport && (
+          <button
+            type="button"
+            aria-label="Download tax invoice"
+            title="Download tax invoice"
+            onClick={() => onDownload(row.original)}
+            disabled={busy}
+            className={busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+          >
+            <Image
+              src="/Purchase/DownloadIcon.svg"
+              alt="Download"
+              width={25}
+              height={19}
+              className="shrink-0"
+            />
+          </button>
+        )}
       </div>
     ),
   },
@@ -244,6 +248,9 @@ const PAGE_SIZE = 10;
 const PurchaseContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  // CREATE opens the goods-receipt flow; EXPORT covers the per-row invoice
+  // download. VIEW is already settled by the route guards.
+  const { canCreate, canExport } = useModulePermissions("PURCHASE");
   // The Add flow is tracked in the URL (?view=add) rather than local state, so
   // clicking "Purchase" in the navbar (which navigates to the bare route)
   // returns to the list instead of leaving a stale form on screen.
@@ -259,15 +266,6 @@ const PurchaseContent = () => {
   // Guards against a second view/download starting while one is still running
   // (a ref so rapid clicks can't slip through before a re-render).
   const isBusyRef = useRef(false);
-
-  // Route guard: in a centralized multi-store org, purchasing happens at the
-  // warehouse, so pharmacy-side roles (Super Admin, Admin, Desk) are kept out of
-  // this page even via a direct URL. Only the Warehouse Manager may purchase.
-  const { checking: accessChecking } = useOrgInventoryGuard({
-    deny: ({ isCentralizedMultiOrg, isWarehouseManager }) =>
-      isCentralizedMultiOrg && !isWarehouseManager,
-    message: "Purchasing is handled at the warehouse for centralized inventory.",
-  });
 
   const openInvoice = async (purchase: PurchaseData, print: boolean) => {
     if (isBusyRef.current) return;
@@ -425,16 +423,6 @@ const PurchaseContent = () => {
     }
   }, [view]);
 
-  // Hold the page blank until the access check resolves, so pharmacy-side roles
-  // in a centralized multi-store org never see the list before being redirected.
-  if (accessChecking) {
-    return (
-      <div className="text-p3 font-normal text-pneutral-500 py-8 text-center">
-        Loading purchases...
-      </div>
-    );
-  }
-
   // Viewing takes over the page. Downloading leaves the list on screen and
   // renders an off-screen copy that only the printer sees.
   if (invoice && !invoice.print) {
@@ -492,19 +480,21 @@ const PurchaseContent = () => {
                   }}
                 />
               </div>
-              <div>
-                <button
-                  className="w-52 h-12 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
-                  onClick={() => {
-                    // Start every Add flow from a clean slate — leaving via the
-                    // navbar skips the Cancel button that used to reset this.
-                    usePurchaseStore.getState().resetPurchase();
-                    router.push("/dashboard/purchase?view=add");
-                  }}
-                >
-                  Add New Purchase
-                </button>
-              </div>
+              {canCreate && (
+                <div>
+                  <button
+                    className="w-52 h-12 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
+                    onClick={() => {
+                      // Start every Add flow from a clean slate — leaving via the
+                      // navbar skips the Cancel button that used to reset this.
+                      usePurchaseStore.getState().resetPurchase();
+                      router.push("/dashboard/purchase?view=add");
+                    }}
+                  >
+                    Add New Purchase
+                  </button>
+                </div>
+              )}
             </div>
 
             {isPreparing && (
@@ -533,7 +523,8 @@ const PurchaseContent = () => {
                     (purchase) => openInvoice(purchase, false),
                     (purchase) => openInvoice(purchase, true),
                     isPreparing,
-                    (currentPage - 1) * PAGE_SIZE
+                    (currentPage - 1) * PAGE_SIZE,
+                    canExport
                   )}
                   data={pageData}
                   pagination={{

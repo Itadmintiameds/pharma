@@ -29,7 +29,8 @@ interface BillingSuccessModalProps {
   totalItems?: number;
   netAmount?: number;
   onSendToWhatsapp: () => void;
-  onPrint: () => void;
+  /** Omitted when the user has no PRINT permission — the button is then dropped. */
+  onPrint?: () => void;
   onBackToDashboard: () => void;
 }
 
@@ -95,16 +96,18 @@ export default function BillingSuccessModal({
             Send to Whatsapp
           </button>
 
-          <button
-            type="button"
-            onClick={onPrint}
-            aria-label="Print"
-            title="Print"
-            className="h-9 min-h-[36px] max-h-[44px] px-3 rounded-[4px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
-          >
-            <Printer size={16} />
-            Print
-          </button>
+          {onPrint && (
+            <button
+              type="button"
+              onClick={onPrint}
+              aria-label="Print"
+              title="Print"
+              className="h-9 min-h-[36px] max-h-[44px] px-3 rounded-[4px] border-[1.5px] border-primary-800 bg-white hover:bg-[#F8F5FF] text-primary-800 flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+            >
+              <Printer size={16} />
+              Print
+            </button>
+          )}
 
           <button
             type="button"

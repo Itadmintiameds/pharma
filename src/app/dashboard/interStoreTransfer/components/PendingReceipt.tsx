@@ -21,6 +21,7 @@ import { formatDate } from '@/utils/formatDate'
 import { getUserById } from '@/services/UserManagementService'
 import { printElementAsPdf } from '@/utils/downloadPdf'
 import { showToast } from '@/app/components/common/Toast'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 
 const EM_DASH = '—'
 
@@ -574,6 +575,7 @@ const PendingReceipt = ({
 
   // The dispatch note is this screen as it stands, printed through the same PDF
   // path the other export screens use so the pages are laid out once.
+  const { canPrint } = useModulePermissions('INTER_STORE_TRANSFER')
   const dispatchNoteRef = useRef<HTMLDivElement>(null)
   const [isPrinting, setIsPrinting] = useState(false)
 
@@ -616,6 +618,7 @@ const PendingReceipt = ({
           </p>
         </div>
 
+        {canPrint && (
         <button
           type="button"
           data-html2canvas-ignore
@@ -626,6 +629,7 @@ const PendingReceipt = ({
           <Printer className="size-5" strokeWidth={2} />
           {isPrinting ? 'Preparing…' : 'Print Dispatch Note'}
         </button>
+        )}
       </div>
 
       <div className="flex w-full flex-col items-stretch gap-4 rounded-2xl border border-pneutral-200 bg-white p-4 lg:flex-row">

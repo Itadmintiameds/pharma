@@ -10,6 +10,7 @@ import AddProducts from './components/AddProducts'
 import ReviewConfirm from './components/ReviewConfirm'
 import DistributionSummary from './components/DistributionSummary'
 import DispatchProducts from './components/StockMovementDetails'
+import { useModulePermissions } from '@/hooks/useModulePermissions'
 import PaginationFooter from '@/app/components/common/table/Pagination'
 import {
   AllocationDraft,
@@ -560,6 +561,9 @@ const OutlineActionButton = ({
 )
 
 const page = () => {
+  // CREATE opens the allocation wizard and dispatches the allocation. The
+  // stock-movement screen gates its own PRINT/EXPORT controls.
+  const { canCreate } = useModulePermissions('WAREHOUSE_DISTRIBUTION')
   const [view, setView] = useState<View>('list')
   const [draft, setDraft] = useState<AllocationDraft>(createInitialAllocationDraft())
   const [isConfirming, setIsConfirming] = useState(false)
@@ -911,7 +915,11 @@ const page = () => {
                   ]
             }
             onBack={() => setView('list')}
-            onDispatchProducts={isCompletedPharmacyTransfer ? undefined : handleDispatchProducts}
+            onDispatchProducts={
+              isCompletedPharmacyTransfer || !canCreate
+                ? undefined
+                : handleDispatchProducts
+            }
             isDispatching={isDispatching}
           />
         )}
@@ -966,10 +974,12 @@ const page = () => {
 
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap sm:items-start lg:shrink-0">
           
-          <OutlineActionButton
-            label="Create Allocation"
-            onClick={handleStartWizard}
-          />
+          {canCreate && (
+            <OutlineActionButton
+              label="Create Allocation"
+              onClick={handleStartWizard}
+            />
+          )}
 
 
         </div>
