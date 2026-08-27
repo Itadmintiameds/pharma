@@ -1,15 +1,18 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { CalendarClock, MapPin, Package } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, MapPin, Package, Warehouse } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import ChartCard from "@/app/components/common/ChartCard";
 import StatCard from "@/app/components/common/StatCard";
 import SalesOverviewSection from "../salesOverview/SalesOverviewSection";
+import { useAccess } from "@/app/components/providers/AccessProvider";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useWarehouseStore } from "@/store/warehouseStore";
 import { getAllPurchases } from "@/services/PurchaseServiceNew";
 import { getUserPharmacyKPIs } from "@/services/SetupBusinessService";
 import { getBatchExpiryKpi } from "@/services/InventoryService";
+import { getSourceTransferKpi } from "@/services/WarehouseDistributionService";
 import { BatchExpiryKpi } from "@/types/ProductData";
 import { DailySeriesPoint } from "../dailySeries";
 import { getPurchaseSpendByDay } from "./aggregations";
@@ -25,6 +28,11 @@ const PURCHASE_SPEND_COLOR = "#2F8F84";
 
 const SuperAdminDashboard = () => {
   const { user } = useCurrentUser();
+  const { actingAsWarehouse } = useAccess();
+  // Populated app-wide by useInitializeWarehouse (in DashboardProvider) with
+  // every warehouse in the organization, for a Super Admin.
+  const warehouses = useWarehouseStore((state) => state.warehouses);
+  const warehouseListLoading = useWarehouseStore((state) => state.loading);
 
   const [purchaseSeries, setPurchaseSeries] = useState<DailySeriesPoint[]>([]);
   const [purchaseLoading, setPurchaseLoading] = useState(true);
@@ -35,11 +43,18 @@ const SuperAdminDashboard = () => {
   const [inventoryKpi, setInventoryKpi] = useState<BatchExpiryKpi | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(true);
 
-  const kpiLoading = businessLoading || inventoryLoading;
+  const [transfersCompleted, setTransfersCompleted] = useState(0);
+  const [transferLoading, setTransferLoading] = useState(true);
 
-  // Needs the current user's id, so it waits for useCurrentUser to resolve.
+  const kpiLoading =
+    (actingAsWarehouse ? warehouseListLoading : businessLoading) ||
+    inventoryLoading ||
+    (actingAsWarehouse && transferLoading);
+
+  // Total Pharmacies only applies in pharmacy mode, so this waits for the
+  // current user's id and skips entirely once toggled into warehouse mode.
   useEffect(() => {
-    if (!user?.userId) return;
+    if (!user?.userId || actingAsWarehouse) return;
     let cancelled = false;
 
     getUserPharmacyKPIs(String(user.userId))
@@ -54,7 +69,7 @@ const SuperAdminDashboard = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.userId]);
+  }, [user?.userId, actingAsWarehouse]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,6 +83,17 @@ const SuperAdminDashboard = () => {
         if (!cancelled) setInventoryLoading(false);
       });
 
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Purchasing is a warehouse-side concern, so this (and the transfer KPI below)
+  // only fetch once toggled into warehouse mode, and re-fetch on toggle.
+  useEffect(() => {
+    if (!actingAsWarehouse) return;
+    let cancelled = false;
+
     getAllPurchases()
       .then((purchases) => {
         if (!cancelled) setPurchaseSeries(getPurchaseSpendByDay(purchases));
@@ -77,19 +103,76 @@ const SuperAdminDashboard = () => {
         if (!cancelled) setPurchaseLoading(false);
       });
 
+    getSourceTransferKpi()
+      .then((kpi) => {
+        if (!cancelled) setTransfersCompleted(kpi.completed);
+      })
+      .catch((err) => console.error("Failed to load inter-store transfer KPI:", err))
+      .finally(() => {
+        if (!cancelled) setTransferLoading(false);
+      });
+
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [actingAsWarehouse]);
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <SalesOverviewSection />
+      {/* Billing/sales data doesn't apply once Super Admin has toggled into warehouse mode. */}
+      {!actingAsWarehouse && <SalesOverviewSection />}
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-label-l5 font-medium text-pneutral-900">Purchase Overview</h2>
-        <div className="flex gap-4">
-          <div className="w-1/2">
+        <h2 className="text-label-l5 font-medium text-pneutral-900">Overview</h2>
+
+        {kpiLoading ? (
+          <p className="text-p3 text-pneutral-500">Loading KPIs…</p>
+        ) : (
+          <div className="flex flex-wrap gap-4">
+            {actingAsWarehouse ? (
+              <StatCard
+                icon={Warehouse}
+                label="Total Warehouse"
+                value={warehouses.length}
+                colorScheme="secondary"
+              />
+            ) : (
+              <StatCard
+                icon={MapPin}
+                label="Total Pharmacies"
+                value={totalPharmacies}
+                colorScheme="secondary"
+              />
+            )}
+            <StatCard
+              icon={Package}
+              label="Total Products"
+              value={inventoryKpi?.totalProducts ?? 0}
+              caption={actingAsWarehouse ? "In warehouse inventory" : "In inventory"}
+              colorScheme="info"
+            />
+            {actingAsWarehouse && (
+              <StatCard
+                icon={ArrowLeftRight}
+                label="Warehouse Transfers"
+                value={transfersCompleted}
+                caption="Completed"
+                colorScheme="secondary"
+              />
+            )}
+            <StatCard
+              icon={CalendarClock}
+              label="Expiring Soon"
+              value={inventoryKpi?.expiring0To30DaysBatches ?? 0}
+              caption="Batches, next 30 days"
+              colorScheme="warning"
+            />
+          </div>
+        )}
+
+        {actingAsWarehouse && (
+          <div className="mt-2 flex flex-col gap-3">
+            <h2 className="text-label-l5 font-medium text-pneutral-900">Purchase Overview</h2>
             {purchaseLoading ? (
               <p className="text-p3 text-pneutral-500">Loading purchase data…</p>
             ) : (
@@ -142,36 +225,7 @@ const SuperAdminDashboard = () => {
               </ChartCard>
             )}
           </div>
-
-          <div className="flex w-1/2 flex-col gap-4">
-            {kpiLoading ? (
-              <p className="text-p3 text-pneutral-500">Loading KPIs…</p>
-            ) : (
-              <>
-                <StatCard
-                  icon={MapPin}
-                  label="Total Pharmacies"
-                  value={totalPharmacies}
-                  colorScheme="secondary"
-                />
-                <StatCard
-                  icon={Package}
-                  label="Total Products"
-                  value={inventoryKpi?.totalProducts ?? 0}
-                  caption="In inventory"
-                  colorScheme="info"
-                />
-                <StatCard
-                  icon={CalendarClock}
-                  label="Expiring Soon"
-                  value={inventoryKpi?.expiring0To30DaysBatches ?? 0}
-                  caption="Batches, next 30 days"
-                  colorScheme="warning"
-                />
-              </>
-            )}
-          </div>
-        </div>
+        )}
       </section>
     </div>
   );

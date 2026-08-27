@@ -161,8 +161,11 @@ interface ReceiveItem {
   productName: string
   packInfo: string
   batchNo: string
-  expiryDate: string
+  /** Display string for the Dispatched column, e.g. "10 Strip". */
   dispatchedQty: string
+  /** Raw dispatched count the received/damaged split is computed against. */
+  dispatchedQtyValue: number
+  expiryDate: string
   receivedQty: string
   damagedQty: string
   remarks: string
@@ -177,7 +180,9 @@ const iconForUnit = (unit?: string): ProductIcon => {
 }
 
 // One dispatched line -> one editable receive row. Received qty defaults to the
-// dispatched qty (the common case is "all arrived"); the user edits down for shortfalls.
+// dispatched qty (the common case is "all arrived"); the received and damaged/
+// not-received split always sums to dispatched, so damaged defaults to the
+// remainder and the two stay in lockstep as the user edits (see handleFieldChange).
 const mapLineToReceiveItem = (
   line: WarehouseDistributionLineData,
   index: number
@@ -185,6 +190,11 @@ const mapLineToReceiveItem = (
   const unit = line.packaging?.purchaseUnit ?? ''
   const contains = line.packaging?.purchaseUnitContains
   const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
+  const received = line.receivedQuantity != null ? line.receivedQuantity : dispatched
+  const damaged =
+    line.damagedQuantity != null
+      ? line.damagedQuantity
+      : Math.max(0, dispatched - received)
   return {
     id: line.warehouseDistributionDetailsId ?? index + 1,
     icon: iconForUnit(unit),
@@ -194,9 +204,9 @@ const mapLineToReceiveItem = (
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
     expiryDate: formatDate(line.batch?.expiryDate),
     dispatchedQty: unit ? `${dispatched} ${unit}` : `${dispatched}`,
-    receivedQty:
-      line.receivedQuantity != null ? String(line.receivedQuantity) : String(dispatched),
-    damagedQty: line.damagedQuantity != null ? String(line.damagedQuantity) : '0',
+    dispatchedQtyValue: dispatched,
+    receivedQty: String(received),
+    damagedQty: String(damaged),
     remarks: line.receiveRemarks ?? line.remarks ?? '',
   }
 }
@@ -204,10 +214,11 @@ const mapLineToReceiveItem = (
 const receiveInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
 
-// A damaged/not-received quantity without a remark leaves no record of why —
-// require one before the row can be treated as valid.
+// Receiving anything other than the full dispatched quantity (i.e. some was
+// damaged or not received) without a remark leaves no record of why — require
+// one before the row can be treated as valid.
 const rowNeedsRemarks = (item: ReceiveItem) =>
-  Number(item.damagedQty) > 0 && item.remarks.trim() === ''
+  Number(item.receivedQty) !== item.dispatchedQtyValue && item.remarks.trim() === ''
 
 interface ReceiveColumn {
   header: string
@@ -483,7 +494,27 @@ const StockReceipt = ({
     value: string
   ) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
+      prev.map((item) => {
+        if (item.id !== id) return item
+        if (field === 'remarks') return { ...item, remarks: value }
+
+        // Received and Damaged/Not-Received always sum to Dispatched, so editing
+        // one auto-fills the other. The entry is clamped to [0, dispatched] so
+        // the pair can never go negative or exceed what was sent.
+        const dispatched = item.dispatchedQtyValue
+        const entered = Math.max(0, Math.min(dispatched, Number(value) || 0))
+        return field === 'receivedQty'
+          ? {
+              ...item,
+              receivedQty: String(entered),
+              damagedQty: String(dispatched - entered),
+            }
+          : {
+              ...item,
+              damagedQty: String(entered),
+              receivedQty: String(dispatched - entered),
+            }
+      })
     )
   }
 
