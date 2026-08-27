@@ -4,19 +4,27 @@ import React from 'react';
 import FeatureComingSoon from '@/app/components/common/FeatureComingSoon';
 import SuperAdminDashboard from './dashboardComponents/superAdmin/SuperAdminDashboard';
 import AdminDashboard from './dashboardComponents/admin/AdminDashboard';
+import WarehouseManagerDashboard from './dashboardComponents/warehouseManager/WarehouseManagerDashboard';
+import DeskDashboard from './dashboardComponents/desk/DeskDashboard';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const Page = () => {
   const { role } = useCurrentUser();
 
-  // Desk / Warehouse Manager dashboards are follow-up passes reusing the same
-  // StatCard/ChartCard/useCurrentUser foundation built for these two.
   if (role === 'superadmin') {
     return <SuperAdminDashboard />;
   }
 
   if (role === 'admin') {
     return <AdminDashboard />;
+  }
+
+  if (role === 'warehousemanager') {
+    return <WarehouseManagerDashboard />;
+  }
+
+  if (role === 'deskrole') {
+    return <DeskDashboard />;
   }
 
   return <FeatureComingSoon />;

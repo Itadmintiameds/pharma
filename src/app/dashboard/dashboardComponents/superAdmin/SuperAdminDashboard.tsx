@@ -2,29 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import { ArrowLeftRight, CalendarClock, MapPin, Package, Warehouse } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import ChartCard from "@/app/components/common/ChartCard";
 import StatCard from "@/app/components/common/StatCard";
 import SalesOverviewSection from "../salesOverview/SalesOverviewSection";
+import PurchaseOverviewSection from "../purchaseOverview/PurchaseOverviewSection";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { getAllPurchases } from "@/services/PurchaseServiceNew";
 import { getUserPharmacyKPIs } from "@/services/SetupBusinessService";
 import { getBatchExpiryKpi } from "@/services/InventoryService";
 import { getSourceTransferKpi } from "@/services/WarehouseDistributionService";
 import { BatchExpiryKpi } from "@/types/ProductData";
-import { DailySeriesPoint } from "../dailySeries";
-import { getPurchaseSpendByDay } from "./aggregations";
-
-const currency = (value: unknown) =>
-  typeof value === "number"
-    ? value.toLocaleString(undefined, { maximumFractionDigits: 0 })
-    : String(value ?? "");
-
-// A deep teal, distinct from the purple used for revenue/patient visits and
-// the green/gold/terracotta used for payment status.
-const PURCHASE_SPEND_COLOR = "#2F8F84";
 
 const SuperAdminDashboard = () => {
   const { user } = useCurrentUser();
@@ -33,9 +20,6 @@ const SuperAdminDashboard = () => {
   // every warehouse in the organization, for a Super Admin.
   const warehouses = useWarehouseStore((state) => state.warehouses);
   const warehouseListLoading = useWarehouseStore((state) => state.loading);
-
-  const [purchaseSeries, setPurchaseSeries] = useState<DailySeriesPoint[]>([]);
-  const [purchaseLoading, setPurchaseLoading] = useState(true);
 
   const [totalPharmacies, setTotalPharmacies] = useState(0);
   const [businessLoading, setBusinessLoading] = useState(true);
@@ -88,20 +72,11 @@ const SuperAdminDashboard = () => {
     };
   }, []);
 
-  // Purchasing is a warehouse-side concern, so this (and the transfer KPI below)
-  // only fetch once toggled into warehouse mode, and re-fetch on toggle.
+  // Only meaningful once toggled into warehouse mode, so it re-fetches on toggle
+  // rather than running unconditionally.
   useEffect(() => {
     if (!actingAsWarehouse) return;
     let cancelled = false;
-
-    getAllPurchases()
-      .then((purchases) => {
-        if (!cancelled) setPurchaseSeries(getPurchaseSpendByDay(purchases));
-      })
-      .catch((err) => console.error("Failed to load purchase data:", err))
-      .finally(() => {
-        if (!cancelled) setPurchaseLoading(false);
-      });
 
     getSourceTransferKpi()
       .then((kpi) => {
@@ -170,62 +145,7 @@ const SuperAdminDashboard = () => {
           </div>
         )}
 
-        {actingAsWarehouse && (
-          <div className="mt-2 flex flex-col gap-3">
-            <h2 className="text-label-l5 font-medium text-pneutral-900">Purchase Overview</h2>
-            {purchaseLoading ? (
-              <p className="text-p3 text-pneutral-500">Loading purchase data…</p>
-            ) : (
-              <ChartCard title="Daily Purchase" subtitle="Last 30 days">
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={purchaseSeries} barCategoryGap="2%">
-                    <defs>
-                      <linearGradient id="purchaseFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={PURCHASE_SPEND_COLOR} stopOpacity={0.95} />
-                        <stop offset="100%" stopColor={PURCHASE_SPEND_COLOR} stopOpacity={0.55} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      vertical={false}
-                      stroke="var(--color-pneutral-100)"
-                    />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 12, fill: "var(--color-pneutral-400)" }}
-                      interval={4}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 12, fill: "var(--color-pneutral-400)" }}
-                      width={48}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      formatter={(value) => currency(value)}
-                      cursor={false}
-                      labelStyle={{ color: "var(--color-pneutral-500)", fontWeight: 500 }}
-                      contentStyle={{
-                        borderRadius: 12,
-                        border: "1px solid var(--color-pneutral-100)",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                        fontSize: 12,
-                      }}
-                    />
-                    <Bar
-                      dataKey="value"
-                      fill="url(#purchaseFill)"
-                      radius={[6, 6, 0, 0]}
-                      background={false}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            )}
-          </div>
-        )}
+        {actingAsWarehouse && <PurchaseOverviewSection />}
       </section>
     </div>
   );

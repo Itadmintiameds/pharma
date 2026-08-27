@@ -7,10 +7,13 @@ import { UserData } from "@/types/UserData";
 export const normalizeRole = (role?: string) =>
   (role || "").toLowerCase().replace(/[^a-z]/g, "");
 
+// The Desk role is stored in the DB as "DESKROLE" (one word, no space) —
+// unlike "Super Admin"/"Warehouse Manager", so it normalizes to "deskrole"
+// rather than "desk".
 export type NormalizedRole =
   | "superadmin"
   | "admin"
-  | "desk"
+  | "deskrole"
   | "warehousemanager"
   | "";
 
