@@ -376,7 +376,7 @@ const buildDispatchColumns = (
         <div className="flex flex-col items-start gap-1">
           <input
             type="text"
-            placeholder="Low Stock"
+            placeholder="Enter remark"
             value={row.remarks}
             onChange={(e) => onFieldChange(row.id, 'remarks', e.target.value)}
             className={`${remarksInputClass} ${showError ? 'border-warning-600' : ''}`}
