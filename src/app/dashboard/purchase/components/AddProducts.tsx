@@ -25,6 +25,7 @@ import {
 import { buildProductAttributes } from "@/utils/productOnboardPayload";
 import { formatMonthYear } from "@/utils/formatDate";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
 import toast from "react-hot-toast";
@@ -107,6 +108,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   // (LocationContextResolver), so the client just needs to know not to demand a
   // pharmacy for them.
   const [isWarehouseManager, setIsWarehouseManager] = useState(false);
+
+  // A Super Admin who has switched into a warehouse purchases for that warehouse
+  // just like a manager does, so the pharmacy requirement is waived for them too.
+  const actingAsWarehouse = useWarehouseStore((s) => s.actingAsWarehouse);
+  const isWarehouseContext = isWarehouseManager || actingAsWarehouse;
 
   useEffect(() => {
     let active = true;
@@ -351,9 +357,10 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         return;
       }
 
-      // Warehouse Managers have no pharmacy; the backend derives their
-      // warehouse from the token, so only require a pharmacy for everyone else.
-      if (!isWarehouseManager && !selectedPharmacy?.pharmacyId) {
+      // Warehouse Managers (and a Super Admin acting as one) have no pharmacy;
+      // the backend derives the warehouse from the token / X-Warehouse-Id, so
+      // only require a pharmacy for everyone else.
+      if (!isWarehouseContext && !selectedPharmacy?.pharmacyId) {
         toast.error("Pharmacy ID is required");
         return;
       }

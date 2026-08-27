@@ -49,6 +49,7 @@ const Sidebar = () => {
     organizationLoaded,
     roleName,
     organization,
+    actingAsWarehouse,
   } = useAccess();
 
   const { hasApprovedPharmacy } = useBusinessRegistration();
@@ -190,7 +191,10 @@ const Sidebar = () => {
   // shape rules out entirely are hidden, the same as for every other role — a
   // lock there would advertise a flow the organization does not have.
   const isSuperAdmin = bypassesPermissionChecks(roleName);
-  const superAdminLocked = superAdminLockedModules(organization);
+  const superAdminLocked = superAdminLockedModules(
+    organization,
+    actingAsWarehouse
+  );
 
   const decorate = (
     item: (typeof navGroups)[number]["items"][number],

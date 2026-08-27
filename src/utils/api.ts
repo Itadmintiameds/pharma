@@ -91,24 +91,26 @@ api.interceptors.response.use(
 
 api.interceptors.request.use(
   (config) => {
-    const pharmacy =
-      usePharmacyStore.getState().selectedPharmacy;
+    // Exactly one location header travels with a request — the two must never
+    // both be present. Scope decides which:
+    //   - acting as a warehouse (a Super Admin who toggled into one): warehouse.
+    //   - otherwise a pharmacy is selected (every store role): pharmacy.
+    //   - otherwise a warehouse is selected but no pharmacy (a Warehouse
+    //     Manager, who has no pharmacy at all): warehouse.
+    // A Super Admin has both a pharmacy and (org) warehouses loaded, so without
+    // this the pharmacy branch correctly wins until they switch into a warehouse.
+    const warehouseState = useWarehouseStore.getState();
+    const pharmacy = usePharmacyStore.getState().selectedPharmacy;
+    const warehouse = warehouseState.selectedWarehouse;
 
-    if (pharmacy?.pharmacyId) {
-      config.headers["X-Pharmacy-Id"] =
-        pharmacy.pharmacyId;
-    }
-
-    // A Warehouse Manager is scoped by warehouse rather than pharmacy, and may
-    // be mapped to several — the backend refuses to guess between them, so the
-    // one they picked has to travel with every request. Only ever set for users
-    // who have warehouses at all; the server ignores it for everyone else.
-    const warehouse =
-      useWarehouseStore.getState().selectedWarehouse;
-
-    if (warehouse?.warehouseId) {
-      config.headers["X-Warehouse-Id"] =
-        warehouse.warehouseId;
+    if (warehouseState.actingAsWarehouse) {
+      if (warehouse?.warehouseId) {
+        config.headers["X-Warehouse-Id"] = warehouse.warehouseId;
+      }
+    } else if (pharmacy?.pharmacyId) {
+      config.headers["X-Pharmacy-Id"] = pharmacy.pharmacyId;
+    } else if (warehouse?.warehouseId) {
+      config.headers["X-Warehouse-Id"] = warehouse.warehouseId;
     }
 
     return config;

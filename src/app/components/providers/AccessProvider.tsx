@@ -27,6 +27,7 @@ import {
   availableModuleKeys,
   buildPermissionIndex,
   can,
+  canActAsWarehouse,
   isModuleAvailable,
   isWarehouseManagerRole,
   MODULE_ROUTES,
@@ -38,6 +39,7 @@ import {
   routeForPath,
 } from "@/access/accessControl";
 import { getUserOrganization } from "@/services/SetupBusinessService";
+import { useWarehouseStore } from "@/store/warehouseStore";
 
 export interface AccessSession {
   userId: string | null;
@@ -58,6 +60,10 @@ interface AccessContextValue extends AccessSession {
   /** False until the organization lookup has settled, successfully or not. */
   organizationLoaded: boolean;
   isWarehouseManager: boolean;
+  /** Whether this user may switch into a warehouse (Super Admin, centralized). */
+  canActAsWarehouse: boolean;
+  /** Whether a Super Admin is currently operating a warehouse rather than a pharmacy. */
+  actingAsWarehouse: boolean;
   can: (
     moduleKey: string,
     featureKey: string,
@@ -87,6 +93,13 @@ export default function AccessProvider({
   });
   const [organizationLoaded, setOrganizationLoaded] = useState(false);
 
+  // A Super Admin can toggle into a warehouse; the flag lives on the warehouse
+  // store so logout clears it. It only ever affects the Super Admin role, so
+  // reading it for everyone is harmless.
+  const actingAsWarehouse = useWarehouseStore(
+    (state) => state.actingAsWarehouse
+  );
+
   useEffect(() => {
     let active = true;
 
@@ -115,7 +128,9 @@ export default function AccessProvider({
 
   const value = useMemo<AccessContextValue>(() => {
     const index = buildPermissionIndex(session.permissions);
-    const availableModules = availableModuleKeys(session.roleName, organization);
+    const availableModules = availableModuleKeys(session.roleName, organization, {
+      actingAsWarehouse,
+    });
 
     return {
       ...session,
@@ -123,6 +138,8 @@ export default function AccessProvider({
       organization,
       organizationLoaded,
       isWarehouseManager: isWarehouseManagerRole(session.roleName),
+      canActAsWarehouse: canActAsWarehouse(session.roleName, organization),
+      actingAsWarehouse,
       can: (moduleKey, featureKey, action) =>
         can(index, moduleKey, featureKey, action),
       actionsFor: (moduleKey, featureKey) =>
@@ -133,13 +150,14 @@ export default function AccessProvider({
           index,
           session.roleName,
           organization,
-          session.permissionsDescribed
+          session.permissionsDescribed,
+          actingAsWarehouse
         ),
       availableModules,
       routeFor: routeForPath,
       moduleRoutes: MODULE_ROUTES,
     };
-  }, [session, organization, organizationLoaded]);
+  }, [session, organization, organizationLoaded, actingAsWarehouse]);
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
 }

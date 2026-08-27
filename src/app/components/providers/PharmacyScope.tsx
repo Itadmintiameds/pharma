@@ -28,8 +28,14 @@ export default function PharmacyScope({ children }: { children: ReactNode }) {
   const warehouseId = useWarehouseStore(
     (state) => state.selectedWarehouse?.warehouseId ?? ""
   );
+  // A Super Admin toggling between pharmacy and warehouse changes which header
+  // the next request carries without changing either id, so the mode is part of
+  // the key too — flipping it remounts the tree and re-runs every page's fetch.
+  const actingAsWarehouse = useWarehouseStore(
+    (state) => state.actingAsWarehouse
+  );
 
-  const locationId = `${pharmacyId}|${warehouseId}`;
+  const locationId = `${pharmacyId}|${warehouseId}|${actingAsWarehouse}`;
 
   // Seeded with the first value so a fresh mount is not treated as a switch.
   const previousId = useRef(locationId);

@@ -27,8 +27,14 @@ import { useAccess } from "./AccessProvider";
 export default function ModuleGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { routeFor, availableModules, organizationLoaded, organization, roleName } =
-    useAccess();
+  const {
+    routeFor,
+    availableModules,
+    organizationLoaded,
+    organization,
+    roleName,
+    actingAsWarehouse,
+  } = useAccess();
 
   const route = routeFor(pathname);
   const awaitingOrganization =
@@ -44,12 +50,17 @@ export default function ModuleGuard({ children }: { children: ReactNode }) {
 
     if (announced.current !== route.moduleKey) {
       announced.current = route.moduleKey;
-      const reason = denialReason(route, roleName, organization);
+      const reason = denialReason(
+        route,
+        roleName,
+        organization,
+        actingAsWarehouse
+      );
       if (reason) showToast.error(reason);
     }
 
     router.replace(`/dashboard?denied=${route.moduleKey}`);
-  }, [blocked, route, roleName, organization, router]);
+  }, [blocked, route, roleName, organization, actingAsWarehouse, router]);
 
   // Nothing of a module the organization rules out is rendered, not even for the
   // frame before the redirect lands.

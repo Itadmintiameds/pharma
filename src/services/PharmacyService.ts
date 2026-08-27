@@ -128,12 +128,22 @@ const warehouseToBillTo = (warehouse: {
 export const getCurrentBillTo = async (): Promise<CurrentPharmacy> => {
   try {
     const { useWarehouseStore } = await import("@/store/warehouseStore");
-    const warehouseId =
-      useWarehouseStore.getState().selectedWarehouse?.warehouseId;
+    const { usePharmacyStore } = await import("@/store/pharmacyStore");
+    const warehouseState = useWarehouseStore.getState();
+    const warehouseId = warehouseState.selectedWarehouse?.warehouseId;
+    const pharmacyId = usePharmacyStore.getState().selectedPharmacy?.pharmacyId;
 
-    if (warehouseId) {
+    // Bill to the warehouse only when the request is warehouse-scoped: a Super
+    // Admin who switched into one, or a Warehouse Manager (who has a warehouse
+    // but no pharmacy). A Super Admin in pharmacy mode has a warehouse loaded
+    // too, so `actingAsWarehouse` — not merely a selected warehouse — is what
+    // decides it for them. Mirrors the header logic in utils/api.ts.
+    const warehouseScoped =
+      !!warehouseId && (warehouseState.actingAsWarehouse || !pharmacyId);
+
+    if (warehouseScoped) {
       const { getWarehouseById } = await import("./SetupWarehouseService");
-      const warehouse = await getWarehouseById(warehouseId);
+      const warehouse = await getWarehouseById(warehouseId!);
       if (warehouse) return warehouseToBillTo(warehouse);
     }
   } catch (err) {

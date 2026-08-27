@@ -6,7 +6,9 @@ import { getById, getUserById } from "@/services/UserManagementService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
 import { warehouseLabel } from "@/types/UserData";
+import { useAccess } from "@/app/components/providers/AccessProvider";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
+import ConfirmDialog from "../common/ConfirmDialog";
 
 interface NavbarProps {
   userRole?: string;
@@ -27,8 +29,33 @@ const Navbar = ({ userRole }: NavbarProps) => {
     warehouses,
     selectedWarehouse,
     selectWarehouse,
+    setActingAsWarehouse,
     loading: warehousesLoading,
   } = useWarehouseStore();
+
+  // A Super Admin (under centralized inventory) can switch into a warehouse and
+  // operate it; the toggle below drives that. Everyone else uses the single
+  // location control their role implies.
+  const { canActAsWarehouse, actingAsWarehouse } = useAccess();
+
+  // Switching context clears any half-built purchase and reloads every screen,
+  // so the toggle asks first. `pendingScope` holds the target actingAsWarehouse
+  // value while the confirmation is open (null when nothing is pending).
+  const [pendingScope, setPendingScope] = useState<boolean | null>(null);
+
+  const requestSwitch = (target: boolean) => {
+    if (target === actingAsWarehouse) return;
+    setPendingScope(target);
+  };
+
+  const confirmSwitch = () => {
+    if (pendingScope !== null) {
+      setActingAsWarehouse(pendingScope);
+    }
+    setPendingScope(null);
+  };
+
+  const cancelSwitch = () => setPendingScope(null);
 
   const pharmacyOptions: DropdownOption[] = useMemo(
     () =>
@@ -87,6 +114,7 @@ const Navbar = ({ userRole }: NavbarProps) => {
   }, []);
 
   return (
+    <>
     <header
       className="w-full h-[61.5px] bg-white border-b border-pneutral-100 flex items-center justify-between px-6 shrink-0"
       style={{ fontFamily: '"Inter", sans-serif' }}
@@ -119,60 +147,92 @@ const Navbar = ({ userRole }: NavbarProps) => {
       </div>
 
       <div className="flex items-center gap-4">
-        <div className="w-[220px] flex items-center justify-center overflow-visible">
-          {isWarehouseUser ? (
-            <div
-              className="w-full origin-center scale-[0.82]"
-              style={{ marginTop: "-8px", marginBottom: "-8px" }}
-            >
-              {warehouses.length > 1 ? (
-                <Dropdown
-                  options={warehouseOptions}
-                  value={selectedWarehouse?.warehouseId}
-                  onChange={(value) => {
-                    const warehouse = warehouses.find(
-                      (w) => w.warehouseId === value,
-                    );
-
-                    if (warehouse) {
-                      selectWarehouse(warehouse);
-                    }
-                  }}
-                  placeholder="Select Warehouse"
-                  isLoading={warehousesLoading}
-                />
-              ) : (
-                // One warehouse (or none yet): nothing to choose between, so it
-                // reads as a label rather than a dropdown that cannot be used.
-                <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
-                  <span className="truncate">
-                    {selectedWarehouse
-                      ? warehouseLabel(selectedWarehouse)
-                      : "Warehouse"}
-                  </span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div
-              className="w-full origin-center scale-[0.82]"
-              style={{ marginTop: "-8px", marginBottom: "-8px" }}
-            >
-              <Dropdown
-                options={pharmacyOptions}
-                value={selectedPharmacy?.pharmacyId}
-                onChange={(value) => {
-                  const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
-
-                  if (pharmacy) {
-                    selectPharmacy(pharmacy);
-                  }
-                }}
-                placeholder="Select Pharmacy"
-                isLoading={loading}
-              />
+        <div className="flex items-center gap-2">
+          {/* A Super Admin picks whether they are operating a pharmacy or a
+              warehouse; the choice flips the control beside it and drives the
+              access rules and the api client's location header. */}
+          {canActAsWarehouse && (
+            <div className="flex items-center rounded-full bg-pneutral-100 p-[2px] text-[11px] font-medium select-none">
+              <button
+                type="button"
+                onClick={() => requestSwitch(false)}
+                className={`px-2.5 py-1 rounded-full transition-colors cursor-pointer ${
+                  actingAsWarehouse
+                    ? "text-pneutral-500 hover:text-pneutral-700"
+                    : "bg-white text-pneutral-900 shadow-sm"
+                }`}
+              >
+                Pharmacy
+              </button>
+              <button
+                type="button"
+                onClick={() => requestSwitch(true)}
+                className={`px-2.5 py-1 rounded-full transition-colors cursor-pointer ${
+                  actingAsWarehouse
+                    ? "bg-white text-pneutral-900 shadow-sm"
+                    : "text-pneutral-500 hover:text-pneutral-700"
+                }`}
+              >
+                Warehouse
+              </button>
             </div>
           )}
+
+          <div className="w-[200px] flex items-center justify-center overflow-visible">
+            {(canActAsWarehouse ? actingAsWarehouse : isWarehouseUser) ? (
+              <div
+                className="w-full origin-center scale-[0.82]"
+                style={{ marginTop: "-8px", marginBottom: "-8px" }}
+              >
+                {warehouses.length > 1 ? (
+                  <Dropdown
+                    options={warehouseOptions}
+                    value={selectedWarehouse?.warehouseId}
+                    onChange={(value) => {
+                      const warehouse = warehouses.find(
+                        (w) => w.warehouseId === value,
+                      );
+
+                      if (warehouse) {
+                        selectWarehouse(warehouse);
+                      }
+                    }}
+                    placeholder="Select Warehouse"
+                    isLoading={warehousesLoading}
+                  />
+                ) : (
+                  // One warehouse (or none yet): nothing to choose between, so it
+                  // reads as a label rather than a dropdown that cannot be used.
+                  <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
+                    <span className="truncate">
+                      {selectedWarehouse
+                        ? warehouseLabel(selectedWarehouse)
+                        : "Warehouse"}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                className="w-full origin-center scale-[0.82]"
+                style={{ marginTop: "-8px", marginBottom: "-8px" }}
+              >
+                <Dropdown
+                  options={pharmacyOptions}
+                  value={selectedPharmacy?.pharmacyId}
+                  onChange={(value) => {
+                    const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
+
+                    if (pharmacy) {
+                      selectPharmacy(pharmacy);
+                    }
+                  }}
+                  placeholder="Select Pharmacy"
+                  isLoading={loading}
+                />
+              </div>
+            )}
+          </div>
         </div>
 
         <button className="relative w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity">
@@ -196,6 +256,21 @@ const Navbar = ({ userRole }: NavbarProps) => {
         </div>
       </div>
     </header>
+
+    <ConfirmDialog
+      isOpen={pendingScope !== null}
+      title={pendingScope ? "Switch to Warehouse" : "Switch to Pharmacy"}
+      message={
+        pendingScope
+          ? "You'll start operating a warehouse. Any in-progress purchase entry is cleared and the current screen reloads for the selected warehouse."
+          : "You'll go back to operating a pharmacy. Any in-progress purchase entry is cleared and the current screen reloads for the selected pharmacy."
+      }
+      confirmLabel={pendingScope ? "Switch to Warehouse" : "Switch to Pharmacy"}
+      cancelLabel="Cancel"
+      onConfirm={confirmSwitch}
+      onCancel={cancelSwitch}
+    />
+    </>
   );
 };
 

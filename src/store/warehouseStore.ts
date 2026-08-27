@@ -21,6 +21,16 @@ interface WarehouseStore {
 
   selectedWarehouse: UserWarehouse | null;
 
+  /**
+   * Whether a Super Admin is currently operating a warehouse rather than a
+   * pharmacy. It is off for every other user — a Warehouse Manager is always
+   * warehouse-scoped and a store role never is, so only the Super Admin toggle
+   * in the navbar ever sets this. While it is on, the access rules hand the
+   * Super Admin the Warehouse Manager module set and the api client sends
+   * `X-Warehouse-Id` instead of `X-Pharmacy-Id`.
+   */
+  actingAsWarehouse: boolean;
+
   loading: boolean;
 
   setLoading: (loading: boolean) => void;
@@ -28,6 +38,8 @@ interface WarehouseStore {
   setWarehouses: (warehouses: UserWarehouse[]) => void;
 
   selectWarehouse: (warehouse: UserWarehouse) => void;
+
+  setActingAsWarehouse: (actingAsWarehouse: boolean) => void;
 
   clearWarehouse: () => void;
 }
@@ -38,6 +50,8 @@ export const useWarehouseStore = create<WarehouseStore>()(
       warehouses: [],
 
       selectedWarehouse: null,
+
+      actingAsWarehouse: false,
 
       loading: false,
 
@@ -62,10 +76,13 @@ export const useWarehouseStore = create<WarehouseStore>()(
 
       selectWarehouse: (warehouse) => set({ selectedWarehouse: warehouse }),
 
+      setActingAsWarehouse: (actingAsWarehouse) => set({ actingAsWarehouse }),
+
       clearWarehouse: () =>
         set({
           warehouses: [],
           selectedWarehouse: null,
+          actingAsWarehouse: false,
         }),
     }),
     {

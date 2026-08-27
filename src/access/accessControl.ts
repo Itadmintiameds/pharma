@@ -196,7 +196,8 @@ export interface OrganizationShape {
  */
 export const availableModuleKeys = (
   roleName: string | null | undefined,
-  organization: OrganizationShape
+  organization: OrganizationShape,
+  opts?: { actingAsWarehouse?: boolean }
 ): Set<ModuleKey> => {
   // A settled-but-unknown organization shape (null) is read as decentralized
   // (false): purchasing then belongs to the store. This only decides the
@@ -207,14 +208,26 @@ export const availableModuleKeys = (
   const isWarehouseManager = isWarehouseManagerRole(roleName);
 
   if (isSuperAdminRole(roleName)) {
-    // A Super Admin oversees the whole organization, but purchasing still
-    // follows the organization's inventory shape rather than the role: under
-    // centralized inventory buying physically happens at the warehouse, so
-    // Purchase is withheld and the store side works through Warehouse Receipt /
-    // Inter Store Transfer; under decentralized inventory each store purchases
-    // for itself. Warehouse Distribution stays a warehouse-side screen until a
-    // Super Admin can switch into a warehouse the way they already switch
-    // pharmacy.
+    // A Super Admin can step into a warehouse and operate it the way a Warehouse
+    // Manager does — but only with centralized inventory, where warehouses exist
+    // at all. In that mode they get the warehouse flows (Distribution, Purchase,
+    // Products) plus the org-wide screens the role always keeps.
+    if (opts?.actingAsWarehouse && centralized === true) {
+      return new Set<ModuleKey>([
+        "PRODUCTS",
+        "WAREHOUSE_DISTRIBUTION",
+        "PURCHASE",
+        "USER_MANAGEMENT",
+        "SET_UP_BUSINESS",
+      ]);
+    }
+
+    // In the ordinary pharmacy context, purchasing still follows the
+    // organization's inventory shape rather than the role: under centralized
+    // inventory buying physically happens at the warehouse, so Purchase is
+    // withheld and the store side works through Warehouse Receipt / Inter Store
+    // Transfer; under decentralized inventory each store purchases for itself.
+    // Warehouse Distribution is reached by switching into a warehouse (above).
     const keys: ModuleKey[] = [
       "SALES",
       "PRODUCTS",
@@ -279,13 +292,30 @@ export const dependsOnOrganization = (moduleKey: ModuleKey): boolean =>
  * shown with a padlock and their reason. Without centralized inventory none
  * apply: the warehouse pair does not exist to lock, and store Purchase is a
  * module the Super Admin can actually use, so it is shown unlocked.
+ *
+ * Nothing is locked once the Super Admin has switched into a warehouse: there
+ * the same Warehouse Distribution and Purchase are theirs to operate, so they
+ * are available rather than padlocked.
  */
 export const superAdminLockedModules = (
-  organization: OrganizationShape
+  organization: OrganizationShape,
+  actingAsWarehouse = false
 ): Set<ModuleKey> =>
-  (organization.centralizedInventory ?? false) === true
+  !actingAsWarehouse && (organization.centralizedInventory ?? false) === true
     ? new Set<ModuleKey>(["WAREHOUSE_DISTRIBUTION", "PURCHASE"])
     : new Set<ModuleKey>();
+
+/**
+ * Whether this user may switch into a warehouse and operate it. Only a Super
+ * Admin, and only under centralized inventory — without it there are no
+ * warehouses to step into. Gates the navbar's Pharmacy/Warehouse toggle.
+ */
+export const canActAsWarehouse = (
+  roleName: string | null | undefined,
+  organization: OrganizationShape
+): boolean =>
+  isSuperAdminRole(roleName) &&
+  (organization.centralizedInventory ?? false) === true;
 
 /**
  * Why a module was withheld, in the user's terms. Returns null when the module
@@ -294,9 +324,14 @@ export const superAdminLockedModules = (
 export const denialReason = (
   route: ModuleRoute,
   roleName: string | null | undefined,
-  organization: OrganizationShape
+  organization: OrganizationShape,
+  actingAsWarehouse = false
 ): string | null => {
-  if (availableModuleKeys(roleName, organization).has(route.moduleKey)) {
+  if (
+    availableModuleKeys(roleName, organization, { actingAsWarehouse }).has(
+      route.moduleKey
+    )
+  ) {
     return null;
   }
 
@@ -339,9 +374,12 @@ export const isModuleAvailable = (
   index: PermissionIndex,
   roleName: string | null | undefined,
   organization: OrganizationShape,
-  permissionsDescribed = true
+  permissionsDescribed = true,
+  actingAsWarehouse = false
 ): boolean =>
-  availableModuleKeys(roleName, organization).has(route.moduleKey) &&
+  availableModuleKeys(roleName, organization, { actingAsWarehouse }).has(
+    route.moduleKey
+  ) &&
   (!permissionsDescribed ||
     bypassesPermissionChecks(roleName) ||
     canViewModule(index, route));
