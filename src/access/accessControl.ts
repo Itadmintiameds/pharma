@@ -172,9 +172,10 @@ export const bypassesPermissionChecks = (roleName?: string | null): boolean =>
 
 export interface OrganizationShape {
   /**
-   * null while the organization has not loaded (or failed to). Warehouse
-   * modules and Purchase both hinge on this flag, so they are withheld until
-   * it is known — briefly missing beats briefly wrong.
+   * null while the organization has not loaded, or if the lookup could not
+   * resolve a boolean. The rules read a null as false (decentralized); the
+   * initial-load flash is prevented separately by `organizationLoaded`, which
+   * holds org-dependent modules blank until the lookup settles.
    */
   centralizedInventory: boolean | null;
   organizationType?: string | null;
@@ -197,26 +198,37 @@ export const availableModuleKeys = (
   roleName: string | null | undefined,
   organization: OrganizationShape
 ): Set<ModuleKey> => {
-  const centralized = organization.centralizedInventory;
+  // A settled-but-unknown organization shape (null) is read as decentralized
+  // (false): purchasing then belongs to the store. This only decides the
+  // failed/absent case — during the initial load the org-dependent modules are
+  // still withheld via `organizationLoaded`, so nothing flashes before the
+  // lookup returns.
+  const centralized = organization.centralizedInventory ?? false;
   const isWarehouseManager = isWarehouseManagerRole(roleName);
 
   if (isSuperAdminRole(roleName)) {
-    // Everything except Warehouse Distribution, which stays a warehouse-side
-    // screen until a Super Admin can switch into a warehouse the way they
-    // already switch pharmacy. Purchase is included even under centralized
-    // inventory: the role oversees the organization rather than one store.
+    // A Super Admin oversees the whole organization, but purchasing still
+    // follows the organization's inventory shape rather than the role: under
+    // centralized inventory buying physically happens at the warehouse, so
+    // Purchase is withheld and the store side works through Warehouse Receipt /
+    // Inter Store Transfer; under decentralized inventory each store purchases
+    // for itself. Warehouse Distribution stays a warehouse-side screen until a
+    // Super Admin can switch into a warehouse the way they already switch
+    // pharmacy.
     const keys: ModuleKey[] = [
-      "PURCHASE",
       "SALES",
       "PRODUCTS",
       "USER_MANAGEMENT",
       "SET_UP_BUSINESS",
     ];
-    // The warehouse pair only exists at all with centralized inventory, so it
-    // is withheld when there is none — that is the organization having no such
-    // flow, not the role lacking rights.
+    // The warehouse pair only exists at all with centralized inventory, and
+    // Purchase only without it — each is withheld when its inventory shape does
+    // not apply, that being the organization having no such flow rather than
+    // the role lacking rights.
     if (centralized === true) {
       keys.push("WAREHOUSE_RECEIPT", "INTER_STORE_TRANSFER");
+    } else if (centralized === false) {
+      keys.push("PURCHASE");
     }
     return new Set(keys);
   }
@@ -260,6 +272,22 @@ export const dependsOnOrganization = (moduleKey: ModuleKey): boolean =>
   ORGANIZATION_DEPENDENT_MODULES.has(moduleKey);
 
 /**
+ * Modules a Super Admin sees listed but *locked* rather than hidden: the flow
+ * exists for this organization yet is not the role's to operate. Under
+ * centralized inventory that is Warehouse Distribution (the Warehouse Manager's
+ * screen) and Purchase (buying happens at the warehouse, not the store) — both
+ * shown with a padlock and their reason. Without centralized inventory none
+ * apply: the warehouse pair does not exist to lock, and store Purchase is a
+ * module the Super Admin can actually use, so it is shown unlocked.
+ */
+export const superAdminLockedModules = (
+  organization: OrganizationShape
+): Set<ModuleKey> =>
+  (organization.centralizedInventory ?? false) === true
+    ? new Set<ModuleKey>(["WAREHOUSE_DISTRIBUTION", "PURCHASE"])
+    : new Set<ModuleKey>();
+
+/**
  * Why a module was withheld, in the user's terms. Returns null when the module
  * is in fact available.
  */
@@ -272,7 +300,7 @@ export const denialReason = (
     return null;
   }
 
-  const centralized = organization.centralizedInventory;
+  const centralized = organization.centralizedInventory ?? false;
 
   if (
     centralized === false &&

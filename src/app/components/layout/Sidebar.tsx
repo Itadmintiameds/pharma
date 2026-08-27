@@ -24,7 +24,12 @@ import Image from "next/image";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
 import { useAccess } from "@/app/components/providers/AccessProvider";
-import { ModuleKey } from "@/access/accessControl";
+import {
+  ModuleKey,
+  bypassesPermissionChecks,
+  denialReason,
+  superAdminLockedModules,
+} from "@/access/accessControl";
 import useBusinessRegistration from "@/hooks/useBusinessRegistration";
 
 const Sidebar = () => {
@@ -38,7 +43,13 @@ const Sidebar = () => {
   // grants inside them. Both come from the access context, which the dashboard
   // layout seeds from the JWT — so role and organization are no longer looked up
   // here, and the sidebar cannot disagree with the route guards.
-  const { moduleRoutes, isModuleAvailable, organizationLoaded } = useAccess();
+  const {
+    moduleRoutes,
+    isModuleAvailable,
+    organizationLoaded,
+    roleName,
+    organization,
+  } = useAccess();
 
   const { hasApprovedPharmacy } = useBusinessRegistration();
 
@@ -173,20 +184,51 @@ const Sidebar = () => {
     },
   ];
 
-  // A module the role or organization rules out is left out entirely rather than
-  // shown with a padlock: the lock means "finish setting up to unlock this",
-  // which is a promise that does not apply to an inapplicable module.
+  // A Super Admin sees a module it cannot reach as a padlock only when the flow
+  // exists for this organization but is not the role's to operate — Warehouse
+  // Distribution and Purchase under centralized inventory. Modules the inventory
+  // shape rules out entirely are hidden, the same as for every other role — a
+  // lock there would advertise a flow the organization does not have.
+  const isSuperAdmin = bypassesPermissionChecks(roleName);
+  const superAdminLocked = superAdminLockedModules(organization);
+
+  const decorate = (
+    item: (typeof navGroups)[number]["items"][number],
+    hidden: boolean,
+    accessLocked = false,
+    accessMessage?: string
+  ) => ({ ...item, hidden, accessLocked, accessMessage });
+
   const visibleGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        if (!item.moduleKey) return true;
-        const route = moduleRoutes.find((r) => r.moduleKey === item.moduleKey);
-        if (!route) return true;
-        // Modules hinging on centralizedInventory stay hidden until the
-        // organization resolves — briefly missing beats briefly wrong.
-        return organizationLoaded && isModuleAvailable(route);
-      }),
+      items: group.items
+        .map((item) => {
+          if (!item.moduleKey) return decorate(item, false);
+          const route = moduleRoutes.find((r) => r.moduleKey === item.moduleKey);
+          if (!route) return decorate(item, false);
+
+          // Modules hinging on centralizedInventory wait for the organization to
+          // resolve before being judged — briefly missing beats briefly wrong.
+          if (!organizationLoaded) return decorate(item, true);
+
+          if (isModuleAvailable(route)) return decorate(item, false);
+
+          // Unavailable for this user. A Super Admin still sees the modules that
+          // exist for this organization but belong to another role, shown locked
+          // with the reason; everything the inventory shape rules out is hidden,
+          // the same as for any other role.
+          if (isSuperAdmin && superAdminLocked.has(route.moduleKey)) {
+            return decorate(
+              item,
+              false,
+              true,
+              denialReason(route, roleName, organization) ?? undefined
+            );
+          }
+          return decorate(item, true);
+        })
+        .filter((item) => !item.hidden),
     }))
     .filter((group) => group.items.length > 0);
 
@@ -209,13 +251,16 @@ const Sidebar = () => {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.path;
-                // Role and organization rules now decide whether an item is
-                // listed at all, so the only lock left is the original one:
-                // the module exists for this user but business setup is not done.
-                const isLocked = item.isLocked;
-                const lockedMessage = isLocked
-                  ? "Complete business setup to unlock this module"
-                  : undefined;
+                // Two reasons an item can be locked: the module is ruled out by
+                // the organization or role (Super Admin only — everyone else has
+                // it hidden), or business setup is not yet done. The access
+                // reason takes precedence and carries its own message.
+                const isLocked = item.isLocked || item.accessLocked;
+                const lockedMessage = item.accessLocked
+                  ? item.accessMessage
+                  : item.isLocked
+                    ? "Complete business setup to unlock this module"
+                    : undefined;
 
                 return (
                   <Link
