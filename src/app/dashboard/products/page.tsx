@@ -189,14 +189,29 @@ const batchStatus = (b: ProductBatchDetails): BadgeStatus => {
   return "Healthy";
 };
 
-/** Roll a package's batches up into a single status. */
+/**
+ * Roll a package's batches up into a single status. Only batches with stock are
+ * considered — an out-of-stock batch cannot make the variant look expired or
+ * near-expiry.
+ *
+ * Priority when in-stock batches disagree: Near Expiry > Healthy/Active >
+ * Expired > Out of Stock. Near expiry wins so the "sell this soon" signal is
+ * never hidden by other stock; a variant with any usable (active) stock reads as
+ * Active, and only reads Expired when every in-stock batch is expired.
+ */
 const packageStatus = (pkg: ProductPackageDetails): BadgeStatus => {
   const withStock = pkg.batches.filter((b) => b.stockQuantity > 0);
   if (withStock.length === 0) return "Out of Stock";
-  if (withStock.some((b) => daysUntil(b.expiryDate) < 0)) return "Expired batch";
-  if (withStock.some((b) => daysUntil(b.expiryDate) <= NEAR_EXPIRY_DAYS))
-    return "Near Expiry Batch";
-  return "Active";
+
+  const isNear = (b: ProductBatchDetails) => {
+    const days = daysUntil(b.expiryDate);
+    return days >= 0 && days <= NEAR_EXPIRY_DAYS;
+  };
+  const isActive = (b: ProductBatchDetails) => daysUntil(b.expiryDate) > NEAR_EXPIRY_DAYS;
+
+  if (withStock.some(isNear)) return "Near Expiry Batch";
+  if (withStock.some(isActive)) return "Active";
+  return "Expired batch";
 };
 
 const packageStock = (pkg: ProductPackageDetails): number =>
