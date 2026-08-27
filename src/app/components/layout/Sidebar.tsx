@@ -25,6 +25,7 @@ import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import { ModuleKey } from "@/access/accessControl";
+import useBusinessRegistration from "@/hooks/useBusinessRegistration";
 
 const Sidebar = () => {
   const pathname = usePathname();
@@ -39,48 +40,10 @@ const Sidebar = () => {
   // here, and the sidebar cannot disagree with the route guards.
   const { moduleRoutes, isModuleAvailable, organizationLoaded } = useAccess();
 
-  const [hasApprovedPharmacy, setHasApprovedPharmacy] = React.useState(false);
+  const { hasApprovedPharmacy } = useBusinessRegistration();
 
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
-
-  React.useEffect(() => {
-    const checkRegistrationStatus = async () => {
-      try {
-        const userRes = await fetch("/api/user-info");
-        if (!userRes.ok) return;
-        const { userId } = await userRes.json();
-        if (!userId) return;
-
-        const [{ getUserPharmacyKPIs }, { getUserById }] = await Promise.all([
-          import("@/services/SetupBusinessService"),
-          import("@/services/UserManagementService"),
-        ]);
-
-        const [kpiResponse, userDetails] = await Promise.all([
-          getUserPharmacyKPIs(String(userId)).catch(() => null),
-          getUserById(userId).catch(() => null),
-        ]);
-
-        // Unlock if this account registered an approved (ACCEPTED) pharmacy itself,
-        // OR a Super Admin already assigned it to an existing (already-approved) pharmacy
-        // via User Management — that user never goes through Setup Business/compliance.
-        // A Warehouse Manager is assigned a warehouse instead of a pharmacy, so an
-        // assigned warehouse unlocks the modules just like an assigned pharmacy does.
-        const hasOwnApprovedPharmacy = (kpiResponse?.data?.approved ?? 0) > 0;
-        const hasAssignedPharmacy = (userDetails?.pharmacies?.length ?? 0) > 0;
-        const hasAssignedWarehouse = (userDetails?.warehouses?.length ?? 0) > 0;
-
-        if (hasOwnApprovedPharmacy || hasAssignedPharmacy || hasAssignedWarehouse) {
-          setHasApprovedPharmacy(true);
-        }
-      } catch (err) {
-        console.error("Failed to check registration status for sidebar:", err);
-      }
-    };
-
-    checkRegistrationStatus();
-  }, []);
 
   const handleLogout = async () => {
     try {
@@ -106,7 +69,7 @@ const Sidebar = () => {
           name: "Dashboard",
           icon: LayoutDashboard,
           path: "/dashboard",
-          isLocked: false,
+          isLocked: !hasApprovedPharmacy,
         },
         {
           name: "Setup Business",
@@ -119,7 +82,7 @@ const Sidebar = () => {
           name: "Settings",
           icon: Settings,
           path: "/dashboard/settings",
-          isLocked: false,
+          isLocked: !hasApprovedPharmacy,
         },
       ],
     },

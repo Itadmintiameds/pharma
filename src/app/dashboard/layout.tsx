@@ -6,6 +6,7 @@ import DashboardProvider from "../components/providers/DashboardProvider";
 import AccessProvider from "../components/providers/AccessProvider";
 import PharmacyScope from "../components/providers/PharmacyScope";
 import ModuleGuard from "../components/providers/ModuleGuard";
+import BusinessSetupGuard from "../components/providers/BusinessSetupGuard";
 import {
   decodeJwtPayload,
   hasPermissionsClaim,
@@ -44,9 +45,11 @@ export default async function layout({
           <Sidebar />
 
           <main className="flex-1 overflow-y-auto p-6 bg-secondary-50">
-            <ModuleGuard>
-              <PharmacyScope>{children}</PharmacyScope>
-            </ModuleGuard>
+            <BusinessSetupGuard>
+              <ModuleGuard>
+                <PharmacyScope>{children}</PharmacyScope>
+              </ModuleGuard>
+            </BusinessSetupGuard>
           </main>
         </div>
       </div>
