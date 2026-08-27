@@ -178,6 +178,12 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
   const billToDocumentLabel =
     DOC_TYPE_LABELS[billToDocument?.documentType ?? ""] ?? "Document No";
 
+  // A warehouse bill-to (a Warehouse Manager, or a Super Admin acting as one)
+  // has no GST/PAN or licence documents — those belong to a pharmacy branch. So
+  // the block is labelled "Warehouse" and drops the GSTIN and document lines
+  // rather than printing empty dashes for fields the entity cannot have.
+  const isWarehouseBillTo = pharmacy?.pharmacyType === "WAREHOUSE";
+
   // A negative discount would inflate the payable, and one above the gross
   // would make it negative — neither is a valid invoice.
   const validateDiscount = (value: number): string => {
@@ -329,12 +335,23 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         </div>
       </div>
 
-      {/* Pharmacy Details */}
-      <div className="w-full h-[156px] p-4 bg-white border border-pneutral-200 rounded-xl flex flex-col gap-3">
-        <InfoRow label="Pharmacy" value={pharmacy?.pharmacyName || "—"} />
+      {/* Bill-to Details */}
+      <div
+        className={`w-full ${
+          isWarehouseBillTo ? "" : "h-[156px]"
+        } p-4 bg-white border border-pneutral-200 rounded-xl flex flex-col gap-3`}
+      >
+        <InfoRow
+          label={isWarehouseBillTo ? "Warehouse" : "Pharmacy"}
+          value={pharmacy?.pharmacyName || "—"}
+        />
         <InfoRow label="Address" value={billToAddress || "—"} />
-        <InfoRow label="GSTIN" value={pharmacy?.gstNumber || "—"} />
-        <InfoRow label={billToDocumentLabel} value={billToDocumentNo || "—"} />
+        {!isWarehouseBillTo && (
+          <>
+            <InfoRow label="GSTIN" value={pharmacy?.gstNumber || "—"} />
+            <InfoRow label={billToDocumentLabel} value={billToDocumentNo || "—"} />
+          </>
+        )}
       </div>
 
       {/* Data Table */}
