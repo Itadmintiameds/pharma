@@ -39,7 +39,7 @@ export const getProductExpiryKpi = async (): Promise<ProductExpiryKpi> => {
   }
 };
 
-// GET /batch-expiry-kpi -> aggregate batch-level counts for the stat cards.
+// GET /product/batch-expiry-kpi -> aggregate batch-level counts for the stat cards.
 export const getBatchExpiryKpi = async (): Promise<BatchExpiryKpi> => {
   try {
     const res = await api.get<BatchExpiryKpiResponse>("product/batch-expiry-kpi");

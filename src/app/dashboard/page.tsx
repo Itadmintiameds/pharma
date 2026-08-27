@@ -1,38 +1,20 @@
+'use client';
+
 import React from 'react';
+import FeatureComingSoon from '@/app/components/common/FeatureComingSoon';
+import SuperAdminDashboard from './dashboardComponents/superAdmin/SuperAdminDashboard';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 const Page = () => {
-  return (
-    <div className="flex items-center justify-center w-full py-16">
-      <div className="animate-modalFadeSlide bg-white rounded-2xl p-8 shadow-sm border border-pneutral-100 flex flex-col items-center justify-center gap-4 text-center shrink-0 w-full max-w-112.5">
-        <div className="relative h-16 w-16 flex items-center justify-center">
-          <div className="animate-pulse absolute inset-0 bg-secondary-50 rounded-full"></div>
-          <div className="animate-rocketOrbit absolute inset-0">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-              className="absolute left-1/2 top-0 w-6 h-6 text-secondary-700"
-              style={{ transform: 'translateX(-50%) rotate(45deg)' }}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15.59 14.37a6 6 0 0 1-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 0 0 6.16-12.12A14.98 14.98 0 0 0 9.631 8.41m5.96 5.96a14.926 14.926 0 0 1-5.841 2.58m-.119-8.54a6 6 0 0 0-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 0 0-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 0 1-2.448-2.448 14.9 14.9 0 0 1 .06-.312m-2.24 2.39a4.493 4.493 0 0 0-1.757 4.306 4.493 4.493 0 0 0 4.306-1.758M16.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Z"
-              />
-            </svg>
-          </div>
-        </div>
-        <div className="flex flex-col gap-2 w-full">
-          <h2 className="text-[20px] font-bold text-pneutral-900 font-work-sans">Feature Coming Soon</h2>
-          <p className="text-p4 text-pneutral-500 font-noto-sans leading-relaxed w-full">
-            We&apos;re working on this feature. Please check back later.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
+  const { role } = useCurrentUser();
+
+  // Admin / Desk / Warehouse Manager dashboards are follow-up passes reusing
+  // the same StatCard/ChartCard/useCurrentUser foundation built for this one.
+  if (role === 'superadmin') {
+    return <SuperAdminDashboard />;
+  }
+
+  return <FeatureComingSoon />;
 };
 
 export default Page;

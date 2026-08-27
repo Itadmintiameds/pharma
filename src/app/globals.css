@@ -613,6 +613,12 @@
   }
 }
 
+/* recharts focuses each pie sector/bar on click for keyboard a11y, which
+   draws the browser's default black focus outline on the SVG shape. */
+.recharts-wrapper :focus {
+  outline: none;
+}
+
 .animate-rocketOrbit {
   animation: rocketOrbit 1.8s linear infinite;
 }
