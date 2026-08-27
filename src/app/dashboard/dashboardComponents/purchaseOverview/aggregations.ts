@@ -26,3 +26,24 @@ export const getPurchaseSpendByDay = (
 
   return series;
 };
+
+/** Total value of every purchase (all time). */
+export const getTotalPurchaseAmount = (purchases: PurchaseData[]): number =>
+  purchases.reduce((sum, purchase) => sum + (purchase.totalNetAmount ?? 0), 0);
+
+/**
+ * Total product quantity across every purchase's line items (all time).
+ * getAllPurchases() doesn't always nest purchaseDetails on every row (see the
+ * same caveat in the Sales & Billing invoice code), so this can undercount —
+ * best available without an extra per-purchase fetch.
+ */
+export const getTotalProductsPurchased = (purchases: PurchaseData[]): number =>
+  purchases.reduce(
+    (sum, purchase) =>
+      sum +
+      (purchase.purchaseDetails ?? []).reduce(
+        (lineSum, line) => lineSum + (line.purchaseQuantity ?? 0),
+        0
+      ),
+    0
+  );

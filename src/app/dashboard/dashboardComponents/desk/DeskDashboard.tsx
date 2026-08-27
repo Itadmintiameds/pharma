@@ -5,7 +5,12 @@ import SalesOverviewSection from "../salesOverview/SalesOverviewSection";
 import TodaysSnapshotSection from "../todaysSnapshot/TodaysSnapshotSection";
 import StockAlertsSection from "../stockAlerts/StockAlertsSection";
 
-const AdminDashboard = () => {
+/**
+ * Desk gets the same SalesOverviewSection/TodaysSnapshotSection/
+ * StockAlertsSection Admin uses — front-counter staff need the same billing
+ * and stock picture, just without Admin's org-management scope.
+ */
+const DeskDashboard = () => {
   return (
     <div className="flex w-full flex-col gap-6">
       <SalesOverviewSection />
@@ -15,4 +20,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default DeskDashboard;
