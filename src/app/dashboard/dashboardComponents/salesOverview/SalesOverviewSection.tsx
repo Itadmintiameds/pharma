@@ -59,6 +59,14 @@ interface LegendEntry {
   color: string;
 }
 
+/** Shown in place of a chart when its underlying data has no values yet. */
+const NoChartData = ({ height }: { height: number }) => (
+  <div className="flex flex-col items-center justify-center gap-1" style={{ height }}>
+    <p className="text-p2 font-medium text-pneutral-500">No data to display</p>
+    <p className="text-p3 text-pneutral-400">Data will appear here once available</p>
+  </div>
+);
+
 /** Small, evenly-spaced legend — recharts' default is cramped here. */
 const DoughnutLegend = ({ payload }: { payload?: LegendEntry[] }) => (
   <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-2 pt-3">
@@ -86,6 +94,10 @@ const SalesOverviewSection = () => {
   const [paymentBreakdown, setPaymentBreakdown] = useState<PaymentStatusSlice[]>([]);
   const [patientVisits, setPatientVisits] = useState<CustomerTypeSlice[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const hasRevenue = revenueSeries.some((point) => point.value > 0);
+  const hasPaymentData = paymentBreakdown.some((slice) => slice.count > 0);
+  const hasVisitData = patientVisits.some((slice) => slice.count > 0);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,7 +128,10 @@ const SalesOverviewSection = () => {
         <div className="flex flex-wrap gap-4">
           <div className="min-w-77 flex-1">
             <ChartCard title="Daily Revenue" subtitle="Last 30 days">
-              <ResponsiveContainer width="100%" height={260}>
+              {!hasRevenue ? (
+                <NoChartData height={260} />
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
                 <AreaChart data={revenueSeries} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
@@ -162,13 +177,17 @@ const SalesOverviewSection = () => {
                     activeDot={{ r: 5, strokeWidth: 2, stroke: "var(--color-base-white)" }}
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              )}
             </ChartCard>
           </div>
 
           <div className="min-w-77 flex-1">
             <ChartCard title="Payment Status" subtitle="All bills">
-              <ResponsiveContainer width="100%" height={260}>
+              {!hasPaymentData ? (
+                <NoChartData height={260} />
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie
                     data={paymentBreakdown}
@@ -194,13 +213,17 @@ const SalesOverviewSection = () => {
                   />
                   <Legend content={<DoughnutLegend />} />
                 </PieChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              )}
             </ChartCard>
           </div>
 
           <div className="min-w-77 flex-1">
             <ChartCard title="Patient Visits" subtitle="By visit type">
-              <ResponsiveContainer width="100%" height={260}>
+              {!hasVisitData ? (
+                <NoChartData height={260} />
+              ) : (
+                <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie
                     data={patientVisits}
@@ -229,7 +252,8 @@ const SalesOverviewSection = () => {
                   />
                   <Legend content={<DoughnutLegend />} />
                 </PieChart>
-              </ResponsiveContainer>
+                </ResponsiveContainer>
+              )}
             </ChartCard>
           </div>
         </div>
