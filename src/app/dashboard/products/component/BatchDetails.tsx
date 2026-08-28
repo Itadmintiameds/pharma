@@ -193,6 +193,31 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     }
   };
 
+  /**
+   * Quantities are counts of units — half a strip cannot be received or given
+   * free — so the decimal point is refused at the keystroke rather than the
+   * value being rounded later. `type="number"` also lets "e" through as an
+   * exponent and a leading sign, which are equally meaningless here.
+   */
+  const blockNonIntegerKeys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (['.', ',', 'e', 'E', '+', '-'].includes(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  /**
+   * Paste and autofill bypass the key guard, so the value is checked too. The
+   * whole value is dropped rather than stripped: turning a pasted "1.5" into
+   * "15" would be worse than ignoring it.
+   */
+  const handleIntegerChange = (
+    field: 'purchaseQuantity' | 'freeQuantity',
+    value: string
+  ) => {
+    if (!/^\d*$/.test(value)) return;
+    handleChange(field, value);
+  };
+
   const handleChange = (field: keyof typeof formData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // A locked batch only accepts the three purchase fields, which the schema
@@ -216,6 +241,17 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
         freeUnit: pair.freeUnit ? prev.freeUnit : '',
         freeQuantity: pair.freeQuantity ? prev.freeQuantity : ''
       }));
+    }
+
+    // Queued after validateField above: that clears the error on the field it
+    // just checked, which would drop this rule's message for the very field
+    // being typed. Last writer wins, so the ordering check goes last.
+    if (
+      field === 'purchasePricePerBox' ||
+      field === 'mrpPerBox' ||
+      field === 'sellingPricePerBox'
+    ) {
+      syncPriceOrderErrors(field, value);
     }
 
     // The batch number just changed, so any prior duplicate check is stale.
@@ -306,6 +342,76 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     freeGoodsErrors(formData.freeQuantity, formData.freeUnit);
 
   /**
+   * Stock cannot be listed below what it cost: MRP and selling price must both
+   * be at least the purchase price. Checked per purchase unit only — the
+   * per-smallest-unit fields are that same price divided by one pack size, so
+   * they hold the ordering automatically and a second message about them would
+   * just repeat this one.
+   *
+   * Blank fields are left to the presence checks; only filled numbers are
+   * compared, so this never fires while a row is half typed.
+   */
+  const PRICE_ORDER_PREFIX = {
+    mrpPerBox: 'MRP cannot be less than the purchase price',
+    sellingPricePerBox: 'Selling price cannot be less than the purchase price',
+  } as const;
+
+  const priceOrderErrorsFor = (data: typeof formData): Record<string, string> => {
+    const next: Record<string, string> = {};
+
+    const asNumber = (value: string) => {
+      const raw = String(value).trim();
+      if (raw === '') return null;
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const purchasePrice = asNumber(data.purchasePricePerBox);
+    if (purchasePrice === null) return next;
+
+    const mrp = asNumber(data.mrpPerBox);
+    if (mrp !== null && mrp < purchasePrice) {
+      next.mrpPerBox = `${PRICE_ORDER_PREFIX.mrpPerBox} (₹${purchasePrice})`;
+    }
+
+    const sellingPrice = asNumber(data.sellingPricePerBox);
+    if (sellingPrice !== null && sellingPrice < purchasePrice) {
+      next.sellingPricePerBox = `${PRICE_ORDER_PREFIX.sellingPricePerBox} (₹${purchasePrice})`;
+    }
+
+    return next;
+  };
+
+  const priceOrderErrors = () => priceOrderErrorsFor(formData);
+
+  /**
+   * Re-checks the ordering as any of the three prices is typed, so raising the
+   * purchase price flags MRP straight away and correcting either clears it.
+   * Only this rule's own messages are cleared — a schema error standing against
+   * the same field (required, negative) is left alone.
+   */
+  const syncPriceOrderErrors = (
+    field: keyof typeof formData,
+    value: string
+  ) => {
+    const order = priceOrderErrorsFor({ ...formData, [field]: value });
+
+    setErrors(prev => {
+      const next = { ...prev };
+      (Object.keys(PRICE_ORDER_PREFIX) as (keyof typeof PRICE_ORDER_PREFIX)[]).forEach(
+        (key) => {
+          if (order[key]) {
+            next[key] = order[key];
+          } else if (prev[key]?.startsWith(PRICE_ORDER_PREFIX[key])) {
+            next[key] = '';
+          }
+        }
+      );
+      return next;
+    });
+  };
+
+  /**
    * For a saved batch only the purchase fields are user-supplied, and of those
    * just the quantity is mandatory — free goods are optional.
    */
@@ -316,10 +422,15 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       next.purchaseQuantity = 'Purchase Quantity is required';
     } else if (Number(formData.purchaseQuantity) <= 0) {
       next.purchaseQuantity = 'Must be greater than 0';
+    } else if (!Number.isInteger(Number(formData.purchaseQuantity))) {
+      next.purchaseQuantity = 'Must be a whole number';
     }
 
-    if (String(formData.freeQuantity).trim() !== '' && Number(formData.freeQuantity) < 0) {
+    const freeQuantity = String(formData.freeQuantity).trim();
+    if (freeQuantity !== '' && Number(formData.freeQuantity) < 0) {
       next.freeQuantity = 'Cannot be negative';
+    } else if (freeQuantity !== '' && !Number.isInteger(Number(freeQuantity))) {
+      next.freeQuantity = 'Must be a whole number';
     }
 
     // The negative-quantity message is the more specific one, so it wins.
@@ -349,6 +460,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       }
 
       if (isLocked) {
+        // A saved batch's prices are the backend's, so only the purchase fields
+        // are judged here — the price ordering is not this form's to enforce.
         const nextErrors = validatePurchaseFields();
         setErrors(nextErrors);
         return !hasErrors(nextErrors);
@@ -373,6 +486,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       );
 
       Object.assign(nextErrors, validateFreeGoods());
+      // After the schema, so "must be at least the purchase price" replaces a
+      // bare "is required" only once a value is actually there.
+      Object.assign(nextErrors, priceOrderErrors());
 
       // A duplicate found on blur takes priority over the schema's own message.
       if (batchExistsError) nextErrors.batchNumber = batchExistsError;
@@ -499,9 +615,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               label="Purchase Quantity"
               required
               type="number"
+              min={0}
+              step={1}
               placeholder="0"
               value={formData.purchaseQuantity}
-              onChange={(e) => handleChange('purchaseQuantity', e.target.value)}
+              onKeyDown={blockNonIntegerKeys}
+              onChange={(e) =>
+                handleIntegerChange('purchaseQuantity', e.target.value)
+              }
               error={errors.purchaseQuantity}
               disabled={awaitingBatchChoice}
             />
@@ -520,9 +641,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
             <Input
               label="Free Quantity"
               type="number"
+              min={0}
+              step={1}
               placeholder="0"
               value={formData.freeQuantity}
-              onChange={(e) => handleChange('freeQuantity', e.target.value)}
+              onKeyDown={blockNonIntegerKeys}
+              onChange={(e) =>
+                handleIntegerChange('freeQuantity', e.target.value)
+              }
               error={errors.freeQuantity}
               disabled={awaitingBatchChoice}
             />

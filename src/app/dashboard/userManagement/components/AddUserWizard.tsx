@@ -79,6 +79,14 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
    */
   const canUploadImage = !isEdit || !isOwnAccount || isSuperAdmin;
 
+  // A Super Admin is the one role allowed to edit its own account, but not to
+  // rewrite its own authority: designation, location and the permission matrix
+  // are read-only there. Department stays editable — it says which part of the
+  // business the person belongs to, not what they may do. No other role's
+  // behaviour changes.
+  const isEditingOwnAuthority = isEdit && isOwnAccount && isSuperAdmin;
+
+
   const [otp, setOtp] = useState<string[]>(["", "", "", "", "", ""]);
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [showOtp, setShowOtp] = useState(false);
@@ -122,6 +130,23 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
   const selectedRoleName = roles.find(
     r => String(r.roleId) === String(formData.designation)
   )?.roleName ?? null;
+
+  // "All Dept" belongs to a Super Admin, who oversees every department rather
+  // than sitting in one. It follows the account's own role, so it is not offered
+  // when assigning a department to anyone else — and stays listed for an account
+  // already set to it, so the field never renders blank.
+  const departmentOptions = useMemo(() => {
+    const base = [
+      { label: 'Pharmacy', value: 'Pharmacy' },
+      { label: 'Operations', value: 'Operations' },
+    ];
+    const allDept = { label: 'All Dept', value: 'All Dept' };
+
+    return isSuperAdminRole(selectedRoleName) ||
+      formData.department === allDept.value
+      ? [...base, allDept]
+      : base;
+  }, [selectedRoleName, formData.department]);
 
   // Which designations may be handed out here:
   //  - Super Admin never is: the role owns the organization rather than being
@@ -390,6 +415,11 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
         // "Profile image updated" row on top of USER_CREATED.
         await uploadUserImage(newUserId, imageFile, true);
       }
+
+      // Re-read the listing now rather than on close, so the new account is
+      // already there when the wizard is dismissed — the update path below does
+      // the same.
+      if (onSaved) onSaved();
 
       setStep(3); // Advance to preview step on success instead of closing
     } catch (err) {
@@ -976,10 +1006,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           label="Department"
           required
           placeholder="Pharmacy"
-          options={[
-            { label: 'Pharmacy', value: 'Pharmacy' },
-            { label: 'Operations', value: 'Operations' }
-          ]}
+          options={departmentOptions}
           value={formData.department}
           onChange={(val) => {
             setFormData({ ...formData, department: val });
@@ -991,6 +1018,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
         <Dropdown
           label="Designation"
           required
+          disabled={isEditingOwnAuthority}
           placeholder="Select Designation"
           options={assignableRoles.map(r => ({ label: r.roleName, value: r.roleId }))}
           value={formData.designation}
@@ -1009,6 +1037,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           required
           searchable
           multiple
+          disabled={isEditingOwnAuthority}
           placeholder="Search Location...."
           options={isWarehouseManager
             ? warehouses.map(w => ({
@@ -1094,7 +1123,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
       <div className="w-full flex-1 flex gap-[10px] items-stretch min-h-0">
         {/* On an edit the matrix opens with what the account already has. */}
         <RolesPermissions
-          mode="assign"
+          mode={isEditingOwnAuthority ? 'view' : 'assign'}
           assignedPermissions={isEdit ? rolePermissions : undefined}
           onPermissionsChange={setRolePermissions}
           allowedModuleNames={allowedModuleNames}

@@ -176,6 +176,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
         options={dosageFormOptions}
         value={formData.dosageForm}
         onChange={(val) => handleChange('dosageForm', val)}
+        error={errors.dosageForm}
       />
       <Input 
         label="Strength / Composition" 

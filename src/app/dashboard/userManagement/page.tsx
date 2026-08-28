@@ -219,7 +219,10 @@ const page = () => {
   return (
     <>
       {showAddUser ? (
-        <AddUserWizard onBack={() => setShowAddUser(false)} />
+        <AddUserWizard
+          onBack={() => setShowAddUser(false)}
+          onSaved={fetchUsers}
+        />
       ) : (
         <div className="flex flex-col gap-4">
           <div className="flex justify-between">
