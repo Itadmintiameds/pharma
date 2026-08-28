@@ -8,7 +8,7 @@ import {
   ShieldAlert,
   Settings,
   ShoppingCart,
-  Package,
+  // Package, // only used by the commented-out Stock Management item below
   Receipt,
   Box,
   Truck,
@@ -109,12 +109,13 @@ const Sidebar = () => {
           path: "/dashboard/purchase",
           isLocked: !hasApprovedPharmacy,
         },
-        {
-          name: "Stock Management",
-          icon: Package,
-          path: "/dashboard/stockManagement",
-          isLocked: !isBusinessRegistered,
-        },
+        // Stock Management is hidden for now — uncomment to bring it back.
+        // {
+        //   name: "Stock Management",
+        //   icon: Package,
+        //   path: "/dashboard/stockManagement",
+        //   isLocked: !isBusinessRegistered,
+        // },
         {
           name: "Sales / Billing",
           moduleKey: "SALES" as ModuleKey,
