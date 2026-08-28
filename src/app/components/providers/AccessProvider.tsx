@@ -90,6 +90,7 @@ export default function AccessProvider({
   const [organization, setOrganization] = useState<OrganizationShape>({
     centralizedInventory: null,
     organizationType: null,
+    organizationName: null,
   });
   const [organizationLoaded, setOrganizationLoaded] = useState(false);
 
@@ -112,6 +113,7 @@ export default function AccessProvider({
               ? org.centralizedInventory
               : null,
           organizationType: org?.organizationType ?? null,
+          organizationName: org?.organizationName ?? null,
         });
       })
       .catch((error) => {

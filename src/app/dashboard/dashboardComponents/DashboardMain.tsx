@@ -5,6 +5,7 @@ import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import { showToast } from "@/app/components/common/Toast";
 import { deletePharmacyRegistration, getPharmacyRegistrationDetails, getUserOrganization, getUserPharmacyKPIs, getUserPharmacyRegistrations } from "@/services/SetupBusinessService";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { isSingleLocationOrganization } from "@/access/accessControl";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -179,6 +180,34 @@ export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainPr
   const [applicationCards, setApplicationCards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [organizationType, setOrganizationType] = useState<string>("");
+  // Application Status filters. Both were rendered but wired to nothing.
+  const [locationQuery, setLocationQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+
+  // A single-location organization runs one store: neither adding a location nor
+  // creating another business setup applies, so both controls are left out
+  // rather than shown greyed — a disabled button invites a click that can never
+  // work.
+  const isSingleLocationOrg = isSingleLocationOrganization(organizationType);
+
+  // Business setup is a first-time action. Once any registration exists, the way
+  // to grow is "Add Location", so the create button is dropped. Held back until
+  // the fetch settles, or it would flash on screen and then vanish.
+  const hasAnyRegistration =
+    applicationCards.length > 0 || kpis.totalPharmacies > 0;
+  const canCreateFirstBusiness =
+    !loading && !isSingleLocationOrg && !hasAnyRegistration;
+
+  // Search matches the location name; the status filter uses the mapped status
+  // the cards already carry, so both agree with what is on screen.
+  const filteredCards = applicationCards.filter((card) => {
+    const query = locationQuery.trim().toLowerCase();
+    if (query && !String(card.hospitalName ?? "").toLowerCase().includes(query)) {
+      return false;
+    }
+    return statusFilter === "ALL" || card.status === statusFilter;
+  });
 
   useEffect(() => {
     const fetchPharmacies = async () => {
@@ -485,7 +514,7 @@ export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainPr
             <div className="text-h4 font-semibold text-pneutral-900">
               Welcome to TiaMeds
             </div>
-            {onCreateBusinessSetup && (
+            {onCreateBusinessSetup && canCreateFirstBusiness && (
               <Button variant="primary" className="w-52" onClick={onCreateBusinessSetup}>
                 Create Business Setup
               </Button>
@@ -540,41 +569,79 @@ export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainPr
 
               <input
                 type="text"
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
                 placeholder="Search Location..."
                 className="w-full bg-transparent outline-none text-p2 font-normal placeholder:text-pneutral-400"
               />
             </div>
-            <div>
-              <button className="w-[117px] h-[36px] border-[1.5px] border-pneutral-300 rounded-lg text-p2 font-normal flex items-center justify-center gap-2">
-                All Status
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setStatusMenuOpen((prev) => !prev)}
+                className="w-[117px] h-[36px] border-[1.5px] border-pneutral-300 rounded-lg text-p2 font-normal flex items-center justify-center gap-2"
+              >
+                <span className="truncate">
+                  {statusFilter === "ALL"
+                    ? "All Status"
+                    : STATUS_CONFIG[statusFilter as keyof typeof STATUS_CONFIG]
+                        ?.label ?? "All Status"}
+                </span>
                 <Image
                   src="/BusinessSetup/DropdownIcon.svg"
                   alt="Dropdown"
                   width={16}
                   height={16}
+                  className={statusMenuOpen ? "rotate-180" : ""}
                 />
               </button>
+
+              {statusMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-[160px] bg-white border border-pneutral-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  {[
+                    ["ALL", "All Status"] as const,
+                    ...(Object.keys(STATUS_CONFIG) as (keyof typeof STATUS_CONFIG)[]).map(
+                      (key) => [key, STATUS_CONFIG[key].label] as const
+                    ),
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter(value);
+                        setStatusMenuOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 text-p2 font-normal hover:bg-pneutral-50 ${
+                        statusFilter === value
+                          ? "bg-[#F3EDFF] text-[#7E3AF2]"
+                          : "text-pneutral-900"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            <div>
-              <button
-                onClick={() => {
-                  if (organizationType?.toLowerCase() === "multiple") {
-                    router.push("/dashboard/setupBusiness");
+            {organizationType?.toLowerCase() === "multiple" && (
+              <div>
+                <button
+                  onClick={() =>
+                    router.push("/dashboard/setupBusiness?view=add")
                   }
-                }}
-                disabled={organizationType?.toLowerCase() !== "multiple"}
-                className={`w-[139px] h-[36px] border-[1.5px] border-secondary-700 rounded-lg text-label-l3 font-medium text-secondary-700 flex items-center justify-center gap-2 ${organizationType?.toLowerCase() !== "multiple" ? "opacity-50 cursor-not-allowed" : "hover:bg-secondary-50 transition-colors"}`}
-              >
-                <Image
-                  src="/BusinessSetup/PlusIcon.svg"
-                  alt="Add"
-                  width={16}
-                  height={16}
-                />
-                Add Location
-              </button>
-            </div>
+                  className="w-[139px] h-[36px] border-[1.5px] border-secondary-700 rounded-lg text-label-l3 font-medium text-secondary-700 flex items-center justify-center gap-2 hover:bg-secondary-50 transition-colors"
+                >
+                  <Image
+                    src="/BusinessSetup/PlusIcon.svg"
+                    alt="Add"
+                    width={16}
+                    height={16}
+                  />
+                  Add Location
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -618,11 +685,13 @@ export default function DashboardMain({ onCreateBusinessSetup }: DashboardMainPr
             <div className="col-span-3 py-10 flex items-center justify-center text-pneutral-500">
               Loading applications...
             </div>
-          ) : applicationCards.length === 0 ? (
+          ) : filteredCards.length === 0 ? (
             <div className="col-span-3 py-10 flex items-center justify-center text-pneutral-500">
-              No applications found.
+              {applicationCards.length === 0
+                ? "No applications found."
+                : "No applications match this search."}
             </div>
-          ) : applicationCards.map((card, index) => {
+          ) : filteredCards.map((card, index) => {
             const config =
               STATUS_CONFIG[card.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.NOT_STARTED;
 

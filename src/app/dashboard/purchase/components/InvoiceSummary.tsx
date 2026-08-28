@@ -29,19 +29,6 @@ const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, v
   </div>
 );
 
-/** A bank-detail line: label, colon, then the value on the same 20px baseline. */
-const BankRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
-  <div className="h-5 flex items-center gap-2 text-[14px] leading-5">
-    {/* Fixed, not content-width: "Bank Name" and "A/C No" are different
-        lengths, so a shrink-to-fit label put each row's colon at its own
-        indent and the card read as two unrelated lines. Sized to the longest
-        label in either column, which lines every colon up down the card. */}
-    <span className="w-[88px] shrink-0 font-normal text-pneutral-800 whitespace-nowrap">{label}</span>
-    <span className="w-[5px] shrink-0 font-normal text-pneutral-800">:</span>
-    <span className="flex-1 min-w-0 truncate font-semibold text-pneutral-900">{value}</span>
-  </div>
-);
-
 /** One 32px total line in the payable card. */
 const TotalRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <div className="w-full h-8 py-1 flex items-center justify-between">
@@ -394,17 +381,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
 
           <div className="w-full h-[144px] flex gap-3">
 
-            {/* Bank Details — two label columns, top and bottom rows */}
-            <div className="flex-[319] min-w-0 h-full p-4 bg-white border border-pneutral-200 rounded-lg flex gap-3">
-              <div className="flex-1 min-w-0 h-[112px] flex flex-col justify-between">
-                <BankRow label="Bank Name" value="" />
-                <BankRow label="A/C No" value="" />
-              </div>
-              <div className="flex-1 min-w-0 h-[112px] flex flex-col justify-between">
-                <BankRow label="Branch" value="" />
-                <BankRow label="IFSC" value="" />
-              </div>
-            </div>
+            {/* Bank Details removed for now: nothing on the purchase or
+                pharmacy payload carries the account, so the card only ever
+                rendered four empty rows (Bank Name / A/C No / Branch / IFSC).
+                Restore it here once the API returns them. */}
 
             {/* Items / QTY / Rounding */}
             <div className="flex-[230] min-w-0 h-full bg-white border border-pneutral-200 rounded-lg flex flex-col justify-between overflow-hidden">

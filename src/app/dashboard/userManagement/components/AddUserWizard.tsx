@@ -12,7 +12,12 @@ import { getWarehousesByOrganizationId } from '@/services/SetupWarehouseService'
 import { sendEmailOtp, verifyEmailOtp } from '@/services/AuthService';
 import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
-import { availableModuleKeys, isSuperAdminRole } from '@/access/accessControl';
+import {
+  availableModuleKeys,
+  isSingleLocationOrganization,
+  isSuperAdminRole,
+  isWarehouseManagerRole as roleNameIsWarehouseManager,
+} from '@/access/accessControl';
 import { useAccess } from '@/app/components/providers/AccessProvider';
 
 interface AddUserWizardProps {
@@ -118,21 +123,26 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     r => String(r.roleId) === String(formData.designation)
   )?.roleName ?? null;
 
-  // Super Admin is not an assignable designation — the role owns the
-  // organization, so it is not something a user is given from this screen. It
-  // stays out of the dropdown while still resolving for an account that
-  // already holds it (see selectedRoleName above).
-  // The one exception is an account that already holds it: editing such a user
-  // would otherwise show an empty Designation, reading as though the role had
-  // been cleared.
+  // Which designations may be handed out here:
+  //  - Super Admin never is: the role owns the organization rather than being
+  //    granted from this screen.
+  //  - Warehouse Manager only in a multi-location organization; a single-location
+  //    one has no warehouse for anyone to manage.
+  // Either is still listed when the account being edited already holds it —
+  // filtering it out would leave Designation looking cleared.
+  const isSingleLocationOrg = isSingleLocationOrganization(
+    organization.organizationType
+  );
+
   const assignableRoles = useMemo(
     () =>
-      roles.filter(
-        r =>
-          !isSuperAdminRole(r.roleName) ||
-          String(r.roleId) === String(formData.designation)
-      ),
-    [roles, formData.designation]
+      roles.filter(r => {
+        if (String(r.roleId) === String(formData.designation)) return true;
+        if (isSuperAdminRole(r.roleName)) return false;
+        if (isSingleLocationOrg && roleNameIsWarehouseManager(r.roleName)) return false;
+        return true;
+      }),
+    [roles, formData.designation, isSingleLocationOrg]
   );
 
   const allowedModuleNames = useMemo(
@@ -160,20 +170,26 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     setRolePermissions({});
   }, [allowedSignature]);
 
-  // With only one warehouse in the org there is nothing for a Warehouse Manager
-  // to choose, so pre-select it. Unlike before it stays editable: the field is a
-  // genuine multi-select now, and a second warehouse may be added later.
+  // With only one location to assign there is nothing to choose, so it is filled
+  // in: the org's single warehouse for a Warehouse Manager, and the single
+  // pharmacy of a single-location organization for everyone else. It stays
+  // editable — the fields are genuine multi-selects, and a second location may
+  // be added later.
   useEffect(() => {
-    if (warehouses.length !== 1) return;
     const role = roles.find(r => String(r.roleId) === String(formData.designation));
-    const isWM = role?.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
-    if (!isWM) return;
-    const onlyId = warehouses[0].warehouseId;
+    if (!role) return;
+    const isWM = role.roleName?.trim().toUpperCase() === 'WAREHOUSE MANAGER';
+
+    const onlyId = isWM
+      ? (warehouses.length === 1 ? warehouses[0].warehouseId : null)
+      : (cities.length === 1 ? cities[0].pharmacyId : null);
+    if (!onlyId) return;
+
     setFormData(prev =>
       prev.location.length > 0 ? prev : { ...prev, location: [onlyId] }
     );
     setErrors(prev => (prev.location ? { ...prev, location: '' } : prev));
-  }, [formData.designation, roles, warehouses]);
+  }, [formData.designation, roles, warehouses, cities]);
 
   // Editing: fill the form from the account itself, so the wizard opens showing
   // what the user is today rather than an empty form.

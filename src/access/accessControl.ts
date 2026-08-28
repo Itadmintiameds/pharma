@@ -163,6 +163,15 @@ export const isSuperAdminRole = (roleName?: string | null): boolean =>
   normalizeRole(roleName) === "superadmin";
 
 /**
+ * A single-location organization runs one store: there is nothing to add, and
+ * no warehouse for anyone to manage. Derived from organizationType on
+ * GET /organization/getUserOrganization ("Single" / "Multiple").
+ */
+export const isSingleLocationOrganization = (
+  organizationType?: string | null
+): boolean => (organizationType || "").trim().toLowerCase() === "single";
+
+/**
  * A Super Admin oversees the whole organization, so the per-action grants are
  * not applied to that role — it may do anything inside a module it can reach.
  * Which modules it can reach is still decided by `availableModuleKeys`.
@@ -179,6 +188,8 @@ export interface OrganizationShape {
    */
   centralizedInventory: boolean | null;
   organizationType?: string | null;
+  /** Used as a last-resort label for the location scope in the header. */
+  organizationName?: string | null;
 }
 
 /**

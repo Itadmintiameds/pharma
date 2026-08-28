@@ -36,7 +36,7 @@ const Navbar = ({ userRole }: NavbarProps) => {
   // A Super Admin (under centralized inventory) can switch into a warehouse and
   // operate it; the toggle below drives that. Everyone else uses the single
   // location control their role implies.
-  const { canActAsWarehouse, actingAsWarehouse } = useAccess();
+  const { canActAsWarehouse, actingAsWarehouse, organization } = useAccess();
 
   // Switching context clears any half-built purchase and reloads every screen,
   // so the toggle asks first. `pendingScope` holds the target actingAsWarehouse
@@ -65,6 +65,19 @@ const Navbar = ({ userRole }: NavbarProps) => {
       })),
     [pharmacies],
   );
+
+  /**
+   * What the header shows when there is nothing to switch between. The selected
+   * pharmacy names it; the only one in the list covers the moment before the
+   * store has settled on it. Failing both — an account with no pharmacy assigned
+   * yet — the organization names the scope, which for a single-location setup is
+   * the location. "Pharmacy" is the last resort and means nothing is known.
+   */
+  const soleLocationLabel =
+    selectedPharmacy?.pharmacyName?.trim() ||
+    pharmacies[0]?.pharmacyName?.trim() ||
+    organization.organizationName?.trim() ||
+    "Pharmacy";
 
   const warehouseOptions: DropdownOption[] = useMemo(
     () =>
@@ -217,19 +230,31 @@ const Navbar = ({ userRole }: NavbarProps) => {
                 className="w-full origin-center scale-[0.82]"
                 style={{ marginTop: "-8px", marginBottom: "-8px" }}
               >
-                <Dropdown
-                  options={pharmacyOptions}
-                  value={selectedPharmacy?.pharmacyId}
-                  onChange={(value) => {
-                    const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
+                {pharmacies.length > 1 ? (
+                  <Dropdown
+                    options={pharmacyOptions}
+                    value={selectedPharmacy?.pharmacyId}
+                    onChange={(value) => {
+                      const pharmacy = pharmacies.find((p) => p.pharmacyId === value);
 
-                    if (pharmacy) {
-                      selectPharmacy(pharmacy);
-                    }
-                  }}
-                  placeholder="Select Pharmacy"
-                  isLoading={loading}
-                />
+                      if (pharmacy) {
+                        selectPharmacy(pharmacy);
+                      }
+                    }}
+                    placeholder="Select Pharmacy"
+                    isLoading={loading}
+                  />
+                ) : (
+                  // A single-location setup — and a multi-location org where this
+                  // user is assigned one store — has nothing to choose between, so
+                  // it reads as a label rather than a dropdown that cannot be used.
+                  // Mirrors the warehouse side above.
+                  <div className="flex h-12 w-full items-center rounded-md border border-pneutral-300 bg-pneutral-50 px-3 text-p4 text-pneutral-900">
+                    <span className="truncate" title={soleLocationLabel}>
+                      {loading ? "Loading..." : soleLocationLabel}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>

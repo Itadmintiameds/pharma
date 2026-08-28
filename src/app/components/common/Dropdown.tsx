@@ -248,6 +248,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           />
         ) : (
           <span
+            title={displayValue || undefined}
             className={clsx(
               "text-p4 truncate w-full flex-1",
               !displayValue || isLoading
@@ -375,7 +376,12 @@ const Dropdown: React.FC<DropdownProps> = ({
                         }}
                       />
                     )}
-                    <span className="truncate">{option.label}</span>
+                    {/* Truncated labels (long product names, "store - city"
+                        pairs) are unreadable at this width, so the full text is
+                        available on hover. */}
+                    <span className="truncate" title={option.label}>
+                      {option.label}
+                    </span>
                   </div>
                 );
               })
