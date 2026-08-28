@@ -257,7 +257,7 @@ const buildRequestedProductColumns = (
   availableStockByBatchId: Record<string, number>
 ): RequestedProductColumn[] => [
   {
-    header: '#',
+    header: 'Sl No.',
     width: 'w-[6%]',
     align: 'center',
     render: (_row, index) => (

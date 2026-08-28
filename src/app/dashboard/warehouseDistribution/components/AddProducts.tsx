@@ -47,6 +47,22 @@ type BatchApiRow = {
 const batchKey = (productId: string, batchId: string, packagingId: string) =>
   `${productId}-${batchId}-${packagingId}`
 
+// Batches with no remaining stock or a lapsed expiry can't be allocated, so
+// they're dropped before the product list is even built.
+const isBatchExpired = (expiryDate: string): boolean => {
+  const date = new Date(expiryDate)
+  if (Number.isNaN(date.getTime())) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return date < today
+}
+
+// The API returns yyyy-mm-dd; the batch table displays it as dd-mm-yyyy.
+const formatExpiryDate = (expiryDate: string): string => {
+  const match = expiryDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : expiryDate
+}
+
 type AddProductsProps = {
   draft: AllocationDraft
   onChange: (patch: Partial<AllocationDraft>) => void
@@ -125,11 +141,13 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
       const identity = batchKey(row.productId, row.batchId, row.packagingId || '')
       if (seen.has(identity)) return
       seen.add(identity)
+      const available = Number(row.totalStock) || 0
+      if (available <= 0 || isBatchExpired(row.expiryDate || '')) return
       const batch: Batch = {
         batchId: row.batchId,
         batchNo: row.batchNumber || 'N/A',
         expiryDate: row.expiryDate || 'N/A',
-        available: Number(row.totalStock) || 0,
+        available,
         packagingId: row.packagingId || '',
       }
       const existing = byProduct.get(row.productId)
@@ -403,7 +421,7 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                   >
                     <p className="pt-3 text-p4 font-medium text-pneutral-900">{batch.batchNo}</p>
                     <p className="pt-3 text-p4 font-normal text-pneutral-900">
-                      {batch.expiryDate}
+                      {formatExpiryDate(batch.expiryDate)}
                     </p>
                     <p className="pt-3 text-p4 font-semibold text-success-600">
                       {batch.available}
@@ -431,7 +449,7 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                           : 'border-secondary-700 text-secondary-700 hover:bg-secondary-50'
                       }`}
                     >
-                      Add
+                      Add to Cart
                     </button>
                   </div>
                 )
@@ -464,17 +482,20 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
           <div className="w-full overflow-x-auto">
             <div className="min-w-150">
               <div className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2">
-                <p className="w-8 shrink-0 text-p4 font-semibold text-pneutral-500">#</p>
-                <p className="w-55 shrink-0 text-p4 font-semibold text-pneutral-500">Product</p>
-                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
+                <p className="w-16 shrink-0 text-p4 font-semibold text-pneutral-500">Sl No.</p>
+                <p className="min-w-0 flex-1 text-p4 font-semibold text-pneutral-500">Product</p>
+                <p className="min-w-0 flex-1 text-p4 font-semibold text-pneutral-500">
                   Batch No.
                 </p>
-                <p className="w-27 shrink-0 text-p4 font-semibold text-pneutral-500">
+                <p className="min-w-0 flex-1 text-p4 font-semibold text-pneutral-500">
                   Purchase Unit
                 </p>
-                <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-500">Issue Qty</p>
-                <div className="flex-1" />
-                <p className="w-15 shrink-0 text-p4 font-semibold text-pneutral-500">Action</p>
+                <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-500">
+                  Issue Qty
+                </p>
+                <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-500">
+                  Action
+                </p>
               </div>
 
               {cart.map((line, index) => (
@@ -482,27 +503,26 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                   key={line.id}
                   className="flex w-full items-center gap-2 border-b border-pneutral-200 py-2"
                 >
-                  <p className="w-8 shrink-0 text-p3 font-normal text-pneutral-900">
+                  <p className="w-16 shrink-0 text-p3 font-normal text-pneutral-900">
                     {index + 1}
                   </p>
-                  <p className="w-55 shrink-0 text-label-l4 font-medium text-pneutral-900">
+                  <p className="min-w-0 flex-1 text-label-l4 font-medium text-pneutral-900">
                     {line.productName}
                   </p>
-                  <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
+                  <p className="min-w-0 flex-1 text-p4 font-normal text-pneutral-900">
                     {line.batchNo}
                   </p>
-                  <p className="w-27 shrink-0 text-p4 font-normal text-pneutral-900">
+                  <p className="min-w-0 flex-1 text-p4 font-normal text-pneutral-900">
                     {line.purchaseUnit}
                   </p>
-                  <p className="w-22 shrink-0 text-p4 font-semibold text-pneutral-900">
+                  <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-900">
                     {line.issueQuantity}
                   </p>
-                  <div className="flex-1" />
                   <button
                     type="button"
                     onClick={() => handleRemoveFromCart(line.id)}
                     aria-label={`Remove ${line.productName} from cart`}
-                    className="flex w-15 shrink-0 items-center"
+                    className="flex min-w-0 flex-1 items-center justify-end"
                   >
                     <Image
                       src="/warehouseDistribution/trash-outline.svg"

@@ -23,6 +23,12 @@ type PharmacyOption = {
   pharmacyCity: string
 }
 
+// draft.allocationDate is stored as yyyy-mm-dd; display it as dd-mm-yyyy.
+const formatAllocationDateDisplay = (value: string): string => {
+  const iso = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  return iso ? `${iso[3]}-${iso[2]}-${iso[1]}` : value
+}
+
 const referenceOptions: DropdownOption[] = [
   { label: 'Planned Replenishment', value: 'planned-replenishment' },
   { label: 'Emergency Requirement', value: 'emergency-requirement' },
@@ -60,7 +66,7 @@ const FormRow = ({
 )
 
 const FlowBadge = ({ label }: { label: string }) => (
-  <div className="flex shrink-0 items-center justify-center gap-2 rounded-[20px] border border-secondary-200 bg-secondary-100 p-3">
+  <div className="flex w-full items-center justify-center gap-2 rounded-[20px] border border-secondary-200 bg-secondary-100 p-3">
     <div className="flex shrink-0 items-center justify-center rounded-full bg-secondary-200 p-2">
       <Image
         src="/warehouseDistribution/home-outline-purple.svg"
@@ -69,7 +75,7 @@ const FlowBadge = ({ label }: { label: string }) => (
         height={20}
       />
     </div>
-    <p className="whitespace-nowrap text-label-l3 font-medium text-secondary-700">
+    <p className="min-w-0 flex-1 break-words text-center text-label-l3 font-medium text-secondary-700">
       {label}
     </p>
   </div>
@@ -203,11 +209,7 @@ const AllocationDetails = ({ draft, onChange, showValidation }: AllocationDetail
       </FormRow>
 
       <FormRow label="Allocation Date">
-        <Input
-          type="date"
-          value={draft.allocationDate}
-          onChange={(e) => onChange({ allocationDate: e.target.value })}
-        />
+        <Input value={formatAllocationDateDisplay(draft.allocationDate)} readOnly />
       </FormRow>
 
       <FormRow label="Distribution Type">

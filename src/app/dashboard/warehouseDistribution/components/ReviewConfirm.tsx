@@ -126,7 +126,7 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
         <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
           <div className="min-w-165">
             <div className="flex w-full items-center gap-2 bg-pneutral-50 px-3.5 py-2.5">
-              <p className="w-6 shrink-0 text-p4 font-semibold text-pneutral-500">#</p>
+              <p className="w-12 shrink-0 text-p4 font-semibold text-pneutral-500">Sl No.</p>
               <p className="w-32.5 shrink-0 text-p4 font-semibold text-pneutral-500">
                 Product
               </p>
@@ -156,7 +156,7 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                 key={line.id}
                 className="flex w-full items-center gap-2 border-t border-pneutral-200 px-3.5 py-2.5"
               >
-                <p className="w-6 shrink-0 text-p3 font-normal text-pneutral-800">
+                <p className="w-12 shrink-0 text-p3 font-normal text-pneutral-800">
                   {index + 1}
                 </p>
                 <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-800">
