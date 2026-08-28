@@ -281,6 +281,7 @@ const DateRangeFilterField = ({
       <input
         type="date"
         value={from}
+        max={to || undefined}
         onChange={(e) => onFromChange(e.target.value)}
         className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none"
       />
@@ -288,6 +289,7 @@ const DateRangeFilterField = ({
       <input
         type="date"
         value={to}
+        min={from || undefined}
         onChange={(e) => onToChange(e.target.value)}
         className="w-full min-w-0 flex-1 bg-transparent text-p2 text-pneutral-900 outline-none"
       />

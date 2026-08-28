@@ -10,6 +10,13 @@ const allocationByMyselfUseCases = [
   'Manual stock movement',
 ]
 
+const stockRequirementUseCases = [
+  'Pharmacy requested stock via phone/WhatsApp',
+  'Urgent stock requirement',
+  'Low stock at pharmacy',
+  'Offline requirement raised by pharmacy staff',
+]
+
 type CreateAllocationProps = {
   draft: AllocationDraft
   onChange: (patch: Partial<AllocationDraft>) => void
@@ -21,27 +28,30 @@ const CreateAllocation = ({ draft, onChange }: CreateAllocationProps) => {
   return (
     <div className="grid w-full grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
       <div
-        className={`flex flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
+        role="radio"
+        aria-checked={selectedMode === 'myself'}
+        aria-label="Create Allocation By Myself"
+        tabIndex={0}
+        onClick={() => onChange({ allocationMode: 'myself' })}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onChange({ allocationMode: 'myself' })
+          }
+        }}
+        className={`flex cursor-pointer flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
           selectedMode === 'myself'
             ? 'border-secondary-700 shadow-[0px_9px_28px_8px_rgba(0,0,0,0.05),0px_3px_6px_-4px_rgba(0,0,0,0.12),0px_6px_16px_rgba(0,0,0,0.08)]'
             : 'border-pneutral-200'
         }`}
       >
         <div className="flex w-full items-center justify-end">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedMode === 'myself'}
-            aria-label="Create Allocation By Myself"
-            onClick={() => onChange({ allocationMode: 'myself' })}
-          >
-            <Image
-              src={`/warehouseDistribution/${selectedMode === 'myself' ? 'radio-selected' : 'radio-unselected'}.svg`}
-              alt=""
-              width={24}
-              height={24}
-            />
-          </button>
+          <Image
+            src={`/warehouseDistribution/${selectedMode === 'myself' ? 'radio-selected' : 'radio-unselected'}.svg`}
+            alt=""
+            width={24}
+            height={24}
+          />
         </div>
 
         <div className="relative h-31.5 w-55.25 shrink-0">
@@ -86,27 +96,30 @@ const CreateAllocation = ({ draft, onChange }: CreateAllocationProps) => {
       </div>
 
       <div
-        className={`flex flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
+        role="radio"
+        aria-checked={selectedMode === 'requirement'}
+        aria-label="Against Stock Requirement"
+        tabIndex={0}
+        onClick={() => onChange({ allocationMode: 'requirement' })}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onChange({ allocationMode: 'requirement' })
+          }
+        }}
+        className={`flex cursor-pointer flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
           selectedMode === 'requirement'
             ? 'border-success-500 shadow-[0px_9px_28px_8px_rgba(0,0,0,0.05),0px_3px_6px_-4px_rgba(0,0,0,0.12),0px_6px_16px_rgba(0,0,0,0.08)]'
             : 'border-pneutral-200'
         }`}
       >
         <div className="flex w-full items-center justify-end">
-          <button
-            type="button"
-            role="radio"
-            aria-checked={selectedMode === 'requirement'}
-            aria-label="Against Stock Requirement"
-            onClick={() => onChange({ allocationMode: 'requirement' })}
-          >
-            <Image
-              src={`/warehouseDistribution/${selectedMode === 'requirement' ? 'radio-selected-success' : 'radio-unselected'}.svg`}
-              alt=""
-              width={24}
-              height={24}
-            />
-          </button>
+          <Image
+            src={`/warehouseDistribution/${selectedMode === 'requirement' ? 'radio-selected-success' : 'radio-unselected'}.svg`}
+            alt=""
+            width={24}
+            height={24}
+          />
         </div>
 
         <div className="relative h-35 w-43 shrink-0">
@@ -128,16 +141,25 @@ const CreateAllocation = ({ draft, onChange }: CreateAllocationProps) => {
 
         <div className="h-px w-full border-t border-pneutral-100" />
 
-        <div className="flex w-full flex-col items-center gap-3">
-          <p className="w-full text-center text-label-l3 font-medium text-pneutral-900">
-            Pending Requirements
+        <div className="flex w-full flex-col items-start gap-3">
+          <p className="w-full text-label-l3 font-semibold text-success-800">
+            Use Cases
           </p>
-          <div className="flex w-30 flex-col items-center justify-center rounded-lg bg-success-50 px-8 py-3">
-            <p className="text-h3 font-semibold text-success-800">18</p>
+          <div className="flex w-full flex-col items-start gap-2.5">
+            {stockRequirementUseCases.map((useCase) => (
+              <div key={useCase} className="flex w-full items-center gap-2.5">
+                <Image
+                  src="/warehouseDistribution/CheckMiniBlack.svg"
+                  alt=""
+                  width={16}
+                  height={16}
+                />
+                <p className="flex-1 text-p3 font-normal text-pneutral-800">
+                  {useCase}
+                </p>
+              </div>
+            ))}
           </div>
-          <p className="w-full text-center text-label-l3 font-normal text-success-800 underline">
-            View Pending Requirements
-          </p>
         </div>
       </div>
 

@@ -568,7 +568,7 @@ const ProductMovement = ({
     <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
       <div className="min-w-165">
         <div className="flex w-full items-center gap-4 bg-pneutral-50 px-3.5 py-2.5">
-          <p className="w-5 shrink-0 text-p3 font-semibold text-pneutral-500">#</p>
+          <p className="w-12 shrink-0 text-p3 font-semibold text-pneutral-500">Sl No.</p>
           <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-500">
             Product
           </p>
@@ -606,7 +606,7 @@ const ProductMovement = ({
               key={`${row.product}-${row.batchNo}-${index}`}
               className="flex w-full items-center gap-4 border-t border-pneutral-200 px-3.5 py-2.5"
             >
-              <p className="w-5 shrink-0 text-p3 font-normal text-pneutral-900">
+              <p className="w-12 shrink-0 text-p3 font-normal text-pneutral-900">
                 {index + 1}
               </p>
               <div className="flex w-32.5 shrink-0 items-center gap-2">

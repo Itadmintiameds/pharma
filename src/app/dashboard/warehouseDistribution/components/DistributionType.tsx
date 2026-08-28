@@ -61,31 +61,34 @@ const DistributionType = ({ draft, onChange }: DistributionTypeProps) => {
 
       <div className="grid w-full grid-cols-1 items-stretch gap-6 sm:grid-cols-2 lg:grid-cols-3">
         <div
-          className={`flex flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
+          role="radio"
+          aria-checked={selectedType === "warehouse"}
+          aria-label="Warehouse Distribution"
+          tabIndex={0}
+          onClick={() =>
+            onChange({ distributionMode: "warehouse", sourceId: "", sourceLabel: "" })
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onChange({ distributionMode: "warehouse", sourceId: "", sourceLabel: "" });
+            }
+          }}
+          className={`flex cursor-pointer flex-col items-center gap-5 self-stretch rounded-2xl border-2 bg-white p-8 ${
             selectedType === "warehouse"
               ? "border-secondary-700 shadow-[0px_9px_28px_8px_rgba(0,0,0,0.05),0px_3px_6px_-4px_rgba(0,0,0,0.12),0px_6px_16px_rgba(0,0,0,0.08)]"
               : "border-pneutral-200"
           }`}
         >
           <div className="flex w-full items-center justify-end">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={selectedType === "warehouse"}
-              aria-label="Warehouse Distribution"
-              onClick={() =>
-                onChange({ distributionMode: "warehouse", sourceId: "", sourceLabel: "" })
-              }
-            >
-              <Image
-                src={`/warehouseDistribution/${
-                  selectedType === "warehouse" ? "radio-selected" : "radio-unselected"
-                }.svg`}
-                alt=""
-                width={24}
-                height={24}
-              />
-            </button>
+            <Image
+              src={`/warehouseDistribution/${
+                selectedType === "warehouse" ? "radio-selected" : "radio-unselected"
+              }.svg`}
+              alt=""
+              width={24}
+              height={24}
+            />
           </div>
 
           <div className="relative h-29.5 w-57.5 shrink-0">
@@ -115,7 +118,11 @@ const DistributionType = ({ draft, onChange }: DistributionTypeProps) => {
           <SourceRow label="Destination:" value="Medical Store" />
 
           <div className="flex w-full flex-col items-start gap-3">
-            <p className="w-full text-label-l3 font-semibold text-secondary-700">
+            <p
+              className={`w-full text-label-l3 font-semibold ${
+                selectedType === "warehouse" ? "text-secondary-700" : "text-pneutral-900"
+              }`}
+            >
               Typical Uses
             </p>
             <div className="flex w-full flex-col items-start gap-2.5">
@@ -137,31 +144,34 @@ const DistributionType = ({ draft, onChange }: DistributionTypeProps) => {
         </div>
 
         <div
-          className={`flex flex-col items-center gap-4 self-stretch rounded-2xl border-2 bg-white p-8 ${
+          role="radio"
+          aria-checked={selectedType === "pharmacy"}
+          aria-label="Pharmacy Transfer"
+          tabIndex={0}
+          onClick={() =>
+            onChange({ distributionMode: "pharmacy", sourceId: "", sourceLabel: "" })
+          }
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onChange({ distributionMode: "pharmacy", sourceId: "", sourceLabel: "" });
+            }
+          }}
+          className={`flex cursor-pointer flex-col items-center gap-4 self-stretch rounded-2xl border-2 bg-white p-8 ${
             selectedType === "pharmacy"
               ? "border-secondary-700 shadow-[0px_9px_28px_8px_rgba(0,0,0,0.05),0px_3px_6px_-4px_rgba(0,0,0,0.12),0px_6px_16px_rgba(0,0,0,0.08)]"
               : "border-pneutral-200"
           }`}
         >
           <div className="flex w-full items-center justify-end">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={selectedType === "pharmacy"}
-              aria-label="Pharmacy Transfer"
-              onClick={() =>
-                onChange({ distributionMode: "pharmacy", sourceId: "", sourceLabel: "" })
-              }
-            >
-              <Image
-                src={`/warehouseDistribution/${
-                  selectedType === "pharmacy" ? "radio-selected" : "radio-unselected"
-                }.svg`}
-                alt=""
-                width={24}
-                height={24}
-              />
-            </button>
+            <Image
+              src={`/warehouseDistribution/${
+                selectedType === "pharmacy" ? "radio-selected" : "radio-unselected"
+              }.svg`}
+              alt=""
+              width={24}
+              height={24}
+            />
           </div>
 
           <div className="relative h-29.5 w-57.5 shrink-0">
@@ -194,7 +204,11 @@ const DistributionType = ({ draft, onChange }: DistributionTypeProps) => {
           <SourceRow label="Destination:" value="Medical Store" />
 
           <div className="flex w-full flex-col items-start gap-3">
-            <p className="w-full text-label-l3 font-medium text-pneutral-900">
+            <p
+              className={`w-full text-label-l3 font-semibold ${
+                selectedType === "pharmacy" ? "text-secondary-700" : "text-pneutral-900"
+              }`}
+            >
               Typical Uses
             </p>
             <div className="flex w-full flex-col items-start gap-2.5">

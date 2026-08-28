@@ -236,7 +236,7 @@ const buildReceiveColumns = (
   showValidation: boolean
 ): ReceiveColumn[] => [
   {
-    header: '#',
+    header: 'Sl No.',
     width: 'w-12',
     align: 'center',
     render: (_row, index) => (

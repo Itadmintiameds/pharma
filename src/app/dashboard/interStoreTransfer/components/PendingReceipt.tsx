@@ -357,7 +357,7 @@ interface DispatchedProductColumn {
 
 const dispatchedProductColumns: DispatchedProductColumn[] = [
   {
-    header: '#',
+    header: 'Sl No.',
     width: 'w-[5%]',
     align: 'center',
     render: (_row, index) => (

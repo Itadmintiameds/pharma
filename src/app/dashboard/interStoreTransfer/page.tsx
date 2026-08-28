@@ -375,8 +375,8 @@ const buildTransferColumns = (
   onAction: (row: TransferRow) => void
 ): TransferColumn[] => [
   {
-    header: '#',
-    width: 'w-[4%] min-w-10',
+    header: 'Sl No.',
+    width: 'w-[4%] min-w-14',
     align: 'center',
     render: (row) => (
       <span className="text-p3 font-semibold text-pneutral-900">

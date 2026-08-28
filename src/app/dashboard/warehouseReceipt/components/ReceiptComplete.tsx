@@ -321,7 +321,7 @@ interface ReceivedColumn {
 
 const receivedColumns: ReceivedColumn[] = [
   {
-    header: '#',
+    header: 'Sl No.',
     width: 'w-12',
     align: 'center',
     render: (_row, index) => (
