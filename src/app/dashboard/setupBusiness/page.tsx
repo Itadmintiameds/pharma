@@ -15,9 +15,16 @@ import { useModulePermissions } from '@/hooks/useModulePermissions';
 const SetupBusinessContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Registering a business is CREATE. Without it the dashboard still lists what
-  // exists (VIEW), it just offers no way to add another.
-  const { canCreate } = useModulePermissions('SET_UP_BUSINESS');
+  // Registering a business is CREATE; amending an existing draft/correction is
+  // EDIT. Without either the dashboard still lists what exists (VIEW).
+  const { canCreate, canEdit } = useModulePermissions('SET_UP_BUSINESS');
+
+  // Editing carries a `reqId` (from the details modal's Edit button) so the form
+  // can fetch that registration and autofill it. It has no `view=add`, so it
+  // must be matched here or the page falls back to the dashboard list.
+  if (searchParams.get('reqId') && canEdit) {
+    return <AddBusiness />;
+  }
 
   if (searchParams.get('view') === 'add' && canCreate) {
     return <AddBusiness />;
