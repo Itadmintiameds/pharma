@@ -2,6 +2,11 @@ export interface RegisterRequest {
   fullName: string;
   userEmail: string;
   password: string;
+  /**
+   * Always true when sent — registration is blocked until the user has read the
+   * Terms & Conditions and Privacy Policy through to the end and accepted them.
+   */
+  acceptedTerms: boolean;
 }
 
 export interface LoginRequest {

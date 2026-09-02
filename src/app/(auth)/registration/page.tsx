@@ -10,11 +10,18 @@ import { useRouter } from "next/navigation";
 import { showToast } from "@/app/components/common/Toast";
 import { Eye, EyeOff } from "lucide-react";
 import { fullNameSchema } from "@/app/schema/AuthSchema";
+import LegalConsentModal from "@/app/components/legal/LegalConsentModal";
+import type { AcceptedTerms } from "@/types/LegalData";
 
 const page = () => {
   const router = useRouter();
 
-  const [isChecked, setIsChecked] = useState(false);
+  // The accepted document itself is the consent state — its presence is what
+  // ticks the box, and it carries the version/hash of exactly what was read, so
+  // the two can never drift apart.
+  const [acceptedTerms, setAcceptedTerms] = useState<AcceptedTerms | null>(null);
+  const isChecked = acceptedTerms !== null;
+
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
@@ -30,6 +37,7 @@ const page = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [emailError, setEmailError] = useState("");
   const [termsError, setTermsError] = useState("");
+  const [showLegalConsent, setShowLegalConsent] = useState(false);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
 
   const validatePassword = (password: string) => {
@@ -159,6 +167,8 @@ const page = () => {
         fullName,
         userEmail,
         password,
+        // Guarded by the checks above, so this is only ever reached as true.
+        acceptedTerms: isChecked,
       };
 
       const response = await register(payload);
@@ -562,17 +572,58 @@ const page = () => {
                   id="terms"
                   type="checkbox"
                   checked={isChecked}
-                  onChange={(e) => setIsChecked(e.target.checked)}
+                  // Ticking the box is only possible by reading the documents
+                  // through to the end, so the click opens the consent dialog
+                  // instead of toggling. Unticking stays a plain toggle.
+                  onClick={(e) => {
+                    if (!isChecked) {
+                      e.preventDefault();
+                      setShowLegalConsent(true);
+                    }
+                  }}
+                  onChange={(e) => {
+                    if (!e.target.checked) setAcceptedTerms(null);
+                  }}
                   className="mt-1 h-4 w-4 accent-[#6C5CE7]"
                 />
 
                 <label htmlFor="terms" className="text-p3">
                   I agree to the{" "}
-                  <span className="font-semibold text-secondary-700">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="font-semibold text-secondary-700 cursor-pointer hover:underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowLegalConsent(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setShowLegalConsent(true);
+                      }
+                    }}
+                  >
                     Terms & Conditions
                   </span>{" "}
                   and{" "}
-                  <span className="font-semibold text-secondary-700">
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="font-semibold text-secondary-700 cursor-pointer hover:underline"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setShowLegalConsent(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setShowLegalConsent(true);
+                      }
+                    }}
+                  >
                     Privacy Policy.
                   </span>
                 </label>
@@ -601,6 +652,23 @@ const page = () => {
           </div>
         </div>
       </div>
+
+      {/* Mounted conditionally so each opening starts unread. */}
+      {showLegalConsent && (
+        <LegalConsentModal
+          onAccept={(accepted) => {
+            setAcceptedTerms(accepted);
+            setTermsError("");
+            setShowLegalConsent(false);
+          }}
+          // Closing is declining: the box goes back to unticked, so the only way
+          // to a ticked box is reading the document through and accepting it.
+          onClose={() => {
+            setAcceptedTerms(null);
+            setShowLegalConsent(false);
+          }}
+        />
+      )}
     </>
   );
 };

@@ -622,3 +622,92 @@
 .animate-rocketOrbit {
   animation: rocketOrbit 1.8s linear infinite;
 }
+
+/* Word document converted to HTML by /api/legal/document, shown in the consent
+   dialog. The markup is whatever mammoth produces, so these rules style bare
+   tags rather than classes. */
+.legal-doc {
+  /* Section numbering runs across the whole document, not per list — see the
+     rule on `ol` below. */
+  counter-reset: legal-item;
+  color: var(--pneutral-700);
+  font-size: var(--text-p3);
+  line-height: 22px;
+}
+
+.legal-doc p {
+  margin-bottom: 12px;
+}
+
+.legal-doc strong {
+  font-weight: 600;
+  color: var(--pneutral-900);
+}
+
+.legal-doc h1,
+.legal-doc h2,
+.legal-doc h3,
+.legal-doc h4,
+.legal-doc h5,
+.legal-doc h6 {
+  margin: 20px 0 8px;
+  font-size: var(--text-p4);
+  font-weight: 600;
+  color: var(--pneutral-900);
+}
+
+.legal-doc ul {
+  margin-bottom: 12px;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.legal-doc ul li {
+  margin-bottom: 4px;
+}
+
+/* Word restarts numbering on every top-level clause, so the converted file is a
+   run of separate single-item <ol>s that would each render as "1.". Numbering
+   them from one document-wide counter instead keeps 1, 2, 3 in sequence. */
+.legal-doc ol {
+  margin-bottom: 12px;
+  padding-left: 20px;
+  list-style: none;
+}
+
+.legal-doc ol > li {
+  counter-increment: legal-item;
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.legal-doc ol > li::before {
+  content: counter(legal-item) ".";
+  position: absolute;
+  left: -20px;
+  font-weight: 600;
+  color: var(--pneutral-900);
+}
+
+.legal-doc a {
+  color: var(--secondary-700);
+  text-decoration: underline;
+}
+
+.legal-doc table {
+  width: 100%;
+  margin-bottom: 12px;
+  border-collapse: collapse;
+}
+
+.legal-doc th,
+.legal-doc td {
+  padding: 6px 8px;
+  border: 1px solid var(--pneutral-200);
+  text-align: left;
+}
+
+.legal-doc img {
+  max-width: 100%;
+  height: auto;
+}

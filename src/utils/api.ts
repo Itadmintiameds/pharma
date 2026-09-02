@@ -35,11 +35,15 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // Skip refresh flow if we are already trying to login, logout, or refresh to prevent infinite loops
+      // Skip refresh flow if we are already trying to login, logout, or refresh to prevent infinite loops.
+      // /terms is here for a different reason: it is read on the registration
+      // page by a user who has no account yet, so a 401 there must surface to
+      // the caller rather than redirect them away mid-signup.
       if (
         originalRequest.url?.includes("/auth/login") ||
         originalRequest.url?.includes("/auth/refreshToken") ||
-        originalRequest.url?.includes("/auth/logout")
+        originalRequest.url?.includes("/auth/logout") ||
+        originalRequest.url?.includes("/terms/")
       ) {
         return Promise.reject(error);
       }

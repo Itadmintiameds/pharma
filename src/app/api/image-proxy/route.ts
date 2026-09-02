@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAllowedRemoteHost } from "@/utils/remoteHosts";
 
 /**
  * Streams a remote image through this app so it is same-origin.
@@ -14,31 +15,6 @@ import { NextRequest, NextResponse } from "next/server";
  * own origin, so nothing is tainted and nothing is blocked.
  */
 
-// Only hosts we actually serve images from, so this cannot be used as an open
-// proxy to reach arbitrary URLs (including anything on the server's network).
-const ALLOWED_HOST_SUFFIXES = ["amazonaws.com"];
-
-const apiHosts = (): string[] =>
-  [process.env.NEXT_PUBLIC_API_URL, process.env.NEXT_PUBLIC_ADMIN_API_URL]
-    .map((base) => {
-      try {
-        return base ? new URL(base.trim()).hostname : null;
-      } catch {
-        return null;
-      }
-    })
-    .filter((host): host is string => !!host);
-
-const isAllowed = (target: URL): boolean => {
-  if (target.protocol !== "https:" && target.protocol !== "http:") return false;
-  const host = target.hostname.toLowerCase();
-  return (
-    ALLOWED_HOST_SUFFIXES.some(
-      (suffix) => host === suffix || host.endsWith(`.${suffix}`)
-    ) || apiHosts().includes(host)
-  );
-};
-
 export async function GET(request: NextRequest) {
   const raw = request.nextUrl.searchParams.get("url");
   if (!raw) {
@@ -52,7 +28,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Not a valid url" }, { status: 400 });
   }
 
-  if (!isAllowed(target)) {
+  if (!isAllowedRemoteHost(target)) {
     return NextResponse.json({ error: "That host is not proxied" }, { status: 403 });
   }
 
