@@ -29,6 +29,18 @@ export const getProductStockSummary = async (): Promise<ProductStockSummary[]> =
   }
 };
 
+// GET /product/stock-summary/organization -> same shape as /product/stock-summary
+// but scoped to the whole organization rather than the active pharmacy/warehouse.
+// Used by the Purchase product search so stock from every location is selectable.
+export const getOrganizationProductStockSummary = async (): Promise<ProductStockSummary[]> => {
+  try {
+    const res = await api.get<ProductStockSummaryResponse>("product/stock-summary/organization");
+    return res.data.data;
+  } catch (error) {
+    throw handleApiError(error, "Failed to load product stock summary.");
+  }
+};
+
 // GET /product/expiry-kpi -> aggregate counts for the stat cards.
 export const getProductExpiryKpi = async (): Promise<ProductExpiryKpi> => {
   try {

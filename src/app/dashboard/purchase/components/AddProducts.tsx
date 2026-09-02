@@ -15,7 +15,7 @@ import AddStockToProduct from "./AddStockToProduct";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { ProductService } from "@/services/ProductService";
-import { getProductStockSummary } from "@/services/InventoryService";
+import { getOrganizationProductStockSummary } from "@/services/InventoryService";
 import {
   formatShelfLife,
   matchesProductQuery,
@@ -28,7 +28,21 @@ import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
+import axios from "axios";
 import toast from "react-hot-toast";
+
+// Onboarding errors come back as a plain-string body (e.g. the duplicate-product
+// message), so read the response body before falling back to the axios message.
+const getApiErrorMessage = (error: unknown, fallback: string): string => {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    if (typeof data === "string" && data.trim().length > 0) return data;
+    if (data?.message) return data.message;
+    if (data?.error) return data.error;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return fallback;
+};
 
 const PRODUCT_CATEGORIES = [
   { id: 1, label: 'Drugs', iconPath: '/ProductManagement/Drug.svg', width: 'w-[178px]' },
@@ -96,6 +110,10 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     unitContains: "",
   });
   
+  // True while the /product/exists check runs, so the Next button can guard
+  // against double-clicks and show progress.
+  const [isCheckingProduct, setIsCheckingProduct] = useState(false);
+
   const productDetailsRef = useRef<any>(null);
   const packagingDetailsRef = useRef<PackagingDetailsRef>(null);
   const batchDetailsRef = useRef<BatchDetailsRef>(null);
@@ -178,7 +196,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       setIsLoadingProducts(true);
       setProductsError(null);
       try {
-        const products = await getProductStockSummary();
+        const products = await getOrganizationProductStockSummary();
         if (active) setProductRows(products.map(toProductStockRow));
       } catch (err) {
         if (active) {
@@ -234,10 +252,39 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     }
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     // Each field already shows its own inline error — no need to also toast.
     if (!validateTab(activeTab)) {
       return;
+    }
+
+    // Leaving the Product Details step: confirm the product isn't already
+    // onboarded for this organization before letting the user continue.
+    if (activeTab === "Product Details") {
+      const productData = productDetailsRef.current?.getFormData();
+      const productName = productData?.productName?.trim();
+      if (productName) {
+        try {
+          setIsCheckingProduct(true);
+          const result = await ProductService.checkProductExists(
+            productName,
+            productData?.brandName?.trim() || undefined,
+            productData?.hsnCode?.trim() || undefined
+          );
+          if (result?.exists) {
+            toast.error(
+              result.message ||
+                "A product with the same name, brand and HSN already exists for this organization"
+            );
+            return;
+          }
+        } catch (error) {
+          toast.error("Could not verify the product. Please try again.");
+          return;
+        } finally {
+          setIsCheckingProduct(false);
+        }
+      }
     }
 
     const currentIndex = TABS.indexOf(activeTab);
@@ -462,7 +509,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       setShowSuccessModal(true);
     } catch (error) {
       console.error("Submission failed:", error);
-      toast.error("Failed to onboard product");
+      toast.error(getApiErrorMessage(error, "Failed to onboard product"));
+      // Onboarding usually fails on the product identity (duplicate name/brand/
+      // HSN), so return to the first step and surface those inputs for editing.
+      setActiveTab("Product Details");
+      productDetailsRef.current?.validate?.();
     } finally {
       setIsSubmitting(false);
     }
@@ -873,8 +924,13 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
                   {isSubmitting ? 'Submitting...' : 'Submit'}
                 </Button>
               ) : (
-                <Button variant="primary" onClick={handleNext} className="w-[120px]">
-                  Next
+                <Button
+                  variant="primary"
+                  onClick={handleNext}
+                  className="w-[120px]"
+                  disabled={isCheckingProduct}
+                >
+                  {isCheckingProduct ? 'Checking...' : 'Next'}
                 </Button>
               )}
             </div>
