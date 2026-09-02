@@ -159,10 +159,10 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                 <p className="w-12 shrink-0 text-p3 font-normal text-pneutral-800">
                   {index + 1}
                 </p>
-                <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-800">
+                <p className="w-32.5 shrink-0 truncate text-p3 font-semibold text-pneutral-800" title={line.productName}>
                   {line.productName}
                 </p>
-                <p className="w-21.25 shrink-0 text-p3 font-normal text-pneutral-800">
+                <p className="w-21.25 shrink-0 truncate text-p3 font-normal text-pneutral-800" title={line.batchNo}>
                   {line.batchNo}
                 </p>
                 <p className="w-27.5 shrink-0 text-p3 font-normal text-pneutral-800">

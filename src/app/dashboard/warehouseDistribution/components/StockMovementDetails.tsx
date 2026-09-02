@@ -108,18 +108,25 @@ interface ProductMovementRow {
   genericName: string
   batchNo: string
   unit: string
+  // The quantity originally allocated for the transfer (issueQuantity), shown
+  // alongside what was actually dispatched and received.
+  allocatedQty: number
   dispatchedQty: number
   receivedQty: number
   // null until the destination actually confirms receipt — a line simply
   // pending receipt is not the same as a line received short/over.
   diff: number | null
   isReceived: boolean
-  remarks: string
+  // Kept separate so the table can show the dispatch-side and receipt-side
+  // notes side by side rather than collapsing them to whichever exists.
+  dispatchRemarks: string
+  receiveRemarks: string
 }
 
 // Maps one API line (product/packaging/batch info nested) to the row shape the
 // Product Movement table renders.
 const toProductMovementRow = (line: WarehouseDistributionLineData): ProductMovementRow => {
+  const allocatedQty = line.issueQuantity ?? 0
   const dispatchedQty = line.dispatchedQuantity ?? line.issueQuantity ?? 0
   const isReceived = line.receivedQuantity != null
   const receivedQty = line.receivedQuantity ?? 0
@@ -128,11 +135,13 @@ const toProductMovementRow = (line: WarehouseDistributionLineData): ProductMovem
     genericName: line.product?.brandName ?? '',
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
     unit: line.packaging?.purchaseUnit ?? '—',
+    allocatedQty,
     dispatchedQty,
     receivedQty,
     diff: isReceived ? dispatchedQty - receivedQty : null,
     isReceived,
-    remarks: line.receiveRemarks || line.dispatchRemarks || line.remarks || '—',
+    dispatchRemarks: line.dispatchRemarks || line.remarks || '—',
+    receiveRemarks: line.receiveRemarks || '—',
   }
 }
 
@@ -566,28 +575,31 @@ const ProductMovement = ({
     </p>
 
     <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
-      <div className="min-w-165">
-        <div className="flex w-full items-center gap-4 bg-pneutral-50 px-3.5 py-2.5">
-          <p className="w-12 shrink-0 text-p3 font-semibold text-pneutral-500">Sl No.</p>
-          <p className="w-32.5 shrink-0 text-p3 font-semibold text-pneutral-500">
+      <div className="w-full min-w-200">
+        <div className="flex w-max min-w-full items-center gap-4 bg-pneutral-50 px-3.5 py-2.5">
+          <p className="w-12 shrink-0 text-center text-p3 font-semibold text-pneutral-500">Sl No.</p>
+          <p className="w-32.5 shrink-0 text-center text-p3 font-semibold text-pneutral-500">
             Product
           </p>
-          <p className="w-18.75 shrink-0 text-p3 font-semibold text-pneutral-500">
+          <p className="w-18.75 shrink-0 text-center text-p3 font-semibold text-pneutral-500">
             Batch No.
           </p>
-          <p className="w-13.75 shrink-0 text-p3 font-semibold text-pneutral-500">
+          <p className="w-13.75 shrink-0 text-center text-p3 font-semibold text-pneutral-500">
             Unit
           </p>
-          <p className="w-17.5 shrink-0 text-right text-p3 font-semibold text-pneutral-500">
+          <p className="w-20 shrink-0 whitespace-nowrap text-center text-p3 font-semibold text-pneutral-500">
+            Allocated
+          </p>
+          <p className="w-20 shrink-0 whitespace-nowrap text-center text-p3 font-semibold text-pneutral-500">
             Dispatched
           </p>
-          <p className="w-17.5 shrink-0 text-right text-p3 font-semibold text-pneutral-500">
+          <p className="w-20 shrink-0 whitespace-nowrap text-center text-p3 font-semibold text-pneutral-500">
             Received
           </p>
-          <p className="w-12.5 shrink-0 text-right text-p3 font-semibold text-pneutral-500">
+          <p className="w-12.5 shrink-0 whitespace-nowrap text-center text-p3 font-semibold text-pneutral-500">
             Diff.
           </p>
-          <p className="min-w-32.5 flex-1 text-p3 font-semibold text-pneutral-500">
+          <p className="min-w-45 flex-1 whitespace-nowrap text-p3 font-semibold text-pneutral-500">
             Remarks
           </p>
         </div>
@@ -606,7 +618,7 @@ const ProductMovement = ({
               key={`${row.product}-${row.batchNo}-${index}`}
               className="flex w-full items-center gap-4 border-t border-pneutral-200 px-3.5 py-2.5"
             >
-              <p className="w-12 shrink-0 text-p3 font-normal text-pneutral-900">
+              <p className="w-12 shrink-0 text-center text-p3 font-normal text-pneutral-900">
                 {index + 1}
               </p>
               <div className="flex w-32.5 shrink-0 items-center gap-2">
@@ -619,28 +631,31 @@ const ProductMovement = ({
                   />
                 </div>
                 <div className="flex min-w-0 flex-col gap-px">
-                  <p className="truncate text-p3 font-semibold text-pneutral-900">
+                  <p className="truncate text-p3 font-semibold text-pneutral-900" title={row.product}>
                     {row.product}
                   </p>
-                  <p className="truncate text-p3 font-normal text-pneutral-500">
+                  <p className="truncate text-p3 font-normal text-pneutral-500" title={row.genericName}>
                     {row.genericName}
                   </p>
                 </div>
               </div>
-              <p className="w-18.75 shrink-0 text-p3 font-normal text-pneutral-900">
+              <p className="w-18.75 shrink-0 truncate text-p3 font-normal text-pneutral-900" title={row.batchNo}>
                 {row.batchNo}
               </p>
-              <p className="w-13.75 shrink-0 text-p3 font-normal text-pneutral-900">
+              <p className="w-13.75 shrink-0 text-center text-p3 font-normal text-pneutral-900">
                 {row.unit}
               </p>
-              <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
+              <p className="w-20 shrink-0 text-center text-p3 font-medium text-pneutral-900">
+                {row.allocatedQty}
+              </p>
+              <p className="w-20 shrink-0 text-center text-p3 font-medium text-pneutral-900">
                 {row.dispatchedQty}
               </p>
-              <p className="w-17.5 shrink-0 text-right text-p3 font-medium text-pneutral-900">
+              <p className="w-20 shrink-0 text-center text-p3 font-medium text-pneutral-900">
                 {row.isReceived ? row.receivedQty : '—'}
               </p>
               <p
-                className={`w-12.5 shrink-0 text-right text-p3 font-semibold ${
+                className={`w-12.5 shrink-0 text-center text-p3 font-semibold ${
                   !row.isReceived
                     ? 'text-pneutral-500'
                     : row.diff !== 0
@@ -650,9 +665,16 @@ const ProductMovement = ({
               >
                 {row.isReceived ? row.diff : '—'}
               </p>
-              <p className="min-w-32.5 flex-1 text-p3 font-normal text-pneutral-900">
-                {row.remarks}
-              </p>
+              <div className="flex min-w-45 flex-1 flex-col gap-0.5 text-p3 text-pneutral-900">
+                <p className="truncate" title={row.dispatchRemarks}>
+                  <span className="font-medium text-pneutral-500">Dispatch: </span>
+                  {row.dispatchRemarks}
+                </p>
+                <p className="truncate" title={row.receiveRemarks}>
+                  <span className="font-medium text-pneutral-500">Receive: </span>
+                  {row.receiveRemarks}
+                </p>
+              </div>
             </div>
           ))
         )}

@@ -419,7 +419,9 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                     key={batchKey(product.id, batch.batchId, batch.packagingId)}
                     className="grid w-full grid-cols-5 items-start gap-2 border-t border-pneutral-200 px-3 py-2"
                   >
-                    <p className="pt-3 text-p4 font-medium text-pneutral-900">{batch.batchNo}</p>
+                    <p className="pt-3 truncate text-p4 font-medium text-pneutral-900" title={batch.batchNo}>
+                      {batch.batchNo}
+                    </p>
                     <p className="pt-3 text-p4 font-normal text-pneutral-900">
                       {formatExpiryDate(batch.expiryDate)}
                     </p>
@@ -506,10 +508,10 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                   <p className="w-16 shrink-0 text-p3 font-normal text-pneutral-900">
                     {index + 1}
                   </p>
-                  <p className="min-w-0 flex-1 text-label-l4 font-medium text-pneutral-900">
+                  <p className="min-w-0 flex-1 truncate text-label-l4 font-medium text-pneutral-900" title={line.productName}>
                     {line.productName}
                   </p>
-                  <p className="min-w-0 flex-1 text-p4 font-normal text-pneutral-900">
+                  <p className="min-w-0 flex-1 truncate text-p4 font-normal text-pneutral-900" title={line.batchNo}>
                     {line.batchNo}
                   </p>
                   <p className="min-w-0 flex-1 text-p4 font-normal text-pneutral-900">
