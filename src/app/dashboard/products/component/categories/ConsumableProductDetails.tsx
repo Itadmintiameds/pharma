@@ -17,7 +17,10 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     brandName: "",
     deviceCategory: "",
     deviceSubCategory: "",
-    materialType: "",
+    // Multi-select: a consumable is often built of several materials at once —
+    // a syringe is barrel plus needle. The payload's materialTypeIds already
+    // took a list (see buildConsumableAttributes), so every pick travels.
+    materialType: [] as string[],
     sizeDimensionGauge: "",
     sterile: "",
     disposable: "",
@@ -79,7 +82,8 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
     }
   };
 
-  const handleChange = (field: keyof typeof formData, value: string) => {
+  // A multi-select hands over a string[], the rest a string.
+  const handleChange = (field: keyof typeof formData, value: string | string[]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     validateField(field, value);
   };
@@ -129,10 +133,12 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
       
       <Dropdown
         label="Material Type"
+        multiple
         placeholder="Select Material Type"
         options={materialTypeOptions}
         value={formData.materialType}
         onChange={(val) => handleChange('materialType', val)}
+        error={errors.materialType}
       />
       <Input label="Size / Dimension / Gauge" placeholder="Enter Size/Dimension/Gauge" value={formData.sizeDimensionGauge} onChange={(e) => handleChange('sizeDimensionGauge', e.target.value)} error={errors.sizeDimensionGauge} maxLength={20} />
       
