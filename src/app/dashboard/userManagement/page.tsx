@@ -5,7 +5,7 @@ import { useModulePermissions } from '@/hooks/useModulePermissions';
 import Image from "next/image";
 import Table from "@/app/components/common/table/Table";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
-import { EyeIcon } from "lucide-react";
+import { EyeIcon, Plus } from "lucide-react";
 import DataTable from "@/app/components/common/table/Table";
 import UserDetails from "./components/UserDetails";
 import AddUserWizard from "./components/AddUserWizard";
@@ -247,12 +247,7 @@ const page = () => {
                 onClick={() => setShowAddUser(true)}
                 className="w-27.75 h-9 bg-primary-800 rounded-lg flex items-center justify-center gap-2 text-pneutral-50 text-label-l3 font-medium"
               >
-                <Image
-                  src="/UserManagement/FilterIcon.svg"
-                  alt="Add User"
-                  width={16}
-                  height={16}
-                />
+                <Plus size={16} />
                 <span>Add User</span>
               </button>
               )}

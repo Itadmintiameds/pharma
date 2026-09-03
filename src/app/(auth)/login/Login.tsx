@@ -31,14 +31,21 @@ const Login = ({ onSubmit }: LoginProps) => {
       showToast.success("OTP sent successfully to your email.");
       onSubmit(userEmail, password);
     } catch (err: any) {
-      showToast.error(err?.message || "Invalid email or password.");
+      // The backend leaks a raw Optional.orElseThrow() message ("No value
+      // present") when the email does not match any account — surfaced here
+      // as the actual reason instead of that implementation detail.
+      const message =
+        err?.message === "No value present"
+          ? "User not found."
+          : err?.message || "Invalid email or password.";
+      showToast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-97.75 h-[489px] border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9 bg-white justify-between">
+    <div className="w-97.75 h-115 border-2 border-pneutral-200 rounded-[14px] flex flex-col p-10 gap-9 bg-white justify-between">
       <div className="text-h5 font-semibold">Login to Your Account</div>
 
       <div className="flex flex-col gap-5 flex-1 justify-center">
@@ -102,7 +109,7 @@ const Login = ({ onSubmit }: LoginProps) => {
           </span>
         </div>
 
-        <div className="flex items-center gap-3 font-noto-sans">
+        {/* <div className="flex items-center gap-3 font-noto-sans">
           <input
             type="checkbox"
             checked={isChecked}
@@ -113,7 +120,7 @@ const Login = ({ onSubmit }: LoginProps) => {
           <span className="font-normal text-[#4B5563] text-p2">
             Remember Me
           </span>
-        </div>
+        </div> */}
 
         <Button variant="primary" onClick={handleLogin} loading={loading}>
           Send OTP
