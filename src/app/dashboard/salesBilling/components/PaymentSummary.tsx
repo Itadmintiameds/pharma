@@ -2,11 +2,13 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { FileText } from "lucide-react";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import { showToast } from "@/app/components/common/Toast";
 import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import BillingSuccessModal from "./BillingSuccessModal";
+import PrescriptionModal from "./PrescriptionModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
 import { formatDateTime, formatMonthYear } from "@/utils/formatDate";
 import { printElement } from "@/utils/printElement";
@@ -52,6 +54,13 @@ interface PaymentSummaryProps {
    * PDF capture has it before render) the component skips its own fetch.
    */
   pharmacy?: CurrentPharmacy | null;
+  /**
+   * The prescription stored against a saved bill, if one was uploaded. Only a
+   * saved bill has one — it is attached after the bill gets its id — so this
+   * only ever arrives in "view" mode, and the button is dropped when it is
+   * absent rather than offering a dialog with nothing in it.
+   */
+  prescriptionUrl?: string | null;
 }
 
 /** Label for the licence line, picked from the document type the pharmacy
@@ -288,12 +297,14 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   onDone,
   onSave,
   pharmacy: pharmacyProp,
+  prescriptionUrl,
 }) => {
   // PRINT covers the printed bill; CREATE covers saving one.
   const { canCreate, canPrint } = useModulePermissions("SALES");
   const [currentMode] = useState<"create" | "view" | "download">(mode);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [savedBillNo, setSavedBillNo] = useState<string | null>(null);
+  const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
   // Mounts the off-screen copy the PDF is captured from.
   const [isCapturing, setIsCapturing] = useState(false);
   const isCapturingRef = useRef(false);
@@ -748,22 +759,45 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           Back
         </button>
 
-        {/* Viewing a saved bill prints it; the create flow saves it. Each side
-            answers to its own permission, so the button is dropped only when
-            the action it would perform is not allowed. */}
-        {(currentMode === "view" ? canPrint : canCreate) && (
-          <button
-            type="button"
-            onClick={currentMode === "view" ? handlePrint : handleSave}
-            disabled={isSubmitting}
-            className={`${PRIMARY_BUTTON} ${
-              currentMode === "view" ? "w-[128px]" : "w-[108px]"
-            } shrink-0`}
-          >
-            {currentMode === "view" ? "Print" : isSubmitting ? "Saving..." : "Save"}
-          </button>
-        )}
+        <div className="flex items-center gap-4">
+          {/* Beside Print, and only on a bill that has one: the prescription is
+              part of the record of the sale, so it is read from the same screen
+              the bill is read from. No permission of its own — whoever may view
+              the bill may view what was dispensed against it. */}
+          {currentMode === "view" && !!prescriptionUrl && (
+            <button
+              type="button"
+              onClick={() => setIsPrescriptionOpen(true)}
+              className={`${BACK_BUTTON} px-5 shrink-0`}
+            >
+              <FileText size={18} />
+              View Prescription
+            </button>
+          )}
+
+          {/* Viewing a saved bill prints it; the create flow saves it. Each side
+              answers to its own permission, so the button is dropped only when
+              the action it would perform is not allowed. */}
+          {(currentMode === "view" ? canPrint : canCreate) && (
+            <button
+              type="button"
+              onClick={currentMode === "view" ? handlePrint : handleSave}
+              disabled={isSubmitting}
+              className={`${PRIMARY_BUTTON} ${
+                currentMode === "view" ? "w-[128px]" : "w-[108px]"
+              } shrink-0`}
+            >
+              {currentMode === "view" ? "Print" : isSubmitting ? "Saving..." : "Save"}
+            </button>
+          )}
+        </div>
       </div>
+
+      <PrescriptionModal
+        isOpen={isPrescriptionOpen}
+        url={prescriptionUrl ?? ""}
+        onClose={() => setIsPrescriptionOpen(false)}
+      />
 
       <BillingSuccessModal
         isOpen={!!savedBillNo}

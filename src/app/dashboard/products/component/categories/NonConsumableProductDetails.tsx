@@ -187,14 +187,16 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) =
       
       <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} maxLength={60} />
       
+      {/* Searchable: the country master is the full ~200-entry list, which is
+          far too long to find an entry in by scrolling. */}
       <Dropdown
         label="Country of Origin"
+        searchable
         placeholder="Select Country of Origin"
         options={countryOptions}
         value={formData.countryOfOrigin}
         onChange={(val) => handleChange('countryOfOrigin', val)}
         menuPlacement="top"
-
       />
 
       <Dropdown

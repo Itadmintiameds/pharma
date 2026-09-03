@@ -859,7 +859,7 @@ const SetupPharmacy = ({
               ? "Central Warehouse Details"
               : showProductManagement
                 ? "Product Maintenance"
-                : "Setup Your Business"}
+                : ""}
           </div>
           
         </div>

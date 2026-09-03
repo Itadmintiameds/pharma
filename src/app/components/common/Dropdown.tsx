@@ -64,8 +64,15 @@ const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  /**
+   * The option the keyboard is on, or -1 for none. Only ever set by the arrow
+   * keys — the mouse has the pointer to say which option it means.
+   */
+  const [activeIndex, setActiveIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const controlRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const dynamicOptions = allowOther
     ? [...options, { label: "Other", value: "OTHER" }]
@@ -93,6 +100,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         !dropdownRef.current.contains(event.target as Node)
       ) {
         setIsOpen(false);
+        setActiveIndex(-1);
       }
     };
 
@@ -102,7 +110,21 @@ const Dropdown: React.FC<DropdownProps> = ({
     };
   }, []);
 
-  const handleSelect = (option: DropdownOption) => {
+  /** Keeps the arrow keys' option visible in a list taller than the menu. */
+  useEffect(() => {
+    if (!isOpen || activeIndex < 0) return;
+    menuRef.current
+      ?.querySelector('[data-active="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [isOpen, activeIndex]);
+
+  /**
+   * `fromKeyboard` keeps the focus where it is: blurring a searchable field
+   * after an Enter-select would drop the caret out of the form, so the Tab that
+   * follows would start over from the top of the page instead of moving on to
+   * the next field.
+   */
+  const handleSelect = (option: DropdownOption, fromKeyboard = false) => {
     if (multiple) {
       const currentValues = Array.isArray(value) ? value : [];
       const isSelected = currentValues.includes(option.value);
@@ -128,13 +150,88 @@ const Dropdown: React.FC<DropdownProps> = ({
       }
       setSearchQuery("");
       setIsOpen(false);
-      inputRef.current?.blur();
+      setActiveIndex(-1);
+      if (!fromKeyboard) inputRef.current?.blur();
     }
   };
 
   const filteredOptions = dynamicOptions.filter((option) =>
     option.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Non-interactive when disabled or readonly.
+  const isLocked = disabled || readOnly;
+  const isInert = isLocked || isLoading;
+
+  /**
+   * Keyboard operation of the control.
+   *
+   * The field is a div, so without this it was unreachable by Tab: the caret
+   * jumped from the input above it to the input below, and a form of dropdowns
+   * could not be filled in from the keyboard at all. Tab itself is deliberately
+   * not handled beyond closing the menu — the browser's own focus order is what
+   * should move on, so the next stop is whatever comes next in the markup,
+   * date picker and upload button included.
+   */
+  const handleControlKeyDown = (event: React.KeyboardEvent) => {
+    if (isInert) return;
+
+    // An open menu must not outlive the focus that opened it.
+    if (event.key === "Tab") {
+      setIsOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (!isOpen) return;
+      event.preventDefault();
+      setIsOpen(false);
+      setActiveIndex(-1);
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isOpen) {
+        setIsOpen(true);
+        // Down enters the list at the top, Up at the bottom.
+        setActiveIndex(
+          filteredOptions.length
+            ? event.key === "ArrowDown"
+              ? 0
+              : filteredOptions.length - 1
+            : -1
+        );
+        return;
+      }
+      if (filteredOptions.length === 0) return;
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      setActiveIndex((prev) => {
+        const next = prev + step;
+        if (next < 0) return filteredOptions.length - 1;
+        if (next >= filteredOptions.length) return 0;
+        return next;
+      });
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      // Space opens a plain field (where it would otherwise scroll the page)
+      // but is left alone on a searchable one — there it is a character being
+      // typed into the query.
+      if (event.key === " " && searchable) return;
+      event.preventDefault();
+
+      if (isOpen && activeIndex >= 0 && filteredOptions[activeIndex]) {
+        handleSelect(filteredOptions[activeIndex], true);
+        return;
+      }
+      setIsOpen((prev) => !prev);
+      setActiveIndex(-1);
+      return;
+    }
+  };
 
   const getDisplayValue = () => {
     if (multiple) {
@@ -155,9 +252,6 @@ const Dropdown: React.FC<DropdownProps> = ({
   };
 
   const displayValue = getDisplayValue();
-
-  // Non-interactive when disabled or readonly
-  const isLocked = disabled || readOnly;
 
   // State styles on the control: disabled > readonly > error > success > enabled/active
   const getStateStyles = () => {
@@ -206,12 +300,25 @@ const Dropdown: React.FC<DropdownProps> = ({
       )}
 
       <div
+        ref={controlRef}
+        // A searchable field has a real input inside it, which is the focus
+        // stop; anything else needs the wrapper to be one, or Tab skips the
+        // field entirely.
+        tabIndex={searchable || isInert ? undefined : 0}
+        role={searchable ? undefined : "combobox"}
+        aria-expanded={searchable ? undefined : isOpen}
+        aria-haspopup={searchable ? undefined : "listbox"}
+        aria-disabled={!searchable && isInert ? true : undefined}
+        onKeyDown={handleControlKeyDown}
         className={clsx(
           "flex h-12 w-full items-center justify-between rounded-md border px-3 transition-all duration-200",
-          getStateStyles()
+          getStateStyles(),
+          !searchable &&
+            !isInert &&
+            "focus:outline-none focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
         )}
         onClick={() => {
-          if (!isLocked && !isLoading && !searchable) {
+          if (!isInert && !searchable) {
             setIsOpen(!isOpen);
           }
         }}
@@ -232,6 +339,9 @@ const Dropdown: React.FC<DropdownProps> = ({
             value={isOpen ? searchQuery : (displayValue || "")}
             onChange={(e) => {
               setSearchQuery(e.target.value);
+              // The list under the caret is a different list now, so the
+              // keyboard's place in it means nothing.
+              setActiveIndex(-1);
               if (!isOpen) setIsOpen(true);
             }}
             onFocus={() => {
@@ -341,27 +451,39 @@ const Dropdown: React.FC<DropdownProps> = ({
       )}
 
       {isOpen && (
-        <div className={clsx(
-          "absolute z-50 w-full bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col",
-          menuPlacement === 'top' ? "bottom-full mb-1" : "top-full mt-1"
-        )}>
-          <div className="overflow-y-auto flex-1">
+        <div
+          role="listbox"
+          className={clsx(
+            "absolute z-50 w-full bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col",
+            menuPlacement === 'top' ? "bottom-full mb-1" : "top-full mt-1"
+          )}
+        >
+          <div ref={menuRef} className="overflow-y-auto flex-1">
             {filteredOptions.length === 0 ? (
               <div className="p-3 text-sm text-pneutral-500 text-center">
                 No options found
               </div>
             ) : (
-              filteredOptions.map((option) => {
+              filteredOptions.map((option, index) => {
                 const isSelected = multiple
                   ? Array.isArray(value) && value.includes(option.value)
                   : value === option.value;
+                const isActive = index === activeIndex;
 
                 return (
                   <div
                     key={option.value}
+                    role="option"
+                    aria-selected={isSelected}
+                    // Read by the effect above to keep the arrow keys' option
+                    // in view on a list longer than the menu.
+                    data-active={isActive ? "true" : undefined}
                     className={clsx(
                       "px-3 py-2.5 text-sm cursor-pointer transition-colors flex items-center",
-                      isSelected ? "bg-purple-50 text-purple-700" : "hover:bg-gray-50 text-pneutral-900"
+                      isSelected ? "bg-purple-50 text-purple-700" : "hover:bg-gray-50 text-pneutral-900",
+                      // Outlined rather than filled, so it reads as "where the
+                      // keyboard is" and not as a second selected row.
+                      isActive && "ring-1 ring-inset ring-secondary-300 bg-gray-50"
                     )}
                     onClick={() => handleSelect(option)}
                   >

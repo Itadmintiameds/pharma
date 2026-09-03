@@ -69,6 +69,10 @@ export const packageLabel = (
 
 const ADD_NEW_PACKAGE = 'ADD_NEW';
 
+/** Unit names come from a master list, so only case and stray space can differ. */
+const sameUnitName = (a: string, b: string) =>
+  a.trim().toLowerCase() === b.trim().toLowerCase();
+
 const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>((
   { categoryId, mode = 'new', packages = [], onPackageChange, onUnitsChange },
   ref
@@ -133,8 +137,18 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   const handleSmallestUnitChange = (value: string) => {
     setPurchaseSmallestUnitId(value);
     const pair = unitPairs.find((p) => String(p.purchaseSmallestUnitId) === value);
-    setSmallestUnit(pair?.purchaseSmallestUnitName ?? '');
-    setErrors((prev) => ({ ...prev, smallestUnit: '' }));
+    const name = pair?.purchaseSmallestUnitName ?? '';
+    setSmallestUnit(name);
+    setErrors((prev) => ({
+      ...prev,
+      smallestUnit: '',
+      // A pairing of the same unit both ways fixes the pack size at 1, so any
+      // standing complaint about that field is settled by this pick alone.
+      eachStripContains:
+        !!purchaseUnit && !!name && sameUnitName(purchaseUnit, name)
+          ? ''
+          : prev.eachStripContains,
+    }));
   };
 
   // Picking a saved package fills the three fields from it; "Add New" clears them.
@@ -175,6 +189,31 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   // ("Each Strip Contains") for both a fresh pick and a saved package.
   const purchaseUnitLabel = purchaseUnit || 'Unit';
 
+  /**
+   * The package is bought and sold in the same unit — a Bottle of Bottle, a
+   * Piece of Piece. One purchase unit then holds exactly one sellable unit by
+   * definition, so the pack size is not something to be typed: it is 1, and
+   * anything else the user could enter would be wrong. Filled in and locked
+   * rather than hidden, so the payload still carries the 1 the backend expects
+   * and the form still reads as the three fields it has everywhere else.
+   */
+  const isSelfContained =
+    !isLocked &&
+    !!purchaseUnit &&
+    !!smallestUnit &&
+    sameUnitName(purchaseUnit, smallestUnit);
+
+  /**
+   * The pack size everything downstream uses — the field, the duplicate check,
+   * the validation and the payload.
+   *
+   * Derived rather than written into state, so a pairing that stops matching
+   * cannot leave a stray "1" behind as the pack size of the Bottle : ml the
+   * user moved on to; and anything typed before the units happened to match is
+   * still there if they stop matching again.
+   */
+  const effectiveContains = isSelfContained ? '1' : eachStripContains;
+
   // Derived, not read from state, so a saved package's smallest unit still
   // resolves when the unit master finishes loading after the package was picked.
   const lockedPackage = isLocked
@@ -199,7 +238,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
    */
   const duplicatePackage = useMemo(() => {
     if (!isAddingNewPackage) return undefined;
-    const contains = Number(eachStripContains);
+    const contains = Number(effectiveContains);
     // Nothing to compare until all three are set — a half-filled form is
     // "incomplete", not "duplicate", and the field errors already say so.
     if (!purchaseUnit || !smallestUnit || !Number.isFinite(contains) || contains <= 0) {
@@ -218,7 +257,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
   }, [
     isAddingNewPackage,
     purchaseUnit,
-    eachStripContains,
+    effectiveContains,
     smallestUnit,
     packages,
     unitPairs,
@@ -240,14 +279,15 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
     onUnitsChangeRef.current?.({
       purchaseUnit,
       smallestUnit: displaySmallestUnit,
-      unitContains: eachStripContains,
+      unitContains: effectiveContains,
     });
-  }, [purchaseUnit, displaySmallestUnit, eachStripContains]);
+  }, [purchaseUnit, displaySmallestUnit, effectiveContains]);
 
   useImperativeHandle(ref, () => ({
     getFormData: () => ({
       purchaseUnit,
-      eachStripContains,
+      // The 1 the locked field shows, when the pairing is what fixed it.
+      eachStripContains: effectiveContains,
       smallestUnit: displaySmallestUnit,
       // The master pairing id — what /product/onboard and /{id}/package expect.
       purchaseSmallestUnitId,
@@ -269,7 +309,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
 
       const nextErrors = collectErrors(
         PackagingSchema,
-        { purchaseUnit, eachStripContains, purchaseSmallestUnitId },
+        { purchaseUnit, eachStripContains: effectiveContains, purchaseSmallestUnitId },
         {
           purchaseUnit: 'Purchase Unit is required',
           eachStripContains: `Each ${purchaseUnitLabel} Contains is required`,
@@ -324,15 +364,15 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   className="bg-gray-50"
                 />
                 <Input
-                  label={`Each ${purchaseUnitLabel} Contains`}
-                  value={eachStripContains}
+                  label="Purchase Smallest Sellable Unit"
+                  value={displaySmallestUnit}
                   readOnly
                   disabled
                   className="bg-gray-50"
                 />
                 <Input
-                  label="Select Unit(Smallest)"
-                  value={displaySmallestUnit}
+                  label={`Each ${purchaseUnitLabel} Contains`}
+                  value={eachStripContains}
                   readOnly
                   disabled
                   className="bg-gray-50"
@@ -365,36 +405,51 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   }
                 />
 
-                <Input
-                  label={`Each ${purchaseUnitLabel} Contains`}
-                  type="number"
-                  required
-                  placeholder="Enter number"
-                  value={eachStripContains}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setEachStripContains(val);
-                    validateField(val);
-                  }}
-                  error={errors.eachStripContains}
-                  disabled={awaitingPackageChoice}
-                  className={awaitingPackageChoice ? 'bg-gray-50 opacity-60' : undefined}
-                />
-
+                {/* Before the pack size, not after it: the pack size is "how
+                    many of the smallest unit", so it cannot be answered until
+                    the smallest unit is named — and when the two units match it
+                    is not asked at all. */}
                 <Dropdown
-                  label="Select Unit(Smallest)"
+                  label="Purchase Smallest Sellable Unit"
                   required
                   placeholder={purchaseUnit ? 'Select Smallest Unit' : 'Select a Purchase Unit first'}
                   options={smallestUnitOptions}
                   value={purchaseSmallestUnitId}
                   onChange={handleSmallestUnitChange}
-                  menuPlacement="top"
                   // Live, not only on submit: the clash is knowable the moment
                   // the third field is set, and finding out at save time means
                   // re-deriving which of the three to change.
                   error={errors.purchaseSmallestUnitId || duplicateError}
                   // Only the units paired with the chosen purchase unit are valid.
                   disabled={awaitingPackageChoice || !purchaseUnit}
+                />
+
+                <Input
+                  label={`Each ${purchaseUnitLabel} Contains`}
+                  type="number"
+                  required
+                  placeholder="Enter number"
+                  value={effectiveContains}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setEachStripContains(val);
+                    validateField(val);
+                  }}
+                  error={errors.eachStripContains}
+                  hint={
+                    isSelfContained
+                      ? `One ${purchaseUnit} is one ${displaySmallestUnit}, so this is always 1.`
+                      : undefined
+                  }
+                  // A matching pairing fixes this at 1; it is shown rather than
+                  // hidden so the package still reads as its three parts.
+                  readOnly={isSelfContained}
+                  disabled={awaitingPackageChoice || isSelfContained}
+                  className={
+                    awaitingPackageChoice || isSelfContained
+                      ? 'bg-gray-50 opacity-60'
+                      : undefined
+                  }
                 />
               </>
             )}

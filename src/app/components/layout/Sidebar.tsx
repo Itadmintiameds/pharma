@@ -238,15 +238,24 @@ const Sidebar = () => {
     .filter((group) => group.items.length > 0);
 
   return (
-    <aside className="w-[244px] h-full bg-secondary-600 text-pneutral-50 px-[20px] py-[24px] flex flex-col justify-between shrink-0 font-body overflow-hidden">
-      {/* Top Section: Navigation */}
-      <div className="flex flex-col gap-8">
+    // No padding of its own: the two bands below carry it, so the scroll area
+    // reaches the bar's own edges and the scrollbar sits against the side
+    // rather than 20px inside it.
+    <aside className="w-[244px] h-full min-h-0 bg-secondary-600 text-pneutral-50 flex flex-col shrink-0 font-body">
+      {/*
+        The nav is the only part that scrolls, and `auto` means it only does so
+        on a screen too short to hold every module — nothing changes on a tall
+        one. It used to be a `justify-between` column under `overflow-hidden`,
+        so on a short screen the growing nav pushed Logout past the bottom edge
+        and the clip simply swallowed it: there was no way to sign out at all.
+      */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-[20px] pt-[24px] pb-2 [scrollbar-width:thin] [scrollbar-color:#ffffff59_transparent]">
         {/* Navigation Menu */}
-        <nav className="w-[204px] flex flex-col gap-[8px]">
+        <nav className="w-full flex flex-col gap-[8px]">
           {visibleGroups.map((group) => (
             <div
               key={group.category}
-              className={`w-[204px] flex flex-col gap-[2px]`}
+              className={`w-full flex flex-col gap-[2px]`}
             >
               {!group.isHeaderHidden && (
                 <div className="w-[120px] h-[24px] flex items-center text-[14px] font-medium font-work-sans text-[#F8F8F9] select-none tracking-wider">
@@ -305,12 +314,14 @@ const Sidebar = () => {
         </nav>
       </div>
 
-      {/* Bottom Section: User & Logout */}
-      <div className="flex flex-col gap-4">
+      {/* Bottom Section: User & Logout. Outside the scroll area and shrink-0,
+          so it stays on screen whatever the nav above it does — signing out is
+          not something to have to scroll for. */}
+      <div className="shrink-0 flex flex-col gap-4 border-t border-white/10 px-[20px] pt-3 pb-[24px]">
         {/* Logout Button */}
         <button
           onClick={handleLogout}
-          className="w-[204px] h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
+          className="w-full h-[48px] p-[12px] gap-[10px] rounded-[16px] bg-warning-50 flex items-center justify-start text-[14px] font-normal leading-none text-warning-500 hover:bg-warning-100 transition-all duration-200 select-none shrink-0"
         >
           <LogOut size={18} className="text-warning-500 shrink-0" />
           <span>Logout</span>

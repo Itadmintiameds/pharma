@@ -6,6 +6,7 @@ import RolesPermissions from "./RolesPermissions";
 import AuditLogs from "./AuditLogs";
 import UnlockAccount from "./UnlockAccount";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
+import { isSuperAdminRole } from "@/access/accessControl";
 import DeactivateUser from "./DeactivateUser";
 import { UserData } from "@/types/UserData";
 import { getUserById, updateUserStatus } from "@/services/UserManagementService";
@@ -211,7 +212,16 @@ const UserDetails = ({ userId, onBack, onEdit }: UserDetailsProps) => {
           return acc;
         }, {} as Record<number, Record<number, boolean>>) || {};
         
-        return <RolesPermissions mode="view" assignedPermissions={mappedPermissions} />;
+        return (
+          <RolesPermissions
+            mode="view"
+            assignedPermissions={mappedPermissions}
+            // A Super Admin's authority isn't stored as explicit grant rows the
+            // way other roles' is, so the matrix is shown fully checked for
+            // them rather than reflecting rows that don't exist.
+            allChecked={isSuperAdminRole(user?.pharmaRolesDto?.roleName)}
+          />
+        );
 
       case "Audit Logs": {
         // Scoped to this user — see auditUserIdOf. Keyed on it too, so viewing
