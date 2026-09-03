@@ -82,9 +82,16 @@ interface RolesPermissionsProps {
   allowedModuleNames?: string[] | null;
   assignedPermissions?: Record<number, Record<number, boolean>>; // for view mode
   onPermissionsChange?: (permissions: Record<number, Record<number, boolean>>) => void; // for assign mode
+  /**
+   * Shows every applicable cell as granted, ignoring assignedPermissions. A
+   * Super Admin's authority is not tracked as explicit rows the way other
+   * roles' is, so the matrix would otherwise render empty for them; this is
+   * how the role's actual "everything" gets reflected instead.
+   */
+  allChecked?: boolean;
 }
 
-const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange, allowedModuleNames }: RolesPermissionsProps) => {
+const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange, allowedModuleNames, allChecked }: RolesPermissionsProps) => {
   const [modules, setModules] = useState<{moduleId: number, moduleName: string}[]>([]);
   const [selectedModuleId, setSelectedModuleId] = useState<number | null>(null);
   const [features, setFeatures] = useState<FeatureRow[]>([]);
@@ -237,7 +244,9 @@ const RolesPermissions = ({ mode, assignedPermissions, onPermissionsChange, allo
                 const isApplicable =
                   f.allowedPermissionIds === null ||
                   f.allowedPermissionIds.has(p.permissionId);
-                const isChecked = !!rolePermissions[f.featureId]?.[p.permissionId];
+                const isChecked = allChecked
+                  ? isApplicable
+                  : !!rolePermissions[f.featureId]?.[p.permissionId];
                 const isLocked = mode === 'view' || !isApplicable;
 
                 return (

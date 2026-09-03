@@ -665,10 +665,20 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
     }
     
     setErrors({});
+    // A Super Admin editing their own account has nothing for step 2 to show —
+    // designation, location and the permission matrix are all locked — so the
+    // wizard saves straight from step 1 instead of stopping on an empty step.
+    if (isEditingOwnAuthority) {
+      await handleUpdate();
+      return;
+    }
     setStep(2);
   };
 
   const renderHeader = () => {
+    const displayTotalSteps = isEditingOwnAuthority ? 2 : totalSteps;
+    const displayStep = isEditingOwnAuthority ? (step >= 3 ? 2 : 1) : step;
+
     return (
       <div className="flex flex-col gap-3 w-full">
         {/* Title */}
@@ -676,16 +686,16 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           <h2 className="font-semibold text-[32px] leading-[38px] text-[#1E1E1D]">
             {isEdit ? 'Edit User' : 'Add Users'}
           </h2>
-          <span className="text-sm text-gray-500 font-medium">Step {step} of {totalSteps}</span>
+          <span className="text-sm text-gray-500 font-medium">Step {displayStep} of {displayTotalSteps}</span>
         </div>
-        
+
         {/* Progress Bar Wrapper */}
         <div className="flex justify-between items-center w-full min-h-[50px] relative px-4">
           <div className="absolute top-[39px] left-8 right-8 h-[1.75px] bg-[#1E1E1D] z-0"></div>
-          
+
           {/* Step 1 */}
           <div className="flex flex-col items-center bg-gray-50 px-4 relative z-10">
-            <div 
+            <div
               className={`w-[35px] h-[35px] rounded-full flex items-center justify-center text-sm font-semibold mb-2 ${step >= 1 ? 'bg-[#7D32FC] text-white border-[0.53px] border-[#7D32FC]' : 'bg-white text-[#1E1E1D]'}`}
               style={step < 1 ? { border: '1px solid #1E1E1D' } : {}}
             >
@@ -693,25 +703,29 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
             </div>
             <span className={`text-[12px] ${step >= 1 ? 'text-[#7D32FC] font-semibold' : 'text-gray-500 font-medium'}`}>Personal Info</span>
           </div>
-          
-          {/* Step 2 */}
-          <div className="flex flex-col items-center bg-gray-50 px-4 relative z-10">
-            <div 
-              className={`w-[35px] h-[35px] rounded-full flex items-center justify-center text-sm font-semibold mb-2 ${step >= 2 ? 'bg-[#7D32FC] text-white border-[0.53px] border-[#7D32FC]' : 'bg-white text-[#1E1E1D]'}`}
-              style={step < 2 ? { border: '1px solid #1E1E1D' } : {}}
-            >
-              2
+
+          {/* Step 2 — Role Assignment: skipped entirely when a Super Admin is
+              editing their own account, since there is nothing on it they are
+              allowed to change. */}
+          {!isEditingOwnAuthority && (
+            <div className="flex flex-col items-center bg-gray-50 px-4 relative z-10">
+              <div
+                className={`w-[35px] h-[35px] rounded-full flex items-center justify-center text-sm font-semibold mb-2 ${step >= 2 ? 'bg-[#7D32FC] text-white border-[0.53px] border-[#7D32FC]' : 'bg-white text-[#1E1E1D]'}`}
+                style={step < 2 ? { border: '1px solid #1E1E1D' } : {}}
+              >
+                2
+              </div>
+              <span className={`text-[12px] ${step >= 2 ? 'text-[#7D32FC] font-semibold' : 'text-gray-500 font-medium'}`}>Role Assignment</span>
             </div>
-            <span className={`text-[12px] ${step >= 2 ? 'text-[#7D32FC] font-semibold' : 'text-gray-500 font-medium'}`}>Role Assignment</span>
-          </div>
-          
+          )}
+
           {/* Step 3 */}
           <div className="flex flex-col items-center bg-gray-50 px-1 relative z-10">
-            <div 
+            <div
               className={`w-[35px] h-[35px] rounded-full flex items-center justify-center text-sm font-semibold mb-2 ${step >= 3 ? 'bg-[#7D32FC] text-white border-[0.53px] border-[#7D32FC]' : 'bg-white text-[#1E1E1D]'}`}
               style={step < 3 ? { border: '1px solid #1E1E1D' } : {}}
             >
-              3
+              {displayTotalSteps}
             </div>
             <span className={`text-[12px] ${step >= 3 ? 'text-[#7D32FC] font-semibold' : 'text-gray-500 font-medium'}`}>Complete</span>
           </div>
@@ -1168,11 +1182,12 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           Cancel
         </button>
         {step === 1 && (
-          <button 
+          <button
             onClick={handleNextStep1}
-            className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
+            disabled={isEditingOwnAuthority && isSaving}
+            className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9] disabled:opacity-60"
           >
-            Next
+            {isEditingOwnAuthority ? (isSaving ? 'Saving...' : 'Save Changes') : 'Next'}
           </button>
         )}
         {step === 2 && (
@@ -1193,9 +1208,9 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
           </>
         )}
         {step === 3 && (
-          <button 
+          <button
             onClick={onBack}
-            className="px-8 py-2 bg-gray-200 text-gray-800 rounded-lg font-medium hover:bg-gray-300"
+            className="px-8 py-2 bg-[#7E3AF2] text-white rounded-lg font-medium hover:bg-[#6c2bd9]"
           >
             Done
           </button>
