@@ -247,6 +247,8 @@ interface BillDraft {
   payment?: PaymentDetails;
   /** Uploaded once the bill has an id. */
   prescriptionFile?: File | null;
+  /** Set only for a saved bill: the prescription already on the record. */
+  prescriptionUrl?: string | null;
   invoiceNo?: string;
   billDate?: string;
   /** Set only for a saved bill: the totals it was stored with, used as they are
@@ -390,6 +392,9 @@ const Page = () => {
         },
         invoiceNo: bill.billNo,
         billDate: bill.createdAt?.split("T")[0] ?? "",
+        // Whatever was uploaded against the bill, so the invoice screen can
+        // offer it beside Print.
+        prescriptionUrl: bill.prescriptionUrl,
         // Saved lines already carry their share of the bill level discount.
         billDiscountValue: 0,
         discountType: "PERCENTAGE",
@@ -677,6 +682,7 @@ const Page = () => {
         totals={totals}
         payment={draft.payment}
         mode={summaryMode}
+        prescriptionUrl={draft.prescriptionUrl}
         onBack={() => {
           if (summaryMode === "view" || summaryMode === "download") {
             setDraft(EMPTY_DRAFT);
