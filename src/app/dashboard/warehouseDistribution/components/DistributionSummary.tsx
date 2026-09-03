@@ -5,8 +5,26 @@ interface ProductDispatchRow {
   genericName?: string;
   batchNo: string;
   purchaseUnit: string;
+  /** Base unit the dispatchQty is stored in (e.g. Tablet). */
+  smallestUnit?: string;
+  /** Divisor from base units back to the purchase unit (1 when they're the same). */
+  unitContains?: number;
   dispatchQty: number;
 }
+
+// dispatchQty is stored in base units. When the purchase unit differs (contains > 1)
+// show both the purchase-unit qty and its base equivalent, e.g. "10 Strip = 100 Tablet";
+// otherwise just the qty with its unit, e.g. "5 Bottle".
+const formatDispatchQty = (base: number, row: ProductDispatchRow): string => {
+  const contains = row.unitContains || 1;
+  const baseLabel = row.smallestUnit || row.purchaseUnit || "";
+  const withUnit = (qty: number, unit: string) => (unit ? `${qty} ${unit}` : String(qty));
+  if (contains > 1) {
+    const purchaseQty = Number((base / contains).toFixed(2));
+    return `${withUnit(purchaseQty, row.purchaseUnit)} = ${withUnit(base, baseLabel)}`;
+  }
+  return withUnit(base, baseLabel);
+};
 
 const defaultProducts: ProductDispatchRow[] = [
   {
@@ -266,7 +284,7 @@ const ProductsToDispatch = ({ products }: { products: ProductDispatchRow[] }) =>
                 <p className="text-p3 font-semibold text-pneutral-900">
                   {row.product}
                 </p>
-                {row.genericName && (
+                {row.genericName && row.genericName !== row.product && (
                   <p className="text-p3 font-normal text-pneutral-500">
                     {row.genericName}
                   </p>
@@ -280,7 +298,7 @@ const ProductsToDispatch = ({ products }: { products: ProductDispatchRow[] }) =>
               </p>
               <div className="flex-1" />
               <p className="w-45 shrink-0 text-right text-p3 font-semibold text-pneutral-900">
-                {row.dispatchQty}
+                {formatDispatchQty(row.dispatchQty, row)}
               </p>
             </div>
           ))}
@@ -297,7 +315,7 @@ const ProductsToDispatch = ({ products }: { products: ProductDispatchRow[] }) =>
         <StatTile
           icon="/warehouseDistribution/document-text-mini.svg"
           label="Total Quantity"
-          value={`${totalQuantity} Purchase Units`}
+          value={`${totalQuantity} Units`}
           valueClassName="text-label-l4"
         />
       </div>

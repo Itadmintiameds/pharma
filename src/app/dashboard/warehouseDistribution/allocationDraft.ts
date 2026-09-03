@@ -20,6 +20,13 @@ export interface AllocationDraftLine {
   batchId: string
   batchNo: string
   purchaseUnit: string
+  /** Base unit the issueQuantity is expressed in (e.g. Tablet, Bottle) for the
+   *  warehouse-distribution flow, where issueQuantity is stored in base units.
+   *  Empty for the pharmacy-transfer flow, which keeps qty in a single unit. */
+  smallestUnit?: string
+  /** Divisor to convert the base-unit availableQuantity back to purchaseUnit for
+   *  display (batch.purchaseUnitContains for warehouse, 1 for pharmacy transfer). */
+  unitContains?: number
   availableQuantity: number
   issueQuantity: number
 }

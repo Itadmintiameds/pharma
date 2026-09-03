@@ -18,6 +18,14 @@ type Batch = {
   batchNo: string
   expiryDate: string
   available: number
+  /** Purchase unit of THIS batch's packaging (e.g. Strip, Bottle). Batches of the
+   *  same product can differ, so it's kept per-batch rather than per-product. */
+  purchaseUnit: string
+  /** Smallest/base unit of THIS batch (e.g. Tablet) — what stock is actually stored in. */
+  purchaseSmallestUnit: string
+  /** Units per purchase unit (e.g. tablets per strip). Used to show availability
+   *  in purchase units for the warehouse-distribution flow. */
+  purchaseUnitContains: number
   packagingId: string
 }
 
@@ -36,6 +44,8 @@ type BatchApiRow = {
   productId?: string
   productName?: string
   purchaseUnit?: string
+  purchaseSmallestUnitName?: string
+  purchaseUnitContains?: number
   packagingId?: string
   totalStock?: number
 }
@@ -61,6 +71,21 @@ const isBatchExpired = (expiryDate: string): boolean => {
 const formatExpiryDate = (expiryDate: string): string => {
   const match = expiryDate.match(/^(\d{4})-(\d{2})-(\d{2})$/)
   return match ? `${match[3]}-${match[2]}-${match[1]}` : expiryDate
+}
+
+// A cart line's issueQuantity is stored in base units. When the purchase unit differs
+// (contains > 1) show both the purchase-unit qty and its base equivalent, e.g.
+// "2 Strip = 20 Tablet"; otherwise just the qty with its unit, e.g. "1 Bottle".
+const formatLineQty = (line: AllocationDraftLine): string => {
+  const base = line.issueQuantity
+  const contains = line.unitContains || 1
+  const baseLabel = line.smallestUnit || line.purchaseUnit || ''
+  const withUnit = (qty: number, unit: string) => (unit ? `${qty} ${unit}` : String(qty))
+  if (contains > 1) {
+    const purchaseQty = Number((base / contains).toFixed(2))
+    return `${withUnit(purchaseQty, line.purchaseUnit)} = ${withUnit(base, baseLabel)}`
+  }
+  return withUnit(base, baseLabel)
 }
 
 type AddProductsProps = {
@@ -148,6 +173,9 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
         batchNo: row.batchNumber || 'N/A',
         expiryDate: row.expiryDate || 'N/A',
         available,
+        purchaseUnit: row.purchaseUnit || '',
+        purchaseSmallestUnit: row.purchaseSmallestUnitName || '',
+        purchaseUnitContains: Number(row.purchaseUnitContains) || 0,
         packagingId: row.packagingId || '',
       }
       const existing = byProduct.get(row.productId)
@@ -232,11 +260,20 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
     setSelectedProductIds((prev) => prev.filter((id) => id !== productId))
   }
 
+  // For warehouse distribution the issue qty is entered in purchase units (Strips),
+  // but stock is stored in base units (Tablets), so entries convert by this factor.
+  // The pharmacy-transfer flow enters and stores in the same unit, so factor is 1.
+  const unitContains = (batch: Batch) =>
+    !isPharmacyTransfer && batch.purchaseUnitContains > 0 ? batch.purchaseUnitContains : 1
+
   // A batch row's issue qty can never exceed what's actually available in it.
+  // `available` is in base units, so the entered qty is converted before comparing.
   const issueQtyError = (batch: Batch, rawQty: string) => {
     if (!rawQty) return undefined
-    return Number(rawQty) > batch.available
-      ? `Cannot exceed available quantity (${batch.available})`
+    const factor = unitContains(batch)
+    const maxEntry = batch.available / factor
+    return Number(rawQty) > maxEntry
+      ? `Cannot exceed available quantity (${Number(maxEntry.toFixed(2))} ${batch.purchaseUnit || ''})`.trim()
       : undefined
   }
 
@@ -252,9 +289,21 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
       packagingId: batch.packagingId,
       batchId: batch.batchId,
       batchNo: batch.batchNo,
-      purchaseUnit: product.purchaseUnit,
+      // Each batch's packaging can differ (Strip vs Bottle), so carry the batch's
+      // own unit rather than the product-level one. Pharmacy transfer transacts in
+      // the smallest unit, so it shows that; warehouse shows the purchase unit.
+      purchaseUnit: isPharmacyTransfer
+        ? batch.purchaseSmallestUnit || batch.purchaseUnit || product.purchaseUnit
+        : batch.purchaseUnit || product.purchaseUnit,
+      // Label the stored qty with its base unit. Pharmacy transfer enters in base
+      // units directly; warehouse converts by `contains` (skip if contains is 0).
+      smallestUnit:
+        isPharmacyTransfer || batch.purchaseUnitContains > 0 ? batch.purchaseSmallestUnit : '',
+      // Lets Review show availability in the same unit as the batch table (Step 4).
+      unitContains: unitContains(batch),
       availableQuantity: batch.available,
-      issueQuantity: qty,
+      // Store the complete stock in base units: entered purchase-unit qty × contains.
+      issueQuantity: qty * unitContains(batch),
     }
 
     onChange({
@@ -401,10 +450,10 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                 <p className="text-p4 font-semibold text-pneutral-500">Batch No.</p>
                 <p className="text-p4 font-semibold text-pneutral-500">Expiry Date</p>
                 <p className="text-p4 font-semibold text-pneutral-500">
-                  Available ({product.purchaseUnit})
+                  Available
                 </p>
                 <p className="text-p4 font-semibold text-pneutral-500">
-                  Issue Qty ({product.purchaseUnit})
+                  Issue Qty
                 </p>
                 <p className="text-p4 font-semibold text-pneutral-500">Action</p>
               </div>
@@ -426,21 +475,39 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                       {formatExpiryDate(batch.expiryDate)}
                     </p>
                     <p className="pt-3 text-p4 font-semibold text-success-600">
-                      {batch.available}
+                      {!isPharmacyTransfer && batch.purchaseUnitContains > 0
+                        ? `${Number((batch.available / batch.purchaseUnitContains).toFixed(2))} ${batch.purchaseUnit}`
+                        : `${batch.available}${batch.purchaseSmallestUnit ? ` ${batch.purchaseSmallestUnit}` : ''}`}
                     </p>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={batch.available}
-                      error={qtyError}
-                      value={rawQty}
-                      onChange={(e) =>
-                        setIssueQtyByBatch((prev) => ({
-                          ...prev,
-                          [batchKey(product.id, batch.batchId, batch.packagingId)]: e.target.value,
-                        }))
-                      }
-                    />
+                    <div className="flex flex-col gap-1">
+                      <Input
+                        type="number"
+                        min={0}
+                        step={1}
+                        max={batch.available / unitContains(batch)}
+                        error={qtyError}
+                        value={rawQty}
+                        onKeyDown={(e) => {
+                          // Issue qty is whole units only — block decimals/exponents/signs.
+                          if (['.', 'e', 'E', '+', '-'].includes(e.key)) e.preventDefault()
+                        }}
+                        onChange={(e) =>
+                          setIssueQtyByBatch((prev) => ({
+                            ...prev,
+                            // Strip anything but digits so pasted/typed decimals can't slip in.
+                            [batchKey(product.id, batch.batchId, batch.packagingId)]:
+                              e.target.value.replace(/[^0-9]/g, ''),
+                          }))
+                        }
+                      />
+                      {!isPharmacyTransfer &&
+                        batch.purchaseUnitContains > 0 &&
+                        Number(rawQty) > 0 && (
+                          <p className="text-p4 font-normal text-pneutral-500">
+                            = {Number(rawQty) * batch.purchaseUnitContains} {batch.purchaseSmallestUnit}
+                          </p>
+                        )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => handleAddToCart(product, batch)}
@@ -492,10 +559,10 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                 <p className="min-w-0 flex-1 text-p4 font-semibold text-pneutral-500">
                   Purchase Unit
                 </p>
-                <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-500">
+                <p className="min-w-0 flex-1 whitespace-nowrap text-left text-p4 font-semibold text-pneutral-500">
                   Issue Qty
                 </p>
-                <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-500">
+                <p className="w-16 shrink-0 text-right text-p4 font-semibold text-pneutral-500">
                   Action
                 </p>
               </div>
@@ -517,14 +584,14 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
                   <p className="min-w-0 flex-1 text-p4 font-normal text-pneutral-900">
                     {line.purchaseUnit}
                   </p>
-                  <p className="min-w-0 flex-1 text-right text-p4 font-semibold text-pneutral-900">
-                    {line.issueQuantity}
+                  <p className="min-w-0 flex-1 whitespace-nowrap text-left text-p4 font-semibold text-pneutral-900">
+                    {formatLineQty(line)}
                   </p>
                   <button
                     type="button"
                     onClick={() => handleRemoveFromCart(line.id)}
                     aria-label={`Remove ${line.productName} from cart`}
-                    className="flex min-w-0 flex-1 items-center justify-end"
+                    className="flex w-16 shrink-0 items-center justify-end"
                   >
                     <Image
                       src="/warehouseDistribution/trash-outline.svg"
@@ -597,7 +664,7 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
           <div className="flex w-full flex-col gap-1">
             <p className="text-label-l4 font-normal text-pneutral-500">Total Quantity</p>
             <p className="text-label-l5 font-semibold text-primary-800">
-              {totalQuantity} Purchase Units
+              {totalQuantity} Units
             </p>
           </div>
         </div>

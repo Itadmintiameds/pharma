@@ -134,7 +134,9 @@ const toProductMovementRow = (line: WarehouseDistributionLineData): ProductMovem
     product: line.product?.productName ?? line.productId,
     genericName: line.product?.brandName ?? '',
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
-    unit: line.packaging?.purchaseUnit ?? '—',
+    // Allocated/Dispatched/Received are stored in base units, so label them with the
+    // base/smallest unit (Tablet) rather than the purchase unit (Strip).
+    unit: line.packaging?.purchaseSmallestUnit || line.packaging?.purchaseUnit || '—',
     allocatedQty,
     dispatchedQty,
     receivedQty,
@@ -634,9 +636,11 @@ const ProductMovement = ({
                   <p className="truncate text-p3 font-semibold text-pneutral-900" title={row.product}>
                     {row.product}
                   </p>
-                  <p className="truncate text-p3 font-normal text-pneutral-500" title={row.genericName}>
-                    {row.genericName}
-                  </p>
+                  {row.genericName && row.genericName !== row.product && (
+                    <p className="truncate text-p3 font-normal text-pneutral-500" title={row.genericName}>
+                      {row.genericName}
+                    </p>
+                  )}
                 </div>
               </div>
               <p className="w-18.75 shrink-0 truncate text-p3 font-normal text-pneutral-900" title={row.batchNo}>
@@ -880,10 +884,10 @@ const StockMovementDetails = ({
 
   const transactionSummary = {
     products: distributionLines.length,
-    totalQuantity: `${totalIssueQuantity} Purchase Units`,
-    dispatchedQuantity: `${totalDispatchedQuantity} Purchase Units`,
-    receivedQuantity: `${totalReceivedQuantity} Purchase Units`,
-    difference: `${totalDispatchedQuantity - totalReceivedQuantity} Purchase Units`,
+    totalQuantity: `${totalIssueQuantity} Units`,
+    dispatchedQuantity: `${totalDispatchedQuantity} Units`,
+    receivedQuantity: `${totalReceivedQuantity} Units`,
+    difference: `${totalDispatchedQuantity - totalReceivedQuantity} Units`,
     inventoryStatus: isStockReceived ? 'Updated' : 'Pending',
     billingStatus: isStockReceived ? 'Available' : 'Pending',
   }

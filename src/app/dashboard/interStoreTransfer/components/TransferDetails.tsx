@@ -216,10 +216,16 @@ const iconForUnit = (unit?: string): ProductIcon => {
 // nothing has been dispatched yet at this point in the flow.
 const mapLineToRequestedRow = (
   line: WarehouseDistributionLineData,
-  index: number
+  index: number,
+  isPharmacyTransfer = false
 ): RequestedProductRow => {
-  const unit = line.packaging?.purchaseUnit ?? ''
-  const contains = line.packaging?.purchaseUnitContains
+  // Pharmacy transfers transact in the smallest unit (e.g. Tablet), so show that
+  // instead of the purchase unit (Strip); the "of N" pack size no longer applies.
+  const unit =
+    (isPharmacyTransfer ? line.packaging?.purchaseSmallestUnit : line.packaging?.purchaseUnit) ||
+    line.packaging?.purchaseUnit ||
+    ''
+  const contains = isPharmacyTransfer ? undefined : line.packaging?.purchaseUnitContains
 
   return {
     id: line.warehouseDistributionDetailsId ?? index + 1,
@@ -437,10 +443,12 @@ const TransferDetails = ({
   onBack,
   onAccept,
 }: TransferDetailsProps) => {
-  const productRows = useMemo(
-    () => (distribution?.lines ?? []).map(mapLineToRequestedRow),
-    [distribution]
-  )
+  const productRows = useMemo(() => {
+    const isPharmacyTransfer = distribution?.distributionType === 'Pharmacy Transfer'
+    return (distribution?.lines ?? []).map((line, index) =>
+      mapLineToRequestedRow(line, index, isPharmacyTransfer)
+    )
+  }, [distribution])
 
   // createdBy is only ever the requesting user's raw id — resolve it to their
   // role once the distribution loads, since that's what "Requested By" shows.

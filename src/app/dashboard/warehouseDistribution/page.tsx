@@ -866,13 +866,25 @@ const page = () => {
             }
             reference={createdAllocation.reference || 'No reference specified'}
             remarks={createdAllocation.remarks || 'No remarks added.'}
-            products={(createdAllocation.lines ?? []).map((line) => ({
-              product: line.product?.productName ?? line.productId,
-              genericName: line.product?.brandName ?? '',
-              batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
-              purchaseUnit: line.packaging?.purchaseUnit ?? '—',
-              dispatchQty: line.issueQuantity ?? 0,
-            }))}
+            products={(createdAllocation.lines ?? []).map((line) => {
+              // Pharmacy transfers transact in the smallest unit (no purchase-unit
+              // conversion); warehouse distributions show purchaseUnit = base equivalent.
+              const isPharmacyTransfer =
+                createdAllocation.distributionType === 'Pharmacy Transfer'
+              return {
+                product: line.product?.productName ?? line.productId,
+                genericName: line.product?.brandName ?? '',
+                batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
+                purchaseUnit: isPharmacyTransfer
+                  ? line.packaging?.purchaseSmallestUnit ||
+                    line.packaging?.purchaseUnit ||
+                    '—'
+                  : line.packaging?.purchaseUnit ?? '—',
+                smallestUnit: line.packaging?.purchaseSmallestUnit,
+                unitContains: isPharmacyTransfer ? 1 : line.packaging?.purchaseUnitContains,
+                dispatchQty: line.issueQuantity ?? 0,
+              }
+            })}
             timelineSteps={
               isCompletedPharmacyTransfer
                 ? [

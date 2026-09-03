@@ -189,6 +189,9 @@ const mapLineToReceiveItem = (
 ): ReceiveItem => {
   const unit = line.packaging?.purchaseUnit ?? ''
   const contains = line.packaging?.purchaseUnitContains
+  // Quantities are stored in base units, so label them with the base/smallest unit
+  // (Tablet) rather than the purchase unit (Strip).
+  const qtyUnit = line.packaging?.purchaseSmallestUnit || unit
   const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
   const received = line.receivedQuantity != null ? line.receivedQuantity : dispatched
   const damaged =
@@ -203,7 +206,7 @@ const mapLineToReceiveItem = (
       unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || '—',
     batchNo: line.batch?.batchNumber ?? line.batchId ?? '—',
     expiryDate: formatDate(line.batch?.expiryDate),
-    dispatchedQty: unit ? `${dispatched} ${unit}` : `${dispatched}`,
+    dispatchedQty: qtyUnit ? `${dispatched} ${qtyUnit}` : `${dispatched}`,
     dispatchedQtyValue: dispatched,
     receivedQty: String(received),
     damagedQty: String(damaged),

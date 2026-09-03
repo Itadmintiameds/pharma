@@ -25,6 +25,8 @@ export interface WarehouseDistributionLineProductInfo {
 export interface WarehouseDistributionLinePackagingInfo {
   packagingId: string;
   purchaseUnit: string;
+  /** Smallest/base unit (e.g. Tablet). Shown instead of purchaseUnit for pharmacy transfers. */
+  purchaseSmallestUnit?: string;
   purchaseUnitContains?: number;
 }
 

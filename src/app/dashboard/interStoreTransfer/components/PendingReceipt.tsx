@@ -299,10 +299,16 @@ const iconForUnit = (unit?: string): ProductIcon => {
 // by the destination is still pending receipt.
 const mapLineToDispatchedRow = (
   line: WarehouseDistributionLineData,
-  index: number
+  index: number,
+  isPharmacyTransfer = false
 ): DispatchedProductRow => {
-  const unit = line.packaging?.purchaseUnit ?? ''
-  const contains = line.packaging?.purchaseUnitContains
+  // Pharmacy transfers transact in the smallest unit (e.g. Tablet), so show that
+  // instead of the purchase unit (Strip); the "of N" pack size no longer applies.
+  const unit =
+    (isPharmacyTransfer ? line.packaging?.purchaseSmallestUnit : line.packaging?.purchaseUnit) ||
+    line.packaging?.purchaseUnit ||
+    ''
+  const contains = isPharmacyTransfer ? undefined : line.packaging?.purchaseUnitContains
   const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
   const received = line.receivedQuantity
   const pending = received != null ? Math.max(dispatched - received, 0) : dispatched
@@ -530,10 +536,12 @@ const PendingReceipt = ({
   onBack,
   onClose,
 }: PendingReceiptProps) => {
-  const productRows = useMemo(
-    () => (distribution?.lines ?? []).map(mapLineToDispatchedRow),
-    [distribution]
-  )
+  const productRows = useMemo(() => {
+    const isPharmacyTransfer = distribution?.distributionType === 'Pharmacy Transfer'
+    return (distribution?.lines ?? []).map((line, index) =>
+      mapLineToDispatchedRow(line, index, isPharmacyTransfer)
+    )
+  }, [distribution])
 
   const steps = buildTransferSteps(distribution?.currentStatus)
   const isReceived = distribution?.currentStatus === 'STOCK_RECEIVED'

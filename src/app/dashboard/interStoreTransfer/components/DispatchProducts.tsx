@@ -224,10 +224,16 @@ const iconForUnit = (unit?: string): ProductIcon => {
 // qty (the common case is "everything ships"); the user edits it down for shortfalls.
 const mapLineToDispatchRow = (
   line: WarehouseDistributionLineData,
-  index: number
+  index: number,
+  isPharmacyTransfer = false
 ): DispatchProductRow => {
-  const unit = line.packaging?.purchaseUnit ?? ''
-  const contains = line.packaging?.purchaseUnitContains
+  // Pharmacy transfers transact in the smallest unit (e.g. Tablet), so show that
+  // instead of the purchase unit (Strip); the "of N" pack size no longer applies.
+  const unit =
+    (isPharmacyTransfer ? line.packaging?.purchaseSmallestUnit : line.packaging?.purchaseUnit) ||
+    line.packaging?.purchaseUnit ||
+    ''
+  const contains = isPharmacyTransfer ? undefined : line.packaging?.purchaseUnitContains
   const issued = line.issueQuantity ?? 0
 
   return {
@@ -519,10 +525,12 @@ const DispatchProducts = ({
 }: DispatchProductsProps) => {
   // Dispatching moves stock out of this store, so it answers to CREATE.
   const { canCreate } = useModulePermissions('INTER_STORE_TRANSFER')
-  const dispatchRows = useMemo(
-    () => (distribution?.lines ?? []).map(mapLineToDispatchRow),
-    [distribution]
-  )
+  const dispatchRows = useMemo(() => {
+    const isPharmacyTransfer = distribution?.distributionType === 'Pharmacy Transfer'
+    return (distribution?.lines ?? []).map((line, index) =>
+      mapLineToDispatchRow(line, index, isPharmacyTransfer)
+    )
+  }, [distribution])
 
   // Only the user's edits are held in state, keyed by line id, so a newly loaded
   // distribution re-seeds the table without an effect syncing a copy of the rows.

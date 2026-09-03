@@ -1,9 +1,24 @@
 import Image from 'next/image'
 import {
   AllocationDraft,
+  AllocationDraftLine,
   distributionTypeLabel,
   resolveSourceLabel,
 } from '@/app/dashboard/warehouseDistribution/allocationDraft'
+
+// Quantities are stored in base units. When the purchase unit differs (contains > 1)
+// show both the purchase-unit qty and its base equivalent, e.g. "10 Strip = 100 Tablet";
+// otherwise just the qty with its unit, e.g. "5 Bottle".
+const formatQty = (base: number, line: AllocationDraftLine): string => {
+  const contains = line.unitContains || 1
+  const baseLabel = line.smallestUnit || line.purchaseUnit || ''
+  const withUnit = (qty: number, unit: string) => (unit ? `${qty} ${unit}` : String(qty))
+  if (contains > 1) {
+    const purchaseQty = Number((base / contains).toFixed(2))
+    return `${withUnit(purchaseQty, line.purchaseUnit)} = ${withUnit(base, baseLabel)}`
+  }
+  return withUnit(base, baseLabel)
+}
 
 const MONTH_ABBR = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -137,10 +152,10 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                 Purchase Unit
               </p>
               <div className="flex-1" />
-              <p className="w-32.5 shrink-0 text-right text-p4 font-semibold text-pneutral-500">
+              <p className="w-45 shrink-0 whitespace-nowrap text-left text-p4 font-semibold text-pneutral-500">
                 Available Qty
               </p>
-              <p className="w-32.5 shrink-0 text-right text-p4 font-semibold text-pneutral-500">
+              <p className="w-45 shrink-0 whitespace-nowrap text-left text-p4 font-semibold text-pneutral-500">
                 Issue Qty
               </p>
             </div>
@@ -169,11 +184,11 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                   {line.purchaseUnit}
                 </p>
                 <div className="flex-1" />
-                <p className="w-32.5 shrink-0 text-right text-p3 font-medium text-pneutral-800">
-                  {line.availableQuantity}
+                <p className="w-45 shrink-0 whitespace-nowrap text-left text-p3 font-medium text-pneutral-800">
+                  {formatQty(line.availableQuantity, line)}
                 </p>
-                <p className="w-32.5 shrink-0 text-right text-p3 font-semibold text-pneutral-800">
-                  {line.issueQuantity}
+                <p className="w-45 shrink-0 whitespace-nowrap text-left text-p3 font-semibold text-pneutral-800">
+                  {formatQty(line.issueQuantity, line)}
                 </p>
               </div>
             ))}
@@ -214,7 +229,7 @@ const ReviewConfirm = ({ draft, onEditAllocationDetails, submitError }: ReviewCo
                 Total Quantity
               </p>
               <p className="text-h6 font-semibold text-success-800">
-                {totalQuantity} Purchase Units
+                {totalQuantity} Units
               </p>
             </div>
           </div>

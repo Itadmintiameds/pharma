@@ -296,7 +296,10 @@ const mapLineToReceivedItem = (
   const unit = line.packaging?.purchaseUnit ?? ''
   const contains = line.packaging?.purchaseUnitContains
   const dispatched = line.dispatchedQuantity ?? line.issueQuantity ?? 0
-  const suffix = unit ? ` ${unit}` : ''
+  // Quantities are stored in base units, so label them with the base/smallest unit
+  // (Tablet) rather than the purchase unit (Strip).
+  const qtyUnit = line.packaging?.purchaseSmallestUnit || unit
+  const suffix = qtyUnit ? ` ${qtyUnit}` : ''
   return {
     id: line.warehouseDistributionDetailsId ?? index + 1,
     icon: iconForUnit(unit),
@@ -304,7 +307,8 @@ const mapLineToReceivedItem = (
     packInfo:
       unit && contains && contains > 1 ? `${unit} of ${contains}` : unit || EM_DASH,
     batchNo: line.batch?.batchNumber ?? line.batchId ?? EM_DASH,
-    purchaseUnit: unit || EM_DASH,
+    // Quantities are shown in base units, so the unit column matches (Tablet, not Strip).
+    purchaseUnit: qtyUnit || EM_DASH,
     expiryDate: line.batch?.expiryDate ? formatDateTime(line.batch.expiryDate) : EM_DASH,
     dispatchedQty: `${dispatched}${suffix}`,
     receivedQty: `${line.receivedQuantity ?? 0}${suffix}`,
