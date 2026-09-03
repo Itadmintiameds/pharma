@@ -722,11 +722,11 @@ const ProductMovement = ({
 
 const StockMovementDetails = ({
   distributionId,
-  movementNo = 'WD000245',
+  movementNo = '—',
   movementType = 'Warehouse Distribution',
   status = 'Received',
-  createdOn = '05-Aug-2026  09:12 AM',
-  lastUpdated = '05-Aug-2026  02:15 PM',
+  createdOn = '—',
+  lastUpdated = '—',
   onBack,
   onPrintTimeline,
   onDownloadPdf,
@@ -867,6 +867,19 @@ const StockMovementDetails = ({
     confirmedBy: confirmedByUserId ? userNamesById[confirmedByUserId] ?? '—' : '—',
   }
 
+  // Header values come from the fetched distribution (the source of truth). Some
+  // entry points (e.g. straight from dispatch) don't pass the display props, so
+  // deriving here avoids falling back to placeholder text once the data loads.
+  // statuses are oldest-first, so the last entry is the most recent update.
+  const latestStatusAt =
+    distribution?.statuses?.[distribution.statuses.length - 1]?.createdAt
+  const headerMovementNo = distribution?.allocationNo || movementNo
+  const headerCreatedOn = formatTimelineTimestamp(distribution?.createdAt) ?? createdOn
+  const headerLastUpdated =
+    formatTimelineTimestamp(latestStatusAt) ??
+    formatTimelineTimestamp(distribution?.createdAt) ??
+    lastUpdated
+
   const distributionLines = distribution?.lines ?? []
   const totalIssueQuantity = distributionLines.reduce(
     (sum, line) => sum + (line.issueQuantity ?? 0),
@@ -918,7 +931,7 @@ const StockMovementDetails = ({
           </div>
           <div className="flex flex-col gap-0.5">
             <p className="whitespace-nowrap text-label-l4 font-semibold text-pneutral-900">
-              {movementNo}
+              {headerMovementNo}
             </p>
             <p className="whitespace-nowrap text-label-l4 font-normal text-pneutral-500">
               {movementType}
@@ -957,7 +970,7 @@ const StockMovementDetails = ({
               Created On
             </p>
             <p className="whitespace-pre text-label-l4 font-semibold text-pneutral-900">
-              {createdOn}
+              {headerCreatedOn}
             </p>
           </div>
         </div>
@@ -976,7 +989,7 @@ const StockMovementDetails = ({
               Last Updated
             </p>
             <p className="whitespace-pre text-label-l4 font-semibold text-pneutral-900">
-              {lastUpdated}
+              {headerLastUpdated}
             </p>
           </div>
         </div>
