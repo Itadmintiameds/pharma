@@ -936,10 +936,12 @@ const SetupPharmacy = ({
         <div className="bg-white rounded-xl p-4 shadow-sm border border-pneutral-100 flex flex-col gap-4">
           <div className="flex flex-col gap-1 text-pneutral-900">
             <div className="text-h6 font-semibold">
-              Primary Location / Pharmacy Details
+              {isNewMultiple ? "Primary Location" : "Pharmacy Details"}
             </div>
             <div className="text-p4 font-normal font-noto-sans">
-              Enter your Primary Location Details
+              {isNewMultiple
+                ? "Enter your Primary Location Details"
+                : "Enter your Pharmacy Details"}
             </div>
           </div>
 
