@@ -440,9 +440,9 @@ const AddProducts = ({ draft, onChange, showValidation }: AddProductsProps) => {
             </button>
           </div>
 
-          <p className="text-label-l4 font-normal text-pneutral-500">
+          {/* <p className="text-label-l4 font-normal text-pneutral-500">
             Purchase Unit : {product.purchaseUnit}
-          </p>
+          </p> */}
 
           <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
             <div className="min-w-165">
