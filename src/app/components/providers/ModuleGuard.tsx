@@ -15,26 +15,15 @@
  * whose answer cannot change their outcome.
  */
 
-import { ReactNode, useEffect, useRef } from "react";
+import { ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  dependsOnOrganization,
-  denialReason,
-} from "@/access/accessControl";
-import { showToast } from "@/app/components/common/Toast";
+import { dependsOnOrganization } from "@/access/accessControl";
 import { useAccess } from "./AccessProvider";
 
 export default function ModuleGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const {
-    routeFor,
-    availableModules,
-    organizationLoaded,
-    organization,
-    roleName,
-    actingAsWarehouse,
-  } = useAccess();
+  const { routeFor, availableModules, organizationLoaded } = useAccess();
 
   const route = routeFor(pathname);
   const awaitingOrganization =
@@ -42,25 +31,10 @@ export default function ModuleGuard({ children }: { children: ReactNode }) {
   const blocked =
     !!route && !awaitingOrganization && !availableModules.has(route.moduleKey);
 
-  // One toast per denial, not one per render pass.
-  const announced = useRef<string | null>(null);
-
   useEffect(() => {
     if (!blocked || !route) return;
-
-    if (announced.current !== route.moduleKey) {
-      announced.current = route.moduleKey;
-      const reason = denialReason(
-        route,
-        roleName,
-        organization,
-        actingAsWarehouse
-      );
-      if (reason) showToast.error(reason);
-    }
-
     router.replace(`/dashboard?denied=${route.moduleKey}`);
-  }, [blocked, route, roleName, organization, actingAsWarehouse, router]);
+  }, [blocked, route, router]);
 
   // Nothing of a module the organization rules out is rendered, not even for the
   // frame before the redirect lands.
