@@ -217,6 +217,12 @@ const mapLineToReceiveItem = (
 const receiveInputClass =
   'h-12 w-full rounded-lg border border-pneutral-300 bg-white p-3 text-p4 font-regular text-sneutral-800 focus:outline-none focus:border-secondary-700'
 
+// Read-only variant used for auto-calculated fields (e.g. Damaged/Not Received
+// Qty). Mirrors the shared Input component's read-only style — pneutral-50
+// background, default cursor, and no focus border so it never reads as editable.
+const readOnlyInputClass =
+  'h-12 w-full rounded-lg border border-pneutral-300 bg-pneutral-50 p-3 text-p4 font-regular text-sneutral-800 cursor-default focus:outline-none'
+
 // Receiving anything other than the full dispatched quantity (i.e. some was
 // damaged or not received) without a remark leaves no record of why — require
 // one before the row can be treated as valid.
@@ -319,8 +325,8 @@ const buildReceiveColumns = (
         type="text"
         inputMode="numeric"
         value={row.damagedQty}
-        onChange={(e) => onFieldChange(row.id, 'damagedQty', e.target.value)}
-        className={receiveInputClass}
+        readOnly
+        className={readOnlyInputClass}
       />
     ),
   },
