@@ -56,7 +56,8 @@ export const BatchSchema = z.object({
   
   purchasePricePerBox: z.coerce.number().min(0, "Must be positive number"),
   mrpPerBox: z.coerce.number().min(0, "Must be positive number"),
-  sellingPricePerBox: z.coerce.number().positive("Must be greater than 0"),
+  // Hidden from the batch form (not required), so 0 must be allowed.
+  sellingPricePerBox: z.coerce.number().min(0, "Must be positive number"),
   
   purchasePricePerSmallestUnit: z.coerce.number().min(0, "Must be positive number"),
   mrpPerSmallestUnit: z.coerce.number().min(0, "Must be positive number"),

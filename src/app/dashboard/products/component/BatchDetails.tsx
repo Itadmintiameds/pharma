@@ -342,18 +342,22 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     freeGoodsErrors(formData.freeQuantity, formData.freeUnit);
 
   /**
-   * Stock cannot be listed below what it cost: MRP and selling price must both
-   * be at least the purchase price. Checked per purchase unit only — the
-   * per-smallest-unit fields are that same price divided by one pack size, so
-   * they hold the ordering automatically and a second message about them would
-   * just repeat this one.
+   * Stock cannot be listed below what it cost: MRP must be strictly greater
+   * than the purchase price (equal isn't allowed — there'd be no margin).
+   * Checked per purchase unit only — the per-smallest-unit fields are that
+   * same price divided by one pack size, so they hold the ordering
+   * automatically and a second message about them would just repeat this one.
    *
    * Blank fields are left to the presence checks; only filled numbers are
    * compared, so this never fires while a row is half typed.
+   *
+   * Selling-price-vs-purchase-price ordering is commented out below (kept for
+   * reference) — selling price is not currently required to stay at or above
+   * the purchase price.
    */
   const PRICE_ORDER_PREFIX = {
-    mrpPerBox: 'MRP cannot be less than the purchase price',
-    sellingPricePerBox: 'Selling price cannot be less than the purchase price',
+    mrpPerBox: 'MRP must be greater than the purchase price',
+    // sellingPricePerBox: 'Selling price cannot be less than the purchase price',
   } as const;
 
   const priceOrderErrorsFor = (data: typeof formData): Record<string, string> => {
@@ -370,14 +374,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     if (purchasePrice === null) return next;
 
     const mrp = asNumber(data.mrpPerBox);
-    if (mrp !== null && mrp < purchasePrice) {
+    if (mrp !== null && mrp <= purchasePrice) {
       next.mrpPerBox = `${PRICE_ORDER_PREFIX.mrpPerBox} (₹${purchasePrice})`;
     }
 
-    const sellingPrice = asNumber(data.sellingPricePerBox);
-    if (sellingPrice !== null && sellingPrice < purchasePrice) {
-      next.sellingPricePerBox = `${PRICE_ORDER_PREFIX.sellingPricePerBox} (₹${purchasePrice})`;
-    }
+    // const sellingPrice = asNumber(data.sellingPricePerBox);
+    // if (sellingPrice !== null && sellingPrice < purchasePrice) {
+    //   next.sellingPricePerBox = `${PRICE_ORDER_PREFIX.sellingPricePerBox} (₹${purchasePrice})`;
+    // }
 
     return next;
   };
@@ -478,10 +482,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
           purchaseQuantity: 'Purchase Quantity is required',
           purchasePricePerBox: `Purchase Price (per ${purchaseUnitLabel}) is required`,
           mrpPerBox: `MRP (per ${purchaseUnitLabel}) is required`,
-          sellingPricePerBox: `Selling Price (per ${purchaseUnitLabel}) is required`,
+          // Selling price fields are hidden from this form, so they're not required here.
           purchasePricePerSmallestUnit: `Purchase Price (per ${smallestUnitLabel}) is required`,
           mrpPerSmallestUnit: `MRP (per ${smallestUnitLabel}) is required`,
-          sellingPricePerSmallestUnit: `Selling Price (per ${smallestUnitLabel}) is required`,
         }
       );
 
@@ -673,7 +676,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               error={errors.mrpPerBox}
               {...masterProps}
             />
-            <Input
+            {/* <Input
               label={`Selling Price (per ${purchaseUnitLabel})`}
               required={!isLocked}
               type="number"
@@ -682,7 +685,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               onChange={(e) => handleChange('sellingPricePerBox', e.target.value)}
               error={errors.sellingPricePerBox}
               {...masterProps}
-            />
+            /> */}
 
             <Input
               label={`Purchase Price (per ${smallestUnitLabel})`}
@@ -704,7 +707,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               error={errors.mrpPerSmallestUnit}
               {...derivedProps}
             />
-            <Input
+            {/* <Input
               label={`Selling Price (per ${smallestUnitLabel})`}
               required={!isLocked}
               type="number"
@@ -713,7 +716,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               onChange={(e) => handleChange('sellingPricePerSmallestUnit', e.target.value)}
               error={errors.sellingPricePerSmallestUnit}
               {...derivedProps}
-            />
+            /> */}
 
             <Input
               label="Rack / Location"

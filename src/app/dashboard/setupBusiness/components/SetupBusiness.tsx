@@ -5,7 +5,7 @@ import Input from "@/app/components/common/Input";
 import LogoCropModal from "@/app/components/common/LogoCropModal";
 import { setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
 import Image from "next/image";
-import React, { useState } from "react";
+import React, { forwardRef, useImperativeHandle, useState } from "react";
 
 const OWNERSHIP_TYPE_OPTIONS = [
   "Private Limited Company",
@@ -38,19 +38,29 @@ interface SetupBusinessViewProps {
   setLogo: (val: File | null) => void;
 }
 
-export default function SetupBusinessView({
-  businessName,
-  setBusinessName,
-  ownershipType,
-  setOwnershipType,
-  panNumber,
-  setPanNumber,
-  gstNumber,
-  setGstNumber,
-  locationType,
-  setLocationType,
-  setLogo,
-}: SetupBusinessViewProps) {
+export interface SetupBusinessHandle {
+  // Validates all business fields (e.g. GSTIN) and surfaces inline errors.
+  // Called by the parent flow before it proceeds past this step.
+  validate: () => boolean;
+}
+
+const SetupBusinessView = forwardRef<SetupBusinessHandle, SetupBusinessViewProps>(
+  function SetupBusinessView(
+    {
+      businessName,
+      setBusinessName,
+      ownershipType,
+      setOwnershipType,
+      panNumber,
+      setPanNumber,
+      gstNumber,
+      setGstNumber,
+      locationType,
+      setLocationType,
+      setLogo,
+    },
+    ref,
+  ) {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [cropState, setCropState] = useState<{ src: string; name: string } | null>(
@@ -123,6 +133,32 @@ export default function SetupBusinessView({
           validateField(field, value);
         }
       };
+
+  useImperativeHandle(ref, () => ({
+    validate: () => {
+      const result = setupBusinessSchema.safeParse({
+        businessName,
+        ownershipType,
+        panNumber,
+        gstNumber,
+      });
+
+      if (result.success) {
+        setErrors({});
+        return true;
+      }
+
+      const fieldErrors: Record<string, string> = {};
+      result.error.issues.forEach((issue) => {
+        const field = issue.path[0] as string;
+        if (!fieldErrors[field]) {
+          fieldErrors[field] = issue.message;
+        }
+      });
+      setErrors(fieldErrors);
+      return false;
+    },
+  }));
 
   return (
     <div className="flex flex-col gap-6 w-full select-none">
@@ -266,13 +302,15 @@ export default function SetupBusinessView({
             maxLength={10}
             error={errors.panNumber}
           />
+          
           <Input
-            label="GST Number (Optional)"
+            label="GST Number"
             placeholder="46SSDSF123S556"
             value={gstNumber}
             onChange={handleFieldChange("gstNumber", setGstNumber)}
             maxLength={15}
             error={errors.gstNumber}
+            required
           />
         </div>
       </div>
@@ -386,4 +424,7 @@ export default function SetupBusinessView({
 
     </div>
   );
-}
+  },
+);
+
+export default SetupBusinessView;
