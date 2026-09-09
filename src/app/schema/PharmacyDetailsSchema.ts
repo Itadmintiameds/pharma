@@ -7,6 +7,32 @@ const validStateCodes = [
     "32", "33", "34", "35", "36", "37", "38", "97", "99",
 ];
 
+// Business types (SetupPharmacy's "Business Type") that aren't required to have a GSTIN.
+export const GST_OPTIONAL_PHARMACY_TYPES = ["clinic", "hospital", "doctor"];
+
+const gstNumberFormat = z
+    .string()
+    .trim()
+    .min(1, "GST Number is required")
+    .length(15, "GST Number must be 15 characters")
+    .regex(
+        /^[A-Z0-9]+$/,
+        "GST Number can only contain letters and numbers"
+    )
+    .refine(
+        (value) => validStateCodes.includes(value.substring(0, 2)),
+        {
+            message: "Invalid GST state code",
+        }
+    )
+    .refine(
+        (value) =>
+            /^[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/.test(value.substring(2)),
+        {
+            message: "Enter a valid GST Number",
+        }
+    );
+
 export const pharmacyDetailsSchema = z.object({
     pharmacyType: z
         .string()
@@ -86,29 +112,10 @@ export const pharmacyDetailsSchema = z.object({
         .optional()
         .or(z.literal("")),
 
-    pharmacyGst: z
-        .string()
-        .trim()
-        .length(15, "GST Number must be 15 characters")
-        .regex(
-            /^[A-Z0-9]+$/,
-            "GST Number can only contain letters and numbers"
-        )
-        .refine(
-            (value) => validStateCodes.includes(value.substring(0, 2)),
-            {
-                message: "Invalid GST state code",
-            }
-        )
-        .refine(
-            (value) =>
-                /^[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/.test(value.substring(2)),
-            {
-                message: "Enter a valid GST Number",
-            }
-        )
-        .optional()
-        .or(z.literal("")),
+    // Required unless the selected Business Type is GST-exempt (see
+    // GST_OPTIONAL_PHARMACY_TYPES) — that conditional "required" check is
+    // applied in SetupPharmacy.tsx, which knows the selected business type.
+    pharmacyGst: gstNumberFormat.optional().or(z.literal("")),
 
     pharmacyPincode: z
         .string()
@@ -167,5 +174,5 @@ export const setupBusinessSchema = z.object({
         ),
 
     panNumber: pharmacyDetailsSchema.shape.pharmacyPan,
-    gstNumber: pharmacyDetailsSchema.shape.pharmacyGst,
+    gstNumber: gstNumberFormat,
 });

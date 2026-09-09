@@ -19,7 +19,7 @@ import {
 } from "@/services/SetupBusinessService";
 import { checkDocumentNumber } from "@/services/UserManagementService";
 import { showToast } from "@/app/components/common/Toast";
-import { pharmacyDetailsSchema, setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { pharmacyDetailsSchema, GST_OPTIONAL_PHARMACY_TYPES } from "@/app/schema/PharmacyDetailsSchema";
 import { OrganizationCreateRequest } from "@/types/SetupBusinessData";
 import { WarehouseDetails } from "@/types/SetupWarehouseData";
 import {
@@ -44,6 +44,7 @@ interface SetupPharmacyProps {
   existingOrg?: any;
   prefillData?: any;
   logo?: File | null;
+  validateBusinessDetails?: () => boolean;
 }
 
 interface PostOffice {
@@ -69,6 +70,7 @@ const SetupPharmacy = ({
   existingOrg = null,
   prefillData = null,
   logo = null,
+  validateBusinessDetails,
 }: SetupPharmacyProps) => {
   const [selected, setSelected] = useState("");
 
@@ -183,14 +185,9 @@ const SetupPharmacy = ({
   const handleNext = () => {
     if (!validateForm()) return;
 
-    const businessResult = setupBusinessSchema.safeParse({
-      businessName,
-      ownershipType,
-      panNumber,
-      gstNumber,
-    });
+    const businessValid = validateBusinessDetails ? validateBusinessDetails() : true;
 
-    if (!businessResult.success) {
+    if (!businessValid) {
       showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
       return;
     }
@@ -366,10 +363,19 @@ const SetupPharmacy = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillData]);
 
+  // Clinics, hospitals and doctors aren't required to register for GST.
+  const isGstOptionalForBusinessType = (businessType: string) =>
+    GST_OPTIONAL_PHARMACY_TYPES.includes(businessType);
+
   const validateField = <K extends keyof typeof pharmacyDetailsSchema.shape>(
     field: K,
     value: string,
   ) => {
+    if (field === "pharmacyGst") {
+      validateGstField(value, selected);
+      return;
+    }
+
     const fieldSchema = pharmacyDetailsSchema.shape[field];
 
     const result = fieldSchema.safeParse(value);
@@ -380,27 +386,49 @@ const SetupPharmacy = ({
     }));
   };
 
+  // GST is format-validated by the schema, but "required" depends on the
+  // selected business type, so it's checked separately here.
+  const validateGstField = (value: string, businessType: string) => {
+    if (!value.trim()) {
+      setErrors((prev) => ({
+        ...prev,
+        pharmacyGst: isGstOptionalForBusinessType(businessType)
+          ? ""
+          : "GST Number is required",
+      }));
+      return;
+    }
+
+    const result = pharmacyDetailsSchema.shape.pharmacyGst.safeParse(value);
+
+    setErrors((prev) => ({
+      ...prev,
+      pharmacyGst: result.success ? "" : (result.error.issues[0]?.message ?? ""),
+    }));
+  };
+
   const validateForm = () => {
     const result = pharmacyDetailsSchema.safeParse(getFormData());
 
-    if (result.success) {
-      setErrors({});
-      return true;
-    }
-
     const fieldErrors: Record<string, string> = {};
 
-    result.error.issues.forEach((issue) => {
-      const field = issue.path[0] as string;
+    if (!result.success) {
+      result.error.issues.forEach((issue) => {
+        const field = issue.path[0] as string;
 
-      if (!fieldErrors[field]) {
-        fieldErrors[field] = issue.message;
-      }
-    });
+        if (!fieldErrors[field]) {
+          fieldErrors[field] = issue.message;
+        }
+      });
+    }
+
+    if (!pharmacyGst.trim() && !isGstOptionalForBusinessType(selected)) {
+      fieldErrors.pharmacyGst = "GST Number is required";
+    }
 
     setErrors(fieldErrors);
 
-    return false;
+    return Object.keys(fieldErrors).length === 0;
   };
 
   // Returns true when the document number is already registered elsewhere.
@@ -619,14 +647,9 @@ const SetupPharmacy = ({
     }
 
     if (!hasOrganization) {
-      const businessResult = setupBusinessSchema.safeParse({
-        businessName,
-        ownershipType,
-        panNumber,
-        gstNumber,
-      });
+      const businessValid = validateBusinessDetails ? validateBusinessDetails() : true;
 
-      if (!businessResult.success) {
+      if (!businessValid) {
         showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
         return;
       }
@@ -903,6 +926,7 @@ const SetupPharmacy = ({
                     onChange={(e) => {
                       setSelected(e.target.value);
                       validateField("pharmacyType", e.target.value);
+                      validateGstField(pharmacyGst, e.target.value);
                     }}
                     className="absolute left-4 top-4 h-5 w-5 accent-secondary-700"
                   />
@@ -1063,7 +1087,11 @@ const SetupPharmacy = ({
             />
 
             <Input
-              label="GST Number (Optional)"
+              label={
+                isGstOptionalForBusinessType(selected)
+                  ? "GST Number (Optional)"
+                  : "GST Number"
+              }
               placeholder="29ABCDE1234F1Z5"
               type="text"
               name="gstNumber"
@@ -1071,6 +1099,7 @@ const SetupPharmacy = ({
               value={pharmacyGst}
               onChange={handleFieldChange("pharmacyGst", setPharmacyGst)}
               error={errors.pharmacyGst}
+              required={!isGstOptionalForBusinessType(selected)}
             />
 
             <Input

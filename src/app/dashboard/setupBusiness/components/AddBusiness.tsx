@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
-import SetupBusinessView from './SetupBusiness';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import SetupBusinessView, { SetupBusinessHandle } from './SetupBusiness';
 import SetupPharmacy from './SetupPharmacy';
 import { EMPTY_WAREHOUSE, WarehouseDetails } from '@/types/SetupWarehouseData';
 import { getUserOrganization, getPharmacyRegistrations, getPharmacyRegistrationDetails } from '@/services/SetupBusinessService';
@@ -27,6 +27,7 @@ function SetupBusinessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const reqId = searchParams.get("reqId");
+  const setupBusinessRef = useRef<SetupBusinessHandle>(null);
 
   useEffect(() => {
     const fetchOrgAndRegistrations = async () => {
@@ -174,6 +175,7 @@ function SetupBusinessContent() {
         <>
           {!hasOrganization && !showProductManagement && (
             <SetupBusinessView
+              ref={setupBusinessRef}
               businessName={businessName}
               setBusinessName={setBusinessName}
               ownershipType={ownershipType}
@@ -192,6 +194,7 @@ function SetupBusinessContent() {
             ownershipType={ownershipType}
             panNumber={panNumber}
             gstNumber={gstNumber}
+            validateBusinessDetails={() => setupBusinessRef.current?.validate() ?? true}
             locationType={locationType}
             manageCentrally={manageCentrally}
             setManageCentrally={setManageCentrally}
