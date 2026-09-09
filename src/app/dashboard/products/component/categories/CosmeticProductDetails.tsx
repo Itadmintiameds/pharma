@@ -12,27 +12,42 @@ export interface ProductDetailsRef {
   validate: () => boolean;
 }
 
-const CosmeticProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
-  const [formData, setFormData] = useState({
-    productName: "",
-    brandName: "",
-    productType: "",
-    productSubType: "",
-    productForm: "",
-    variant: "",
-    // Multi-select: a product can be meant for more than one area, and the
-    // payload field is `intendedUseAreaIds`.
-    intendedUseArea: [] as string[],
-    skinType: "",
-    hairType: "",
-    ageGroup: [] as string[],
-    gender: "",
-    fragrance: "",
-    netQuantity: "",
-    netQuantityUnit: "",
-    manufacturerName: "",
-    gst: "",
-    hsnCode: ""
+
+/**
+ * The form opens blank for a new product. `initialData` is the wizard's own
+ * snapshot of this form (its `getFormData()` result) handed back so an already
+ * onboarded product can be edited from what was saved, rather than re-typed.
+ */
+export interface CosmeticProductDetailsProps {
+  initialData?: Record<string, any>;
+}
+
+const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDetailsProps>(({ initialData }, ref) => {
+  const [formData, setFormData] = useState(() => {
+    const blank = {
+      productName: "",
+      brandName: "",
+      productType: "",
+      productSubType: "",
+      productForm: "",
+      variant: "",
+      // Multi-select: a product can be meant for more than one area, and the
+      // payload field is `intendedUseAreaIds`.
+      intendedUseArea: [] as string[],
+      skinType: "",
+      hairType: "",
+      ageGroup: [] as string[],
+      gender: "",
+      fragrance: "",
+      netQuantity: "",
+      netQuantityUnit: "",
+      manufacturerName: "",
+      gst: "",
+      hsnCode: ""
+    };
+    // An edit opens on the wizard's own snapshot of this form; a new
+    // product opens blank.
+    return { ...blank, ...(initialData as Partial<typeof blank> | undefined) };
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});

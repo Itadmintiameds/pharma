@@ -48,6 +48,19 @@ export interface BatchDetailsProps {
   productId?: string;
   /** Package the batch is being added under — needed to check for duplicate batch numbers. */
   packagingId?: string;
+  /**
+   * Form state to open with — this form's own `getFormData()` result, handed
+   * back so an already created batch can be edited from what was saved rather
+   * than re-typed. Only read on mount.
+   */
+  initialData?: Record<string, any>;
+  /**
+   * The batch is settled and none of its master data may be touched: only the
+   * quantities booked against it are in play. Same locking as picking a saved
+   * batch in "existing" mode, minus the picker — there is no choice to make,
+   * so the batch number is shown read-only instead.
+   */
+  lockedBatch?: boolean;
 }
 
 const ADD_NEW_BATCH = 'ADD_NEW';
@@ -101,6 +114,17 @@ const toFirstOfMonth = (monthYear: string): string => {
   return match ? `${match[1]}-${match[2]}-01` : monthYear;
 };
 
+/**
+ * The reverse of the two above, for a snapshot handed back as `initialData`:
+ * getFormData() reports a full calendar date, but the picker only shows a
+ * month, so "2028-08-31" has to go back into the field as "2028-08".
+ */
+const toMonthInput = (value: unknown): string => {
+  const text = value === null || value === undefined ? '' : String(value);
+  const match = /^(\d{4}-\d{2})/.exec(text);
+  return match ? match[1] : text;
+};
+
 const toLastOfMonth = (monthYear: string): string => {
   const match = /^(\d{4})-(\d{2})$/.exec(monthYear);
   if (!match) return monthYear;
@@ -110,10 +134,23 @@ const toLastOfMonth = (monthYear: string): string => {
 
 
 const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
-  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '', productId = '', packagingId = '' },
+  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '', productId = '', packagingId = '', initialData, lockedBatch = false },
   ref
 ) => {
-  const [formData, setFormData] = useState({ ...EMPTY_FORM });
+  const [formData, setFormData] = useState(() => {
+    if (!initialData) return { ...EMPTY_FORM };
+    const restored = { ...EMPTY_FORM, ...(initialData as Partial<typeof EMPTY_FORM>) };
+    // A locked batch's dates are shown as plain text and read back untouched,
+    // so they stay the full dates they arrived as; only the month pickers of an
+    // editable batch need trimming back to what they can display.
+    return lockedBatch
+      ? restored
+      : {
+          ...restored,
+          manufacturingDate: toMonthInput(restored.manufacturingDate),
+          expiryDate: toMonthInput(restored.expiryDate),
+        };
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   // "" = nothing picked yet, ADD_NEW_BATCH = create one, otherwise a batchId.
   const [selectedBatch, setSelectedBatch] = useState('');
@@ -123,8 +160,10 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const [isCheckingBatch, setIsCheckingBatch] = useState(false);
 
   const isExistingMode = mode === 'existing';
-  // Batch master data mirrors a saved batch and must not be edited.
-  const isLocked = isExistingMode && !!selectedBatch && selectedBatch !== ADD_NEW_BATCH;
+  // Batch master data mirrors a saved batch and must not be edited — either one
+  // the user picked from the list, or one the caller has already settled on.
+  const isLocked =
+    lockedBatch || (isExistingMode && !!selectedBatch && selectedBatch !== ADD_NEW_BATCH);
   // Shown but inert until the user says which batch the stock belongs to.
   const awaitingBatchChoice = isExistingMode && !selectedBatch;
   /**
@@ -266,6 +305,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const checkBatchNumberExists = async (batchNumber: string) => {
     const trimmed = batchNumber.trim();
     if (isLocked || !trimmed || !productId || !packagingId) return;
+
+    // Editing a batch that already exists: its own number is on record under
+    // this very product and package, so checking it would report the batch as
+    // its own duplicate. Only a number the user actually changed is checked.
+    if (initialData && trimmed === String(initialData.batchNumber ?? '').trim()) {
+      setBatchExistsError('');
+      return;
+    }
 
     setIsCheckingBatch(true);
     try {
@@ -449,9 +496,14 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       expiryDate: isLocked || !resolvedFormData.expiryDate
         ? resolvedFormData.expiryDate
         : toLastOfMonth(resolvedFormData.expiryDate),
-      // Empty unless a saved batch was picked — that is what tells the caller
-      // no batch needs creating.
-      batchId: isLocked ? selectedBatch : ''
+      // Empty unless the batch already exists — that is what tells the caller
+      // no batch needs creating. A batch settled by the caller has no picker to
+      // read it from, so it is echoed back from the state it arrived in.
+      batchId: lockedBatch
+        ? str(initialData?.batchId)
+        : isLocked
+          ? selectedBatch
+          : ''
     }),
     validate: () => {
       if (isExistingMode && !selectedBatch) {
@@ -537,7 +589,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
 
           <div className="grid grid-cols-2 items-start gap-x-xlg gap-y-sm">
             {/* The picker and the new-batch field share one slot. */}
-            {isExistingMode && !isAddingNewBatch && (
+            {isExistingMode && !isAddingNewBatch && !lockedBatch && (
               <Dropdown
                 label="Batch Number"
                 required
@@ -546,6 +598,17 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
                 value={selectedBatch}
                 onChange={handleBatchChange}
                 error={errors.selectedBatch}
+              />
+            )}
+
+            {/* No picker to name the batch, so it is named here instead. */}
+            {lockedBatch && (
+              <Input
+                label="Batch Number"
+                value={formData.batchNumber}
+                readOnly
+                disabled
+                className="bg-gray-50"
               />
             )}
 

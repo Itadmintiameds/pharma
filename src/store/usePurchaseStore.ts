@@ -54,6 +54,12 @@ interface PurchaseState {
   
   setPurchaseHeader: (data: Partial<PurchaseState>) => void;
   addPurchaseDetail: (detail: PurchaseDetail) => void;
+  /**
+   * Replaces the fields given on one line, keeping the rest. Used when a
+   * product already on the invoice is edited before the purchase is saved: the
+   * product master is updated on the server, and the line has to follow.
+   */
+  updatePurchaseDetail: (index: number, patch: Partial<PurchaseDetail>) => void;
   removePurchaseDetail: (index: number) => void;
   resetPurchase: () => void;
 }
@@ -89,6 +95,27 @@ export const usePurchaseStore = create<PurchaseState>((set) => ({
       totalNetAmount: state.totalNetAmount + detail.netAmount
     })),
     
+  updatePurchaseDetail: (index, patch) =>
+    set((state) => {
+      const previous = state.purchaseDetails[index];
+      if (!previous) return {};
+
+      const next = { ...previous, ...patch };
+      const details = [...state.purchaseDetails];
+      details[index] = next;
+
+      // The running sums are kept as the lines are added, so an edited line has
+      // to be taken back out of them before its new figures go in.
+      return {
+        purchaseDetails: details,
+        totalGrossAmount:
+          state.totalGrossAmount - previous.grossAmount + next.grossAmount,
+        totalGst: state.totalGst - previous.gst + next.gst,
+        totalNetAmount:
+          state.totalNetAmount - previous.netAmount + next.netAmount,
+      };
+    }),
+
   removePurchaseDetail: (index) =>
     set((state) => {
       const details = [...state.purchaseDetails];

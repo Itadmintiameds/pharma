@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import toast from "react-hot-toast";
 import Button from "@/app/components/common/Button";
@@ -19,6 +19,7 @@ import {
   type ProductDetails,
 } from "@/types/ProductData";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
+import type { OnboardedLine } from "@/utils/onboardedLines";
 
 const TABS = ["Packaging & Order Details", "Batch & Stock Details"];
 
@@ -29,6 +30,17 @@ interface AddStockToProductProps {
   onCancel: () => void;
   /** Fired once the batch is created and pushed onto the purchase store. */
   onAdded: () => void;
+  /**
+   * Reports what this flow created, so the invoice line can still be corrected
+   * before the purchase is saved.
+   *
+   * Not called when nothing was created — booking against a package and batch
+   * the product already had leaves nothing this invoice may edit. The product's
+   * own details are never in scope here either: there is no Product Details
+   * step, so `snapshot.productData` is absent and the edit is limited to the
+   * package / batch rows below.
+   */
+  onLineCreated?: (line: OnboardedLine) => void;
 }
 
 /** Every batch on the product, whether under a package or unassigned. */
@@ -80,6 +92,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
   fallbackName,
   onCancel,
   onAdded,
+  onLineCreated,
 }) => {
   const [activeTab, setActiveTab] = useState(TABS[0]);
   const [details, setDetails] = useState<ProductDetails | null>(null);
@@ -102,6 +115,33 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
 
   const selectedPackage = details?.packages?.find(
     (pkg) => pkg.packagingId === selectedPackagingId
+  );
+
+  /**
+   * Batches of this product the invoice already has a line for.
+   *
+   * A second line against the same batch is two claims on one row: the same
+   * stock counted twice, and no way to tell the two apart afterwards. Rather
+   * than let it be picked and then refused, those batches are dropped from the
+   * picker — the user can still add a new batch under the same package.
+   */
+  const purchaseDetails = usePurchaseStore((state) => state.purchaseDetails);
+  const bookedBatchIds = useMemo(
+    () =>
+      new Set(
+        purchaseDetails
+          .filter((line) => line.productId === productId)
+          .map((line) => line.batchId)
+      ),
+    [purchaseDetails, productId]
+  );
+
+  const availableBatches = useMemo(
+    () =>
+      (selectedPackage?.batches ?? []).filter(
+        (batch) => !bookedBatchIds.has(batch.batchId)
+      ),
+    [selectedPackage, bookedBatchIds]
   );
 
   useEffect(() => {
@@ -236,6 +276,16 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         }
       }
 
+      // The picker already hides booked batches, but a batch created here is
+      // identified by reading the product back — and that can land on a row the
+      // invoice already claims. Refused rather than added as a second line.
+      if (bookedBatchIds.has(batchId)) {
+        toast.error(
+          "This batch is already on the invoice. Edit that line's quantity instead of adding it twice."
+        );
+        return;
+      }
+
       const pkg = updated.packages?.find((p) => p.packagingId === packagingId);
       const variant = pkg
         ? `1x${pkg.purchaseUnitContains} ${packageSmallestUnitName(pkg)}`.trim()
@@ -272,6 +322,22 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         grossAmount,
         gst,
         netAmount,
+      });
+
+      // What may be corrected from the invoice is what this flow brought into
+      // being: the package too when it was added here, the batch alone when the
+      // stock went into a package the product already had, and — when the batch
+      // itself already existed — only the quantities being booked, since its
+      // master data is shared with earlier purchases and the stock on hand.
+      onLineCreated?.({
+        productId,
+        packagingId,
+        batchId,
+        productCategoryId: details.productCategoryId,
+        scope: existingBatchId ? "quantities" : "stock",
+        packagingCreated: !existingPackagingId,
+        batchCreated: !existingBatchId,
+        snapshot: { productData: undefined, packagingData, batchData },
       });
 
       onAdded();
@@ -384,7 +450,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             key={selectedPackagingId}
             ref={batchRef}
             mode="existing"
-            batches={selectedPackage?.batches ?? []}
+            batches={availableBatches}
             productId={productId}
             packagingId={selectedPackagingId}
             {...packagingUnits}

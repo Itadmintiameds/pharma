@@ -12,20 +12,35 @@ export interface ProductDetailsRef {
   validate: () => boolean;
 }
 
-const FoodInfantProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
-  const [formData, setFormData] = useState({
-    productName: "",
-    brandName: "",
-    productCategory: "",
-    productSubCategory: "",
-    variantName: "",
-    productForm: "",
-    ageGroup: [] as string[],
-    netQuantity: "",
-    netQuantityUnit: "",
-    manufacturerName: "",
-    gst: "",
-    hsnCode: ""
+
+/**
+ * The form opens blank for a new product. `initialData` is the wizard's own
+ * snapshot of this form (its `getFormData()` result) handed back so an already
+ * onboarded product can be edited from what was saved, rather than re-typed.
+ */
+export interface FoodInfantProductDetailsProps {
+  initialData?: Record<string, any>;
+}
+
+const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProductDetailsProps>(({ initialData }, ref) => {
+  const [formData, setFormData] = useState(() => {
+    const blank = {
+      productName: "",
+      brandName: "",
+      productCategory: "",
+      productSubCategory: "",
+      variantName: "",
+      productForm: "",
+      ageGroup: [] as string[],
+      netQuantity: "",
+      netQuantityUnit: "",
+      manufacturerName: "",
+      gst: "",
+      hsnCode: ""
+    };
+    // An edit opens on the wizard's own snapshot of this form; a new
+    // product opens blank.
+    return { ...blank, ...(initialData as Partial<typeof blank> | undefined) };
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});

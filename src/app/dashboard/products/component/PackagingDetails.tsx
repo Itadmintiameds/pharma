@@ -36,6 +36,13 @@ export interface PackagingDetailsProps {
    * to label and derive its per-smallest-unit prices.
    */
   onUnitsChange?: (units: PackagingUnits) => void;
+  /**
+   * Form state to open with — this form's own `getFormData()` result, handed
+   * back so an already created package can be edited from what was saved
+   * rather than re-picked. Only read on mount, and only meaningful in "new"
+   * mode: in "existing" mode the package picker is what fills the fields.
+   */
+  initialData?: Record<string, any>;
 }
 
 /** The unit pairing a batch is priced against. */
@@ -74,14 +81,18 @@ const sameUnitName = (a: string, b: string) =>
   a.trim().toLowerCase() === b.trim().toLowerCase();
 
 const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>((
-  { categoryId, mode = 'new', packages = [], onPackageChange, onUnitsChange },
+  { categoryId, mode = 'new', packages = [], onPackageChange, onUnitsChange, initialData },
   ref
 ) => {
-  const [purchaseUnit, setPurchaseUnit] = useState('');
-  const [eachStripContains, setEachStripContains] = useState<string>('');
-  const [smallestUnit, setSmallestUnit] = useState('');
+  const [purchaseUnit, setPurchaseUnit] = useState(String(initialData?.purchaseUnit ?? ''));
+  const [eachStripContains, setEachStripContains] = useState<string>(
+    String(initialData?.eachStripContains ?? '')
+  );
+  const [smallestUnit, setSmallestUnit] = useState(String(initialData?.smallestUnit ?? ''));
   // The master row id for the chosen pairing — this is what the payload sends.
-  const [purchaseSmallestUnitId, setPurchaseSmallestUnitId] = useState('');
+  const [purchaseSmallestUnitId, setPurchaseSmallestUnitId] = useState(
+    String(initialData?.purchaseSmallestUnitId ?? '')
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const { units: unitPairs, isLoading: isLoadingUnits } = usePurchaseSmallestUnits(categoryId);

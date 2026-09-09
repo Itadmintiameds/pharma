@@ -11,6 +11,26 @@ export class ProductService {
     }
   }
 
+  /**
+   * Edits a product that is already onboarded.
+   *
+   * Only the fields that actually changed belong in `payload` — the backend
+   * applies whatever it is given. The one exception is the identifiers: a
+   * `packagingDetails` entry must carry its `packagingId` and a `batchDetails`
+   * entry its `batchId`, otherwise the backend reads the entry as a new package
+   * or batch and creates a second one alongside the original. See
+   * buildProductUpdatePayload, which assembles exactly that shape.
+   */
+  static async updateProduct(productId: string, payload: any) {
+    try {
+      const response = await api.put(`/product/${productId}`, payload);
+      return response.data;
+    } catch (error) {
+      console.error(`Error updating product ${productId}:`, error);
+      throw error;
+    }
+  }
+
   static async getAllBatches() {
     try {
       const response = await api.get('/product/batches');

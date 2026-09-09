@@ -11,25 +11,40 @@ export interface ProductDetailsRef {
   validate: () => boolean;
 }
 
-const ConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
-  const [formData, setFormData] = useState({
-    productName: "",
-    brandName: "",
-    deviceCategory: "",
-    deviceSubCategory: "",
-    // Multi-select: a consumable is often built of several materials at once —
-    // a syringe is barrel plus needle. The payload's materialTypeIds already
-    // took a list (see buildConsumableAttributes), so every pick travels.
-    materialType: [] as string[],
-    sizeDimensionGauge: "",
-    sterile: "",
-    disposable: "",
-    intendedUse: "",
-    manufacturerName: "",
-    manufacturerLicenseNumber: "",
-    isIsoCertified: "",
-    gst: "",
-    hsnCode: ""
+
+/**
+ * The form opens blank for a new product. `initialData` is the wizard's own
+ * snapshot of this form (its `getFormData()` result) handed back so an already
+ * onboarded product can be edited from what was saved, rather than re-typed.
+ */
+export interface ConsumableProductDetailsProps {
+  initialData?: Record<string, any>;
+}
+
+const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProductDetailsProps>(({ initialData }, ref) => {
+  const [formData, setFormData] = useState(() => {
+    const blank = {
+      productName: "",
+      brandName: "",
+      deviceCategory: "",
+      deviceSubCategory: "",
+      // Multi-select: a consumable is often built of several materials at once —
+      // a syringe is barrel plus needle. The payload's materialTypeIds already
+      // took a list (see buildConsumableAttributes), so every pick travels.
+      materialType: [] as string[],
+      sizeDimensionGauge: "",
+      sterile: "",
+      disposable: "",
+      intendedUse: "",
+      manufacturerName: "",
+      manufacturerLicenseNumber: "",
+      isIsoCertified: "",
+      gst: "",
+      hsnCode: ""
+    };
+    // An edit opens on the wizard's own snapshot of this form; a new
+    // product opens blank.
+    return { ...blank, ...(initialData as Partial<typeof blank> | undefined) };
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});

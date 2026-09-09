@@ -8,25 +8,32 @@ import NonConsumableProductDetails from './categories/NonConsumableProductDetail
 
 interface ProductDetailsProps {
   categoryId?: number;
+  /**
+   * Form state to open with — the snapshot the caller took of this same form,
+   * so an already onboarded product can be edited from what was saved. The
+   * shape is the category's own, which is why it is only ever handed back to
+   * the category it came from.
+   */
+  initialData?: Record<string, any>;
 }
 
-const ProductDetails = forwardRef<ProductDetailsRef, ProductDetailsProps>(({ categoryId = 1 }, ref) => {
+const ProductDetails = forwardRef<ProductDetailsRef, ProductDetailsProps>(({ categoryId = 1, initialData }, ref) => {
   const renderCategoryContent = () => {
     switch (categoryId) {
       case 1:
-        return <DrugProductDetails ref={ref} />;
+        return <DrugProductDetails ref={ref} initialData={initialData} />;
       case 2:
-        return <SupplementProductDetails ref={ref} />;
+        return <SupplementProductDetails ref={ref} initialData={initialData} />;
       case 3:
-        return <FoodInfantProductDetails ref={ref} />;
+        return <FoodInfantProductDetails ref={ref} initialData={initialData} />;
       case 4:
-        return <CosmeticProductDetails ref={ref} />;
+        return <CosmeticProductDetails ref={ref} initialData={initialData} />;
       case 5:
-        return <ConsumableProductDetails ref={ref} />;
+        return <ConsumableProductDetails ref={ref} initialData={initialData} />;
       case 6:
-        return <NonConsumableProductDetails ref={ref} />;
+        return <NonConsumableProductDetails ref={ref} initialData={initialData} />;
       default:
-        return <DrugProductDetails ref={ref} />;
+        return <DrugProductDetails ref={ref} initialData={initialData} />;
     }
   };
 

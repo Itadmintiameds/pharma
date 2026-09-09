@@ -11,24 +11,39 @@ export interface ProductDetailsRef {
   validate: () => boolean;
 }
 
-const NonConsumableProductDetails = forwardRef<ProductDetailsRef>((props, ref) => {
-  const [formData, setFormData] = useState({
-    productName: "",
-    brandName: "",
-    deviceCategory: "",
-    deviceSubCategory: "",
-    modelName: "",
-    deviceClassification: "",
-    intendedUse: "",
-    technicalDimensions: "",
-    materialBuildType: "",
-    powerSource: "",
-    warrantyPeriod: "",
-    amcServiceAvailability: "",
-    manufacturerName: "",
-    countryOfOrigin: "",
-    gst: "",
-    hsnCode: ""
+
+/**
+ * The form opens blank for a new product. `initialData` is the wizard's own
+ * snapshot of this form (its `getFormData()` result) handed back so an already
+ * onboarded product can be edited from what was saved, rather than re-typed.
+ */
+export interface NonConsumableProductDetailsProps {
+  initialData?: Record<string, any>;
+}
+
+const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableProductDetailsProps>(({ initialData }, ref) => {
+  const [formData, setFormData] = useState(() => {
+    const blank = {
+      productName: "",
+      brandName: "",
+      deviceCategory: "",
+      deviceSubCategory: "",
+      modelName: "",
+      deviceClassification: "",
+      intendedUse: "",
+      technicalDimensions: "",
+      materialBuildType: "",
+      powerSource: "",
+      warrantyPeriod: "",
+      amcServiceAvailability: "",
+      manufacturerName: "",
+      countryOfOrigin: "",
+      gst: "",
+      hsnCode: ""
+    };
+    // An edit opens on the wizard's own snapshot of this form; a new
+    // product opens blank.
+    return { ...blank, ...(initialData as Partial<typeof blank> | undefined) };
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Button from "@/app/components/common/Button";
@@ -23,10 +23,15 @@ import {
   type ProductStockRow,
 } from "@/utils/productStock";
 import { buildProductAttributes } from "@/utils/productOnboardPayload";
+import {
+  buildProductUpdatePayload,
+  type ProductFormSnapshot,
+} from "@/utils/productUpdatePayload";
+import { lineKey, type OnboardedLine } from "@/utils/onboardedLines";
 import { formatMonthYear } from "@/utils/formatDate";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { usePurchaseStore } from "@/store/usePurchaseStore";
+import { usePurchaseStore, type PurchaseDetail } from "@/store/usePurchaseStore";
 import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -69,14 +74,134 @@ const hasMeaningfulValue = (value: unknown): boolean => {
   return Boolean(value);
 };
 
+/** A form field read back as text, with a stand-in for the empty readings. */
+const text = (value: unknown, fallback = ""): string => {
+  const raw = value === null || value === undefined ? "" : String(value);
+  return raw.trim() === "" ? fallback : raw;
+};
+
+/**
+ * The invoice line the three step forms describe, without the ids the backend
+ * assigns. Shared by the two ways a line reaches the store — created after
+ * onboarding, and re-costed after the product is edited — so what the invoice
+ * shows is worked out one way only.
+ */
+const buildLineFields = ({
+  productData,
+  packagingData,
+  batchData,
+}: ProductFormSnapshot): Omit<
+  PurchaseDetail,
+  "productId" | "batchId" | "packagingId"
+> => {
+  const purchaseQuantity = Number(batchData?.purchaseQuantity || 0);
+  // Per purchase unit, to match purchaseQuantity — stock is bought by the
+  // pack, so the per-smallest-unit price would under-state the line.
+  const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
+  const gstPercentage = Number(productData?.gst || 0);
+
+  const grossAmount = purchaseQuantity * purchasePrice;
+  const gst = (grossAmount * gstPercentage) / 100;
+
+  const containsVal = text(packagingData?.eachStripContains, "1");
+  const unitVal = text(packagingData?.smallestUnit);
+
+  return {
+    productName: text(productData?.productName, "Unnamed Product"),
+    brandName: text(productData?.brandName),
+    batchNumber: text(batchData?.batchNumber),
+    expiryDate: text(batchData?.expiryDate),
+    hsnCode: text(productData?.hsnCode),
+    variant: `1x${containsVal} ${unitVal}`.trim(),
+    purchasePrice,
+    mrp: Number(batchData?.mrpPerBox || 0),
+    gstPercentage,
+    freeQty: String(Number(batchData?.freeQuantity || 0)),
+    freeQtyUnit: text(batchData?.freeUnit),
+    purchaseQuantity,
+    grossAmount,
+    gst,
+    netAmount: grossAmount + gst,
+  };
+};
+
+/**
+ * The same for a line whose product was not created here: its name, brand, HSN
+ * and GST slab belong to the product master, so they are left exactly as the
+ * line already has them and the GST amount is re-worked on that standing slab.
+ * Only the package and batch the flow created, and the quantities booked
+ * against them, are the line's to restate.
+ */
+const stockLineFields = (
+  after: ProductFormSnapshot,
+  index: number
+): Partial<PurchaseDetail> => {
+  const {
+    batchNumber,
+    expiryDate,
+    variant,
+    purchasePrice,
+    mrp,
+    freeQty,
+    freeQtyUnit,
+    purchaseQuantity,
+    grossAmount,
+  } = buildLineFields(after);
+
+  const line = usePurchaseStore.getState().purchaseDetails[index];
+  const gstPercentage = Number(line?.gstPercentage || 0);
+  const gst = (grossAmount * gstPercentage) / 100;
+
+  return {
+    batchNumber,
+    expiryDate,
+    variant,
+    purchasePrice,
+    mrp,
+    freeQty,
+    freeQtyUnit,
+    purchaseQuantity,
+    grossAmount,
+    gst,
+    netAmount: grossAmount + gst,
+  };
+};
+
 /** Identifies a category or medical-device sub-category the user is switching to. */
 type PendingSelection = { type: "category" | "subCategory"; id: number };
+
+/** A line being edited: what created it, plus where it sits on the invoice. */
+interface EditingLine extends OnboardedLine {
+  index: number;
+}
 
 interface AddProductsProps {
   onClose?: () => void;
   /** Returns to the supplier details this invoice is being built against. */
   onBack?: () => void;
 }
+
+/** The wizard's three steps, in order. */
+const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
+
+/**
+ * The steps a line's edit may touch — only what this flow created is the
+ * line's to change:
+ *
+ *  - a product onboarded here: all three steps;
+ *  - stock booked on an existing product, package and all: the package and its
+ *    batch, but not the product's own details;
+ *  - stock booked into a package the product already had: the batch alone,
+ *    since the package is shared with whatever else sits under it;
+ *  - stock booked against a batch that already existed: the batch step again,
+ *    but with every master field locked — see `lockedBatch` on BatchDetails.
+ *    Only the purchase quantity and free goods are in play, which is what that
+ *    step already collects for a saved batch.
+ */
+const editableTabs = (line: OnboardedLine | null): string[] => {
+  if (!line || line.scope === "product") return TABS;
+  return line.packagingCreated ? TABS.slice(1) : TABS.slice(2);
+};
 
 /** Rows per page in the existing-product list. */
 const PRODUCT_PAGE_SIZE = 10;
@@ -113,6 +238,20 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   // True while the /product/exists check runs, so the Next button can guard
   // against double-clicks and show progress.
   const [isCheckingProduct, setIsCheckingProduct] = useState(false);
+
+  /**
+   * Set while an invoice line's product is being edited. Null means the wizard
+   * is onboarding a new product, which is the only thing it did before.
+   */
+  const [editingLine, setEditingLine] = useState<EditingLine | null>(null);
+  const isEditing = editingLine !== null;
+
+  /**
+   * Every product this session onboarded, by line key. A ref rather than state:
+   * nothing renders off it, and it must survive the re-renders that switching
+   * view and remounting the step forms cause.
+   */
+  const onboardedLines = useRef<Map<string, OnboardedLine>>(new Map());
 
   const productDetailsRef = useRef<any>(null);
   const packagingDetailsRef = useRef<PackagingDetailsRef>(null);
@@ -163,6 +302,60 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     };
   }, []);
 
+  /**
+   * Re-opens the wizard on an invoice line, showing only the steps that line is
+   * allowed to change (see editableTabs).
+   *
+   * A line the wizard can't open is one that created nothing: stock booked
+   * against a package and batch the product already had. There is no snapshot
+   * for it, and editing those rows would reach beyond this invoice. Reads the
+   * store through getState() and touches only stable setters, so it stays
+   * correct inside the memoised column that renders the button.
+   */
+  const handleEditLine = useCallback((index: number) => {
+    const line = usePurchaseStore.getState().purchaseDetails[index];
+    if (!line) return;
+
+    const onboarded = onboardedLines.current.get(
+      lineKey(line.productId, line.batchId)
+    );
+    if (!onboarded) {
+      toast.error(
+        "This item's details can't be edited from the invoice. Change them from Product Management instead."
+      );
+      return;
+    }
+
+    // The category drives which product form renders and which unit master the
+    // packaging step reads, so it has to agree with the product being edited —
+    // Medical Devices (5) carries its real category in the sub-category.
+    const { productCategoryId, snapshot } = onboarded;
+    if (productCategoryId === 5 || productCategoryId === 6) {
+      setSelectedCategory(5);
+      setSelectedSubCategory(productCategoryId);
+    } else {
+      setSelectedCategory(productCategoryId);
+    }
+
+    // Seeded from the snapshot rather than left to the packaging step: when
+    // that step isn't among the editable ones, nothing else would tell the
+    // batch form which units its prices are in.
+    setPackagingUnits({
+      purchaseUnit: text(snapshot.packagingData?.purchaseUnit),
+      smallestUnit: text(snapshot.packagingData?.smallestUnit),
+      unitContains: text(snapshot.packagingData?.eachStripContains),
+    });
+
+    setEditingLine({ ...onboarded, index });
+    setActiveTab(editableTabs(onboarded)[0]);
+    // Remounts the step forms, which is what makes them pick up the snapshot
+    // as their initial state.
+    setFormKey((key) => key + 1);
+    setViewState("add");
+    // Only refs and state setters, so it never has to be rebuilt — which is
+    // what lets the memoised column below hold on to it.
+  }, []);
+
   // Mirrors the tax invoice grid, so the line reads the same here as it does on
   // the summary the user saves.
   const tableColumns = useMemo<ColumnDef<any, any>[]>(() => [
@@ -185,7 +378,30 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     { accessorKey: 'discountPercentage', header: 'DIS%', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'gstPercentage', header: 'GST%', cell: (info) => Number(info.getValue() || 0).toFixed(2) },
     { accessorKey: 'netAmount', header: 'Amount (₹)', cell: (info) => <span className="font-semibold text-secondary-700">{Number(info.getValue() || 0).toFixed(2)}</span> },
-  ], []);
+    // The line's product is still editable while the invoice is unsaved: the
+    // product was created the moment it was added, so a correction goes to
+    // PUT /product/{id} rather than waiting for the purchase to be saved.
+    {
+      id: 'actions',
+      header: 'Action',
+      cell: (info) => (
+        <button
+          type="button"
+          onClick={() => handleEditLine(info.row.index)}
+          aria-label="Edit item details"
+          title="Edit item details"
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-secondary-50"
+        >
+          <Image
+            src="/UserManagement/EditIcon.svg"
+            alt="Edit"
+            width={16}
+            height={16}
+          />
+        </button>
+      ),
+    },
+  ], [handleEditLine]);
 
   // Product master, loaded once so both the search dropdown and the table
   // below it filter the same client-side list.
@@ -236,7 +452,13 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     productPage * PRODUCT_PAGE_SIZE
   );
 
-  const TABS = ["Product Details", "Packaging & Order Details", "Batch & Stock Details"];
+  /**
+   * The steps this wizard run actually shows: all three when onboarding, and
+   * only what the line may change when editing.
+   */
+  const wizardTabs = editableTabs(editingLine);
+  const showsProductStep = wizardTabs.includes("Product Details");
+  const showsPackagingStep = wizardTabs.includes("Packaging & Order Details");
 
   // Each step must pass its own validation before the user can move forward.
   const validateTab = (tab: string): boolean => {
@@ -263,7 +485,18 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     if (activeTab === "Product Details") {
       const productData = productDetailsRef.current?.getFormData();
       const productName = productData?.productName?.trim();
-      if (productName) {
+      // While editing, the product under the wizard is itself on record, so the
+      // check is only meaningful once the identity actually changes — run on
+      // the values it was saved with, it would report the product as its own
+      // duplicate and refuse to move on.
+      const identityChanged =
+        !isEditing ||
+        (["productName", "brandName", "hsnCode"] as const).some(
+          (field) =>
+            String(productData?.[field] ?? "").trim() !==
+            String(editingLine?.snapshot.productData?.[field] ?? "").trim()
+        );
+      if (productName && identityChanged) {
         try {
           setIsCheckingProduct(true);
           const result = await ProductService.checkProductExists(
@@ -287,23 +520,23 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       }
     }
 
-    const currentIndex = TABS.indexOf(activeTab);
-    if (currentIndex < TABS.length - 1) {
-      setActiveTab(TABS[currentIndex + 1]);
+    const currentIndex = wizardTabs.indexOf(activeTab);
+    if (currentIndex < wizardTabs.length - 1) {
+      setActiveTab(wizardTabs[currentIndex + 1]);
     }
   };
 
   const handleBack = () => {
-    const currentIndex = TABS.indexOf(activeTab);
+    const currentIndex = wizardTabs.indexOf(activeTab);
     if (currentIndex > 0) {
-      setActiveTab(TABS[currentIndex - 1]);
+      setActiveTab(wizardTabs[currentIndex - 1]);
     }
   };
 
   // Jumping via the tab strip is only allowed for steps already completed.
   const handleTabClick = (tab: string) => {
-    const targetIndex = TABS.indexOf(tab);
-    const currentIndex = TABS.indexOf(activeTab);
+    const targetIndex = wizardTabs.indexOf(tab);
+    const currentIndex = wizardTabs.indexOf(activeTab);
 
     if (targetIndex <= currentIndex) {
       setActiveTab(tab);
@@ -311,8 +544,8 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     }
 
     for (let i = currentIndex; i < targetIndex; i++) {
-      if (!validateTab(TABS[i])) {
-        setActiveTab(TABS[i]);
+      if (!validateTab(wizardTabs[i])) {
+        setActiveTab(wizardTabs[i]);
         return;
       }
     }
@@ -321,6 +554,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
 
   // Always open the wizard on step 1 with blank forms.
   const handleOpenAddProduct = () => {
+    setEditingLine(null);
     setActiveTab(TABS[0]);
     setFormKey((key) => key + 1);
     setPackagingUnits({ purchaseUnit: "", smallestUnit: "", unitContains: "" });
@@ -359,6 +593,16 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     const current = sel.type === "category" ? selectedCategory : selectedSubCategory;
     if (sel.id === current) return;
 
+    // A product's category is fixed once it is onboarded — the attributes hang
+    // off it, so PUT /product/{id} has no way to move it. Editing a line is
+    // therefore locked to the category it was created under.
+    if (isEditing) {
+      toast.error(
+        "A product's category can't be changed after it is created. Remove the item and add it again to use a different category."
+      );
+      return;
+    }
+
     if (hasEnteredData()) {
       setPendingSelection(sel);
       return;
@@ -380,6 +624,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   };
 
   const handleCancel = () => {
+    // Leaving the wizard ends the edit; the line keeps whatever is on the
+    // server, which is what it already showed.
+    setEditingLine(null);
     setViewState('search'); // Go back to search view instead of list page
   };
 
@@ -470,40 +717,29 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         console.warn("Warning: Missing productId or batchId from onboard response:", response?.data);
       }
 
+      const snapshot: ProductFormSnapshot = { productData, packagingData, batchData };
+
       // Add to Purchase Store
-      const purchaseQty = Number(batchData?.purchaseQuantity || 0);
-      // Per purchase unit, to match purchaseQuantity — stock is bought by the
-      // pack, so the per-smallest-unit price would under-state the line.
-      const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
-      const gstPercentage = Number(productData?.gst || 0);
-      
-      const grossAmount = purchaseQty * purchasePrice;
-      const gst = (grossAmount * gstPercentage) / 100;
-      const netAmount = grossAmount + gst;
-
-      const containsVal = packagingData?.eachStripContains || "1";
-      const unitVal = packagingData?.smallestUnit || "";
-      const variant = `1x${containsVal} ${unitVal}`.trim();
-
       store.addPurchaseDetail({
         productId,
-        productName: productData?.productName || "Unnamed Product",
-        brandName: productData?.brandName || "",
         batchId,
-        batchNumber: batchData?.batchNumber || "",
         packagingId,
-        expiryDate: batchData?.expiryDate || "",
-        hsnCode: productData?.hsnCode || "",
-        variant,
-        purchasePrice,
-        mrp: Number(batchData?.mrpPerBox || 0),
-        gstPercentage,
-        freeQty: String(batchData?.freeQuantity || 0),
-        freeQtyUnit: batchData?.freeUnit || "",
-        purchaseQuantity: purchaseQty,
-        grossAmount,
-        gst,
-        netAmount
+        ...buildLineFields(snapshot),
+      });
+
+      // What the product was created from, so the line can be edited again
+      // before the purchase is saved. Keyed by the very ids the edit will be
+      // addressed to.
+      onboardedLines.current.set(lineKey(productId, batchId), {
+        productId,
+        packagingId,
+        batchId,
+        productCategoryId,
+        // The product itself was created here, so all of it stays editable.
+        scope: "product",
+        packagingCreated: true,
+        batchCreated: true,
+        snapshot,
       });
 
       setShowSuccessModal(true);
@@ -514,6 +750,115 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       // HSN), so return to the first step and surface those inputs for editing.
       setActiveTab("Product Details");
       productDetailsRef.current?.validate?.();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  /**
+   * Saves an edit to a line already on the invoice.
+   *
+   * What it created exists from the moment the item was added, so this is a PUT
+   * against it rather than a second create — and it carries only what the user
+   * actually changed, plus the packaging and batch ids, so the backend edits
+   * the rows the line points at instead of creating new ones beside them.
+   *
+   * A step outside this run is read from the snapshot rather than from its (now
+   * unmounted) form, so it diffs as unchanged and nothing the line doesn't own
+   * can reach the payload. Purchase quantity and free goods are likewise the
+   * line's own, not the product's: they never reach the PUT, they just re-cost
+   * the line here. The purchase is still created from the store when the
+   * invoice is saved.
+   */
+  const handleUpdate = async () => {
+    if (!editingLine) return;
+
+    try {
+      if (!validateTab(activeTab)) {
+        toast.error("Please fill all mandatory fields before saving");
+        return;
+      }
+
+      setIsSubmitting(true);
+
+      // Nothing on the server is this line's to change — the batch it books
+      // against was already there. Only how much is being bought moves, and
+      // that lives on the purchase, which is saved with the invoice.
+      if (editingLine.scope === "quantities") {
+        store.updatePurchaseDetail(
+          editingLine.index,
+          stockLineFields(
+            {
+              productData: undefined,
+              packagingData: editingLine.snapshot.packagingData,
+              batchData: batchDetailsRef.current?.getFormData(),
+            },
+            editingLine.index
+          )
+        );
+        toast.success("Quantities updated");
+        setEditingLine(null);
+        setViewState("search");
+        return;
+      }
+
+      const { snapshot } = editingLine;
+      const after: ProductFormSnapshot = {
+        productData: showsProductStep
+          ? productDetailsRef.current?.getFormData()
+          : snapshot.productData,
+        packagingData: showsPackagingStep
+          ? packagingDetailsRef.current?.getFormData()
+          : snapshot.packagingData,
+        batchData: batchDetailsRef.current?.getFormData(),
+      };
+
+      const { payload, hasChanges } = buildProductUpdatePayload(
+        editingLine.productCategoryId,
+        {
+          // Belt and braces alongside the step not being rendered: a package
+          // the product already had is not this line's to rewrite, so there is
+          // no id to address an edit of it to.
+          packagingId: editingLine.packagingCreated
+            ? editingLine.packagingId
+            : undefined,
+          batchId: editingLine.batchId,
+        },
+        snapshot,
+        after
+      );
+
+      if (!hasChanges) {
+        toast.success("No changes to save");
+        setEditingLine(null);
+        setViewState("search");
+        return;
+      }
+
+      await ProductService.updateProduct(editingLine.productId, payload);
+
+      // The line follows what was saved: batch, prices and the figures they
+      // cost out to — and, where the product itself was edited, its name too.
+      store.updatePurchaseDetail(
+        editingLine.index,
+        editingLine.scope === "product"
+          ? buildLineFields(after)
+          : stockLineFields(after, editingLine.index)
+      );
+
+      // The edit is the new baseline, so editing the same line again diffs
+      // against what was last saved rather than against the original.
+      onboardedLines.current.set(
+        lineKey(editingLine.productId, editingLine.batchId),
+        { ...editingLine, snapshot: after }
+      );
+
+      toast.success("Product updated");
+      setEditingLine(null);
+      setViewState("search");
+    } catch (error) {
+      console.error("Update failed:", error);
+      toast.error(getApiErrorMessage(error, "Failed to update product"));
     } finally {
       setIsSubmitting(false);
     }
@@ -609,7 +954,17 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       {/* Top Header */}
       <div className="flex flex-col gap-1 w-full mb-1">
         <h2 className="font-semibold text-[24px] text-pneutral-900 leading-[32px]">
-          {viewState === 'search' || viewState === 'add' ? "Add Items to Invoice" : ""}
+          {isEditing && viewState === 'add'
+            ? editingLine?.scope === "quantities"
+              ? "Edit Purchase Quantity"
+              : showsProductStep
+                ? "Edit Item Details"
+                : showsPackagingStep
+                  ? "Edit Package & Batch Details"
+                  : "Edit Batch Details"
+            : viewState === 'search' || viewState === 'add'
+              ? "Add Items to Invoice"
+              : ""}
         </h2>
       </div>
 
@@ -631,6 +986,14 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         <AddStockToProduct
           productId={stockTarget.productId}
           fallbackName={stockTarget.productName}
+          // Only fires when the flow actually created a package or batch, so
+          // the line's Edit button reaches exactly those.
+          onLineCreated={(created) =>
+            onboardedLines.current.set(
+              lineKey(created.productId, created.batchId),
+              created
+            )
+          }
           onCancel={() => {
             setStockTarget(null);
             setViewState('search');
@@ -787,14 +1150,19 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         </>
       ) : (
         <>
-          {/* Product Category Selection */}
+          {/* Product Category Selection — only while the product's own details
+              are in play. Editing stock booked on an existing product cannot
+              touch them, so the picker would be a row of dead cards. */}
+          {showsProductStep && (
           <div className="flex flex-col p-[16px] gap-[16px] w-full min-w-0 h-[194px] bg-white rounded-xl border-[0.89px] border-pneutral-200 overflow-hidden">
             <div className="flex flex-col gap-1">
               <h3 className="font-semibold text-[18px] text-[#1E1E1D] leading-[28px]">
                 Select Product Category
               </h3>
               <p className="font-normal text-[16px] text-[#1E1E1D] leading-[24px]">
-                Choose the category that best describes your product.
+                {isEditing
+                  ? "The category is fixed once a product is created, so it can't be changed here."
+                  : "Choose the category that best describes your product."}
               </p>
             </div>
             <div className="w-full flex flex-nowrap overflow-x-auto gap-[16px] h-[90px] pb-2">
@@ -804,10 +1172,17 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
                   <div
                     key={cat.id}
                     onClick={() => handleSelectCategory(cat.id)}
-                    className={`shrink-0 flex items-center gap-[4px] p-[8px] h-[74px] rounded-[20px] border cursor-pointer transition-all ${cat.width} ${
+                    // While editing, the one the product was created under is
+                    // still shown selected; the rest read as unavailable rather
+                    // than inviting a click that can only be refused.
+                    className={`shrink-0 flex items-center gap-[4px] p-[8px] h-[74px] rounded-[20px] border transition-all ${cat.width} ${
                       isSelected
                         ? "border-secondary-700 bg-secondary-50 shadow-[0px_4px_6px_-2px_#00000008,0px_12px_16px_-4px_#00000014]"
                         : "border-[#D5D5D4] bg-white hover:border-gray-400"
+                    } ${
+                      isEditing && !isSelected
+                        ? "cursor-not-allowed opacity-50"
+                        : "cursor-pointer"
                     }`}
                   >
                     <Image src={cat.iconPath} alt={cat.label} width={58} height={58} className="shrink-0 object-contain" />
@@ -819,9 +1194,10 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
               })}
             </div>
           </div>
+          )}
 
           {/* Medical Device Sub-Category Selection */}
-          {selectedCategory === 5 && (
+          {showsProductStep && selectedCategory === 5 && (
             <div className="flex flex-col p-[16px] gap-[16px] w-full min-w-0 h-[150px] bg-white rounded-xl border-[0.89px] border-pneutral-200 overflow-hidden">
               <div className="flex flex-col gap-1">
                 <h3 className="font-semibold text-[18px] text-[#1E1E1D] leading-[28px]">
@@ -831,10 +1207,14 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
               <div className="w-full flex gap-[16px] h-[60px]">
                 <div
                   onClick={() => handleSelectSubCategory(5)}
-                  className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
+                  className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border transition-all ${
                     selectedSubCategory === 5
                       ? "border-secondary-700 bg-secondary-50 shadow-sm"
                       : "border-[#D5D5D4] bg-white hover:border-gray-400"
+                  } ${
+                    isEditing && selectedSubCategory !== 5
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer"
                   }`}
                 >
                   <span className="text-[14px] font-semibold text-gray-800">
@@ -843,10 +1223,14 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
                 </div>
                 <div
                   onClick={() => handleSelectSubCategory(6)}
-                  className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border cursor-pointer transition-all ${
+                  className={`flex-1 flex items-center justify-center p-[8px] rounded-[12px] border transition-all ${
                     selectedSubCategory === 6
                       ? "border-secondary-700 bg-secondary-50 shadow-sm"
                       : "border-[#D5D5D4] bg-white hover:border-gray-400"
+                  } ${
+                    isEditing && selectedSubCategory !== 6
+                      ? "cursor-not-allowed opacity-50"
+                      : "cursor-pointer"
                   }`}
                 >
                   <span className="text-[14px] font-semibold text-gray-800">
@@ -859,7 +1243,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
 
           {/* Details Tabs */}
           <div className="flex items-center gap-4 w-full max-w-[600px] h-[46px] border-b border-gray-200 mt-2">
-            {TABS.map((tab) => (
+            {wizardTabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => handleTabClick(tab)}
@@ -877,23 +1261,40 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
             ))}
           </div>
 
-          {/* Render all tabs but hide inactive ones to preserve refs and state */}
+          {/* Every step in play stays mounted, inactive ones hidden, so refs and
+              entered values survive tab switches. A step outside this run isn't
+              rendered at all — its ref stays null, and handleUpdate reads the
+              snapshot for it instead.
+              Editing hands each form back the snapshot it was submitted from —
+              the forms only read it on mount, which the formKey bump in
+              handleEditLine is what triggers. */}
+          {showsProductStep && (
           <div className={activeTab === "Product Details" ? "block w-full" : "hidden"}>
-            <ProductDetails key={`product-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`} categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory} ref={productDetailsRef} />
+            <ProductDetails key={`product-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`} categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory} ref={productDetailsRef} initialData={editingLine?.snapshot.productData} />
           </div>
+          )}
+          {showsPackagingStep && (
           <div className={activeTab === "Packaging & Order Details" ? "block w-full" : "hidden"}>
             <PackagingDetails
               key={`packaging-${formKey}-${selectedCategory === 5 ? selectedSubCategory : selectedCategory}`}
               categoryId={selectedCategory === 5 ? selectedSubCategory : selectedCategory}
               ref={packagingDetailsRef}
               onUnitsChange={setPackagingUnits}
+              initialData={editingLine?.snapshot.packagingData}
             />
           </div>
+          )}
           <div className={activeTab === "Batch & Stock Details" ? "block w-full" : "hidden"}>
             <BatchDetails
               key={`batch-${formKey}`}
               ref={batchDetailsRef}
               {...packagingUnits}
+              productId={editingLine?.productId}
+              packagingId={editingLine?.packagingId}
+              initialData={editingLine?.snapshot.batchData}
+              // An existing batch keeps its number, dates, prices and rack —
+              // only the quantities booked against it are this line's.
+              lockedBatch={editingLine?.scope === "quantities"}
             />
           </div>
           
@@ -904,7 +1305,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
             <div>
               <Button
                 variant="outline"
-                onClick={activeTab === "Product Details" ? handleCancel : handleBack}
+                onClick={activeTab === wizardTabs[0] ? handleCancel : handleBack}
                 className="w-[120px]"
               >
                 Back
@@ -914,14 +1315,18 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
               <Button variant="outline" onClick={handleCancel} className="w-[120px]">
                 Cancel
               </Button>
-              {activeTab === "Batch & Stock Details" ? (
-                <Button 
-                  variant="primary" 
-                  onClick={handleSubmit} 
-                  className="w-[120px]"
+              {activeTab === wizardTabs[wizardTabs.length - 1] ? (
+                // Editing saves the changes against the product that already
+                // exists; onboarding creates it.
+                <Button
+                  variant="primary"
+                  onClick={isEditing ? handleUpdate : handleSubmit}
+                  className={isEditing ? "w-[150px]" : "w-[120px]"}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                  {isSubmitting
+                    ? isEditing ? 'Saving...' : 'Submitting...'
+                    : isEditing ? 'Save Changes' : 'Submit'}
                 </Button>
               ) : (
                 <Button
