@@ -19,6 +19,10 @@ export interface PurchaseDetail {
   mrp?: number;
   /** The slab the line sits on; `gst` below is the amount it works out to. */
   gstPercentage?: number;
+  /** The product's GST slab was the non-numeric "Exempted" one, rather than a
+   *  real 0% product — `gstPercentage` above cannot tell the two apart, since
+   *  both cost out to a 0 rate. */
+  isGstExempted?: boolean;
   /** Per-line discount. Nothing captures one yet, so it reads as 0. */
   discountPercentage?: number;
   freeQty: string | number;
@@ -37,6 +41,9 @@ interface PurchaseState {
   grnNo: string;
   invoiceNo: string;
   invoiceDate: string;
+  /** The total printed on the supplier's own invoice — entered on Goods
+   *  Receipt, not derived from the lines. */
+  invoiceAmount: number;
   paymentType: "CASH" | "CREDIT" | "";
   creditDays: number;
   supplierPaymentStatus: string;
@@ -71,6 +78,7 @@ const initialState = {
   grnNo: "",
   invoiceNo: "",
   invoiceDate: "",
+  invoiceAmount: 0,
   paymentType: "" as const,
   creditDays: 0,
   supplierPaymentStatus: "PENDING",

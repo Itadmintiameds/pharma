@@ -49,7 +49,7 @@ type FieldMap = Record<string, (data: FormData) => unknown>;
 const PRODUCT_FIELDS: FieldMap = {
   productName: (d) => text(d?.productName),
   brandName: (d) => text(d?.brandName),
-  gstPercentage: (d) => num(d?.gst),
+  gstPercentage: (d) => text(d?.gst),
   hsnNo: (d) => text(d?.hsnCode),
 };
 

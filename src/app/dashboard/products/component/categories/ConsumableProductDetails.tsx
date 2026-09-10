@@ -52,16 +52,19 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
   const [deviceCategoryOptions, setDeviceCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [deviceSubCategoryOptions, setDeviceSubCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [materialTypeOptions, setMaterialTypeOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [deviceCatRes, materialTypeRes] = await Promise.all([
+        const [deviceCatRes, materialTypeRes, gstRes] = await Promise.all([
           ProductMasterService.getDeviceCategories(5), // Consumables category ID is 5
-          ProductMasterService.getMaterialTypes(5)
+          ProductMasterService.getMaterialTypes(5),
+          ProductMasterService.getGstRates()
         ]);
         setDeviceCategoryOptions(deviceCatRes.data.map((item: any) => ({ label: item.deviceCategoryName, value: String(item.deviceCategoryId) })));
         setMaterialTypeOptions(materialTypeRes.data.map((item: any) => ({ label: item.materialTypeName, value: String(item.materialTypeId) })));
+        setGstOptions(gstRes.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
       } catch (error) {
         console.error("Error fetching consumable master data:", error);
       }
@@ -212,12 +215,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
         label="GST%"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

@@ -28,6 +28,7 @@ import {
   type ProductFormSnapshot,
 } from "@/utils/productUpdatePayload";
 import { lineKey, type OnboardedLine } from "@/utils/onboardedLines";
+import { parseGstPercentage, isGstExempted } from "@/utils/gst";
 import { formatMonthYear } from "@/utils/formatDate";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
@@ -98,7 +99,8 @@ const buildLineFields = ({
   // Per purchase unit, to match purchaseQuantity — stock is bought by the
   // pack, so the per-smallest-unit price would under-state the line.
   const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
-  const gstPercentage = Number(productData?.gst || 0);
+  const gstPercentage = parseGstPercentage(productData?.gst);
+  const isExempted = isGstExempted(productData?.gst);
 
   const grossAmount = purchaseQuantity * purchasePrice;
   const gst = (grossAmount * gstPercentage) / 100;
@@ -116,6 +118,7 @@ const buildLineFields = ({
     purchasePrice,
     mrp: Number(batchData?.mrpPerBox || 0),
     gstPercentage,
+    isGstExempted: isExempted,
     freeQty: String(Number(batchData?.freeQuantity || 0)),
     freeQtyUnit: text(batchData?.freeUnit),
     purchaseQuantity,
@@ -676,7 +679,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         productCategoryId,
         productName: productData?.productName || "",
         brandName: productData?.brandName || "",
-        gstPercentage: Number(productData?.gst || 0),
+        gstPercentage: text(productData?.gst),
         hsnNo: productData?.hsnCode || "",
         packagingDetails: [
           {
@@ -891,6 +894,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         // grnNo is intentionally omitted — the backend generates it.
         invoiceNo: storeState.invoiceNo,
         invoiceDate: formattedInvoiceDate,
+        invoiceAmount: Number(storeState.invoiceAmount || 0),
         paymentType: storeState.paymentType,
         creditDays: storeState.creditDays,
         supplierPaymentStatus: "PENDING",
@@ -912,6 +916,12 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
           // and in the GST and amount below.
           grossAmount: totals.lines[idx].grossAmount,
           gst: totals.lines[idx].gstAmount,
+          // The slab itself, in the same "5%"/"Exempted" text the GST master
+          // uses — the amount above can't tell an exempt line apart from a
+          // genuine 0% one.
+          gstPercentage: item.isGstExempted
+            ? "Exempted"
+            : `${totals.lines[idx].gstPercentage}%`,
           netAmount: totals.lines[idx].netAmount
         }))
       };

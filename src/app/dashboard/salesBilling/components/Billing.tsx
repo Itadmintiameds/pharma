@@ -60,6 +60,7 @@ import {
   DARK_BUTTON,
   PRIMARY_BUTTON,
 } from "./billingButtons";
+import { parseGstPercentage } from "@/utils/gst";
 
 interface BillingProps {
   onCancel: () => void;
@@ -316,7 +317,7 @@ const Billing: React.FC<BillingProps> = ({
           availableQuantity: Number(b.stockQty ?? b.totalStock) || 0,
           mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || 0,
           sellingPricePerUnit: Number(b.sellingPricePerUnit) || Number(b.sellingPrice) || Number(b.mrpPerUnit) || 0,
-          gstPercentage: Number(b.gstPercentage) || 0,
+          gstPercentage: parseGstPercentage(b.gstPercentage),
           rackNo: b.rackLocation || "",
         }));
         setBatchCatalog(mapped);
@@ -589,7 +590,7 @@ const Billing: React.FC<BillingProps> = ({
         mrpPerUnit: Number(b.mrpPerUnit) || Number(b.mrp) || 0,
         sellingPricePerUnit:
           Number(b.sellingPricePerUnit) || Number(b.sellingPrice) || Number(b.mrpPerUnit) || 0,
-        gstPercentage: Number(b.gstPercentage) || 0,
+        gstPercentage: parseGstPercentage(b.gstPercentage),
         rackNo: b.rackLocation || "",
       };
     } catch (err) {

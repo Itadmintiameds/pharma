@@ -7,6 +7,7 @@ import api from '@/utils/api';
 export const ProductMasterService = {
   // --- Common ---
   getAgeGroups: () => api.get('master/age-groups'),
+  getGstRates: () => api.get('/gst/getAll'),
 
   /**
    * Valid purchase-unit / smallest-unit pairs for a category, e.g. a Strip of

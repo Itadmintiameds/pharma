@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
 import ConfirmationPopup from "@/app/components/common/ConfirmationPopup";
+import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -16,6 +17,7 @@ import {
 import { amountInWords } from "@/utils/billingTotals";
 // One costing for the screen and the payload, so what is shown is what is saved.
 import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
+import { parseGstPercentage, isGstExempted } from "@/utils/gst";
 
 /**
  * One 24px-tall key : value line. The key column is fixed so every value in a
@@ -23,7 +25,7 @@ import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
  */
 const InfoRow: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
   <div className="w-full h-6 flex items-center gap-3 text-[16px] leading-6">
-    <span className="w-[100px] shrink-0 truncate font-normal text-pneutral-800" title={label}>{label}</span>
+    <span className="w-[130px] shrink-0 truncate font-normal text-pneutral-800" title={label}>{label}</span>
     <span className="w-[5px] shrink-0 font-normal text-pneutral-800">:</span>
     <span className="flex-1 truncate font-medium text-pneutral-900">{value}</span>
   </div>
@@ -60,6 +62,10 @@ interface InvoiceSummaryProps {
 const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data, purchase, pharmacy: pharmacyProp }) => {
   const [currentMode, setCurrentMode] = useState<'create' | 'view' | 'download'>(mode);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  // Shown instead of saving outright when the entered Invoice Amount doesn't
+  // match what the lines actually total to — the mismatch may be a typo on
+  // either side, so it's a confirm rather than a hard block.
+  const [showAmountMismatch, setShowAmountMismatch] = useState(false);
   const [discount, setDiscount] = useState<number>(0);
   const [discountError, setDiscountError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -90,9 +96,65 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     ? Number(purchase?.totalNetAmount || 0)
     : live.netAmount;
   const taxableAmt = grossAmt - appliedDiscount;
-  // The strip shows a rate, but only amounts are stored — back it out of the
-  // taxable value and halve it, since CGST and SGST split the total GST.
-  const gstRate = taxableAmt > 0 ? (gstAmt / 2 / taxableAmt) * 100 : 0;
+
+  // A saved purchase's own lines now carry the slab they were charged at
+  // (gstPercentage — added alongside the plain gst amount), but a purchase
+  // saved before that column existed has none of them, so it still has to
+  // fall back to one blended rate for that older data.
+  const savedPurchaseLines = purchase?.purchaseDetails ?? [];
+  const hasPerLineGstData = savedPurchaseLines.some(
+    (line) => line.gstPercentage != null,
+  );
+
+  const hasExemptedLine = isSaved
+    ? savedPurchaseLines.some((line) => isGstExempted(line.gstPercentage))
+    : store.purchaseDetails.some((line) => line.isGstExempted);
+
+  // A blended rate backed out of the total — the fallback for a saved
+  // purchase that predates the per-line gstPercentage column.
+  const blendedGstRate = taxableAmt > 0 ? (gstAmt / taxableAmt) * 100 : 0;
+
+  /**
+   * One taxable/GST figure per slab actually on the invoice, so a cart mixing
+   * 5% and 12% products shows both rather than one rate blended across them.
+   */
+  const gstGroups = useMemo(() => {
+    if (isSaved) {
+      if (!hasPerLineGstData) {
+        return taxableAmt > 0 || gstAmt > 0
+          ? [{ rate: blendedGstRate, amount: gstAmt }]
+          : [];
+      }
+      const byRate = new Map<number, number>();
+      savedPurchaseLines.forEach((line) => {
+        const rate = parseGstPercentage(line.gstPercentage);
+        if (rate <= 0) return;
+        byRate.set(rate, (byRate.get(rate) ?? 0) + Number(line.gst || 0));
+      });
+      return Array.from(byRate, ([rate, amount]) => ({ rate, amount })).sort(
+        (a, b) => a.rate - b.rate,
+      );
+    }
+    const byRate = new Map<number, number>();
+    live.lines.forEach((line) => {
+      if (line.gstPercentage <= 0) return;
+      byRate.set(
+        line.gstPercentage,
+        (byRate.get(line.gstPercentage) ?? 0) + line.gstAmount,
+      );
+    });
+    return Array.from(byRate, ([rate, amount]) => ({ rate, amount })).sort(
+      (a, b) => a.rate - b.rate,
+    );
+  }, [
+    isSaved,
+    hasPerLineGstData,
+    savedPurchaseLines,
+    live.lines,
+    taxableAmt,
+    gstAmt,
+    blendedGstRate,
+  ]);
 
   // Header fields: the saved record if we have one, otherwise the live store.
   const header = {
@@ -104,13 +166,14 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     invoiceNo: purchase?.invoiceNo ?? store.invoiceNo,
     // Saved dates arrive as "2026-08-03T00:00:00"; the time is noise here.
     invoiceDate: (purchase?.invoiceDate ?? store.invoiceDate)?.split("T")[0],
+    invoiceAmount: purchase?.invoiceAmount ?? store.invoiceAmount,
     grnNo: purchase?.grnNo ?? store.grnNo,
     paymentType: purchase?.paymentType ?? store.paymentType,
     creditDays: purchase?.creditDays ?? store.creditDays,
     status: purchase?.supplierPaymentStatus ?? store.supplierPaymentStatus,
   } as {
     supplierName: string; supplierId?: number | string; invoiceNo?: string;
-    invoiceDate?: string; grnNo?: string; paymentType?: string;
+    invoiceDate?: string; invoiceAmount?: number; grnNo?: string; paymentType?: string;
     creditDays?: number | string; status?: string; dueDate?: string;
   };
 
@@ -194,14 +257,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     setDiscountError(validateDiscount(value));
   };
 
-  const handleSaveTaxInvoice = async () => {
-    const error = validateDiscount(discount);
-    if (error) {
-      setDiscountError(error);
-      toast.error(error);
-      return;
-    }
-
+  const submitPurchase = async () => {
     if (onSubmit) {
       setIsSubmitting(true);
       try {
@@ -215,6 +271,30 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
     } else {
       setShowConfirmation(true);
     }
+  };
+
+  const handleSaveTaxInvoice = async () => {
+    const error = validateDiscount(discount);
+    if (error) {
+      setDiscountError(error);
+      toast.error(error);
+      return;
+    }
+
+    // The entered Invoice Amount is only a cross-check against what the
+    // supplier printed — a mismatch may just be a typo on either side, so it
+    // asks before saving rather than blocking outright. Skipped when nothing
+    // was entered, since the field is optional.
+    const enteredInvoiceAmount = Number(header.invoiceAmount || 0);
+    if (
+      enteredInvoiceAmount > 0 &&
+      Math.abs(enteredInvoiceAmount - netAmt) > 0.01
+    ) {
+      setShowAmountMismatch(true);
+      return;
+    }
+
+    await submitPurchase();
   };
 
   // Memoised so the `?? []` fallback doesn't hand useMemo a new array each render.
@@ -313,9 +393,10 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
           <InfoRow label="Supplier" value={header.supplierName || (header.supplierId ? `Supplier #${header.supplierId}` : '-')} />
           <InfoRow label="Invoice No" value={header.invoiceNo || "-"} />
           <InfoRow label="Invoice Date" value={header.invoiceDate || "-"} />
-          <InfoRow label="GRN" value={header.grnNo || "-"} />
+          <InfoRow label="Invoice Amount" value={header.invoiceAmount ? `₹ ${Number(header.invoiceAmount).toFixed(2)}` : "-"} />
         </div>
         <div className="flex-1 h-[126px] flex flex-col gap-[10px]">
+          <InfoRow label="GRN" value={header.grnNo || "-"} />
           <InfoRow label="Payment Type" value={header.paymentType || "-"} />
           <InfoRow label="Credit Days" value={header.creditDays ? `${header.creditDays} Days` : "-"} />
           <InfoRow label="Due Date" value={header.dueDate || "-"} />
@@ -350,33 +431,40 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         {/* Left column: tax strip, then bank details beside the count card */}
         <div className="w-[60%] shrink-0 h-full flex flex-col gap-3">
 
-          {/* Tax Breakdown — seven equal columns, hairline between each */}
+          {/* Tax Breakdown — Taxable, a stacked GST column (one row per slab
+              on the invoice, rather than a pair of columns per slab that would
+              force the strip to scroll), then Exempted and Free GST. */}
           <div className="w-full h-[144px] bg-white border border-pneutral-200 rounded-lg flex overflow-hidden">
-            {[
-              { label: "Taxable", value: `₹ ${taxableAmt.toFixed(2)}` },
-              { label: "CGST (%)", value: gstRate.toFixed(2) },
-              { label: "CGST Amt", value: `₹ ${(gstAmt / 2).toFixed(2)}` },
-              { label: "SGST (%)", value: gstRate.toFixed(2) },
-              { label: "SGST Amt", value: `₹ ${(gstAmt / 2).toFixed(2)}` },
-              { label: "Exempted", value: "₹ 0.00" },
-              { label: "Free GST", value: "₹ 0.00" },
-            ].map((col, i, all) => (
-              <div
-                key={col.label}
-                // Centred, not flush left: the columns are narrow and their
-                // labels and values are different lengths, so left alignment
-                // left each pair looking unrelated to its own cell.
-                // px-1, down from px-2: at 16px "₹ 54,330.40" and "CGST (%)"
-                // are close to a seventh of the strip, and the padding is the
-                // only place left to find the room without wrapping them.
-                className={`flex-1 min-w-0 h-full px-1 py-4 flex flex-col items-center justify-between text-center ${
-                  i < all.length - 1 ? "border-r border-pneutral-200" : ""
-                }`}
-              >
-                <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">{col.label}</span>
-                <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">{col.value}</span>
+            <div className="flex-1 min-w-0 h-full px-1 py-4 flex flex-col items-center justify-between text-center border-r border-pneutral-200">
+              <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">Taxable</span>
+              <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">₹ {taxableAmt.toFixed(2)}</span>
+            </div>
+
+            <div className="flex-[1.4] min-w-0 h-full px-1 py-4 flex flex-col items-center border-r border-pneutral-200">
+              <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">GST</span>
+              <div className="flex-1 w-full flex flex-col items-center justify-center gap-1 overflow-y-auto">
+                {gstGroups.length === 0 ? (
+                  <span className="text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">₹ 0.00</span>
+                ) : (
+                  gstGroups.map((group) => (
+                    <div key={group.rate} className="flex items-baseline gap-2 whitespace-nowrap">
+                      <span className="text-[14px] leading-5 font-normal text-pneutral-700">{group.rate.toFixed(2)}%</span>
+                      <span className="text-[14px] leading-5 font-semibold text-pneutral-900">₹ {group.amount.toFixed(2)}</span>
+                    </div>
+                  ))
+                )}
               </div>
-            ))}
+            </div>
+
+            <div className="flex-1 min-w-0 h-full px-1 py-4 flex flex-col items-center justify-between text-center border-r border-pneutral-200">
+              <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">Exempted</span>
+              <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">{hasExemptedLine ? "Yes" : "No"}</span>
+            </div>
+
+            <div className="flex-1 min-w-0 h-full px-1 py-4 flex flex-col items-center justify-between text-center">
+              <span className="h-6 text-[16px] leading-6 font-normal text-pneutral-800 whitespace-nowrap">Free GST</span>
+              <span className="h-6 text-[16px] leading-6 font-semibold text-pneutral-900 whitespace-nowrap">₹ 0.00</span>
+            </div>
           </div>
 
           <div className="w-full h-[144px] flex gap-3">
@@ -535,6 +623,21 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
             window.location.href = '/dashboard/purchase';
           }
         }}
+      />
+
+      {/* Invoice Amount vs Net Payable mismatch */}
+      <ConfirmDialog
+        isOpen={showAmountMismatch}
+        title="Invoice Amount Mismatch"
+        message={`The entered Invoice Amount (₹ ${Number(header.invoiceAmount || 0).toFixed(2)}) does not match the Net Payable (₹ ${netAmt.toFixed(2)}). Do you want to save anyway?`}
+        confirmLabel="Save"
+        cancelLabel="Cancel"
+        loading={isSubmitting}
+        onConfirm={async () => {
+          setShowAmountMismatch(false);
+          await submitPurchase();
+        }}
+        onCancel={() => setShowAmountMismatch(false)}
       />
     </div>
   );

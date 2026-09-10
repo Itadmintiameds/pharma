@@ -20,6 +20,7 @@ import {
 } from "@/types/ProductData";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
 import type { OnboardedLine } from "@/utils/onboardedLines";
+import { parseGstPercentage, isGstExempted } from "@/utils/gst";
 
 const TABS = ["Packaging & Order Details", "Batch & Stock Details"];
 
@@ -297,7 +298,9 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
       // Per purchase unit, to match purchaseQuantity — stock is bought by the
       // pack, so the per-smallest-unit price would under-state the line.
       const purchasePrice = Number(batchData?.purchasePricePerBox || 0);
-      const gstPercentage = Number(updated.gstPercentage ?? details.gstPercentage ?? 0);
+      const rawGstPercentage = updated.gstPercentage ?? details.gstPercentage;
+      const gstPercentage = parseGstPercentage(rawGstPercentage);
+      const isExempted = isGstExempted(rawGstPercentage);
 
       const grossAmount = purchaseQty * purchasePrice;
       const gst = (grossAmount * gstPercentage) / 100;
@@ -316,6 +319,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         purchasePrice,
         mrp: Number(batchData?.mrpPerBox || 0),
         gstPercentage,
+        isGstExempted: isExempted,
         freeQty: String(batchData?.freeQuantity || 0),
         freeQtyUnit: batchData?.freeUnit || "",
         purchaseQuantity: purchaseQty,
@@ -403,7 +407,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
             )}
           </div>
           <span className="text-[14px] text-pneutral-700">
-            HSN {details.hsnNo || "—"} | GST {Number(details.gstPercentage ?? 0)}%
+            HSN {details.hsnNo || "—"} | GST {details.gstPercentage ?? "—"}
           </span>
           <span className="text-[14px] text-pneutral-700">
             {details.brandName || "—"}

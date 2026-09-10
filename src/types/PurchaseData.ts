@@ -6,6 +6,9 @@ export interface PurchaseData {
   grnNo: string;
   invoiceNo: string;
   invoiceDate: string;
+  /** The total printed on the supplier's own invoice, as entered on Goods
+   *  Receipt — not derived from the purchase lines. */
+  invoiceAmount?: number;
   paymentType: string;
   creditDays?: number;
   supplierPaymentStatus: string;
@@ -29,6 +32,10 @@ export interface PurchaseDetailsData {
   freeQuantity?: number;
   grossAmount: number;
   gst: number;
+  /** The product's GST slab at the time of purchase — "5%", "28%", or the
+   *  non-numeric "Exempted" slab. Absent on a purchase saved before this
+   *  column existed. */
+  gstPercentage?: string;
   netAmount: number;
 }
 

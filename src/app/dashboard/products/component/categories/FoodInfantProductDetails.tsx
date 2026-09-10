@@ -50,20 +50,23 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
   const [productSubCategoryOptions, setProductSubCategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [productFormOptions, setProductFormOptions] = useState<{label: string, value: string}[]>([]);
   const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, typeRes, formRes, unitRes] = await Promise.all([
+        const [ageRes, typeRes, formRes, unitRes, gstRes] = await Promise.all([
           ProductMasterService.getAgeGroups(),
           ProductMasterService.getFoodProductTypes(),
           ProductMasterService.getFoodProductForms(),
-          ProductMasterService.getFoodNetQuantityUnits()
+          ProductMasterService.getFoodNetQuantityUnits(),
+          ProductMasterService.getGstRates()
         ]);
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
         setProductCategoryOptions(typeRes.data.map((item: any) => ({ label: item.productTypeName, value: String(item.productTypeId) })));
         setProductFormOptions(formRes.data.map((item: any) => ({ label: item.productFormName, value: String(item.productFormId) })));
         setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
+        setGstOptions(gstRes.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
@@ -245,12 +248,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
         label="GST"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

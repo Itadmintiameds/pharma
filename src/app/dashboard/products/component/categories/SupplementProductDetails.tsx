@@ -54,22 +54,25 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef, SupplementProduct
   const [therapeuticSubcategoryOptions, setTherapeuticSubcategoryOptions] = useState<{label: string, value: string}[]>([]);
   const [dosageFormOptions, setDosageFormOptions] = useState<{label: string, value: string}[]>([]);
   const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, flavourRes, tcRes, unitRes, dosageRes] = await Promise.all([
+        const [ageRes, flavourRes, tcRes, unitRes, dosageRes, gstRes] = await Promise.all([
           ProductMasterService.getAgeGroups(),
           ProductMasterService.getFlavours(),
           ProductMasterService.getTherapeuticCategories(),
           ProductMasterService.getSupplementNetQuantityUnits(),
-          ProductMasterService.getDosageForms()
+          ProductMasterService.getDosageForms(),
+          ProductMasterService.getGstRates()
         ]);
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
         setFlavorOptions(flavourRes.data.map((item: any) => ({ label: item.flavourName, value: String(item.flavourId) })));
         setTherapeuticCategoryOptions(tcRes.data.map((item: any) => ({ label: item.therapeuticCategoryName, value: String(item.therapeuticCategoryId) })));
         setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
         setDosageFormOptions(dosageRes.data.map((item: any) => ({ label: item.dosageName, value: String(item.dosageId) })));
+        setGstOptions(gstRes.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
@@ -289,12 +292,7 @@ const SupplementProductDetails = forwardRef<ProductDetailsRef, SupplementProduct
         label="GST"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

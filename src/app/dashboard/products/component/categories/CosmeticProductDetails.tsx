@@ -60,21 +60,23 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
   const [hairTypeOptions, setHairTypeOptions] = useState<{label: string, value: string}[]>([]);
   const [ageGroupOptions, setAgeGroupOptions] = useState<{label: string, value: string}[]>([]);
   const [netQtyUnitOptions, setNetQtyUnitOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
 
   // Fetch initial master data
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [ageRes, typeRes, formRes, intendedRes, skinRes, hairRes, unitRes] = await Promise.all([
+        const [ageRes, typeRes, formRes, intendedRes, skinRes, hairRes, unitRes, gstRes] = await Promise.all([
           ProductMasterService.getAgeGroups(),
           ProductMasterService.getCosmeticProductTypes(),
           ProductMasterService.getCosmeticProductForms(),
           ProductMasterService.getIntendedUseAreas(),
           ProductMasterService.getSkinTypes(),
           ProductMasterService.getHairTypes(),
-          ProductMasterService.getCosmeticNetQuantityUnits()
+          ProductMasterService.getCosmeticNetQuantityUnits(),
+          ProductMasterService.getGstRates()
         ]);
-        
+
         setAgeGroupOptions(ageRes.data.map((item: any) => ({ label: item.ageGroupName, value: String(item.ageGroupId) })));
         setProductTypeOptions(typeRes.data.map((item: any) => ({ label: item.productTypeName, value: String(item.productTypeId) })));
         setProductFormOptions(formRes.data.map((item: any) => ({ label: item.productFormName, value: String(item.productFormId) })));
@@ -82,6 +84,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
         setSkinTypeOptions(skinRes.data.map((item: any) => ({ label: item.skinTypeName, value: String(item.skinTypeId) })));
         setHairTypeOptions(hairRes.data.map((item: any) => ({ label: item.hairTypeName, value: String(item.hairTypeId) })));
         setNetQtyUnitOptions(unitRes.data.map((item: any) => ({ label: item.netQuantityUnitName, value: String(item.netQuantityUnitId) })));
+        setGstOptions(gstRes.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
       } catch (error) {
         console.error("Error fetching master data:", error);
       }
@@ -362,12 +365,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
         label="GST"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

@@ -53,20 +53,23 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
   const [materialTypeOptions, setMaterialTypeOptions] = useState<{label: string, value: string}[]>([]);
   const [powerSourceOptions, setPowerSourceOptions] = useState<{label: string, value: string}[]>([]);
   const [countryOptions, setCountryOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [deviceCatRes, materialTypeRes, powerRes, countryRes] = await Promise.all([
+        const [deviceCatRes, materialTypeRes, powerRes, countryRes, gstRes] = await Promise.all([
           ProductMasterService.getDeviceCategories(6), // Non-Consumables category ID is 6
           ProductMasterService.getMaterialTypes(6),
           ProductMasterService.getPowerSources(),
-          ProductMasterService.getCountries()
+          ProductMasterService.getCountries(),
+          ProductMasterService.getGstRates()
         ]);
         setDeviceCategoryOptions(deviceCatRes.data.map((item: any) => ({ label: item.deviceCategoryName, value: String(item.deviceCategoryId) })));
         setMaterialTypeOptions(materialTypeRes.data.map((item: any) => ({ label: item.materialTypeName, value: String(item.materialTypeId) })));
         setPowerSourceOptions(powerRes.data.map((item: any) => ({ label: item.powerSourceName, value: String(item.powerSourceId) })));
         setCountryOptions(countryRes.data.map((item: any) => ({ label: item.countryName, value: String(item.countryId) })));
+        setGstOptions(gstRes.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
       } catch (error) {
         console.error("Error fetching non-consumable master data:", error);
       }
@@ -218,12 +221,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
         label="GST%"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

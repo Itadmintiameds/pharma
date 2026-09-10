@@ -239,8 +239,10 @@ export interface BillingDetailRecord {
   expiryDate?: string | null;
   unit: string;
   billQuantity: number;
-  /** Stored on the line, so nothing has to be derived back out of the amounts. */
-  gstPercentage?: number;
+  /** Stored on the line, so nothing has to be derived back out of the amounts.
+   *  The API's own display text ("18%", "Exempted"), not a plain rate — run it
+   *  through parseGstPercentage() before using it in arithmetic. */
+  gstPercentage?: string | number;
   /** The product's HSN, as the billing API names it. */
   hsnNo?: string;
   /** MRP x billQuantity. Absent on bills saved before the column existed, so

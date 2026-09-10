@@ -233,7 +233,10 @@ export interface ProductDetails {
   pharmacyId: string;
   productCategoryId: number;
   hsnNo: string;
-  gstPercentage: number;
+  // The GST master's own display text — "18%", "0%", or the non-numeric slab
+  // "Exempted" — not a plain rate. Run it through parseGstPercentage() before
+  // using it in arithmetic.
+  gstPercentage: string;
   packages: ProductPackageDetails[];
   unassignedBatches: ProductBatchDetails[];
 }

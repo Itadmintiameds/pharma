@@ -40,6 +40,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps
   const [moleculeOptions, setMoleculeOptions] = useState<{label: string, value: string}[]>([]);
   const [moleculeSchedules, setMoleculeSchedules] = useState<Record<string, string>>({});
   const [strengthUnitOptions, setStrengthUnitOptions] = useState<{label: string, value: string}[]>([]);
+  const [gstOptions, setGstOptions] = useState<{label: string, value: string}[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -58,6 +59,16 @@ const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps
       }
     };
     fetchMasterData();
+
+    const fetchGstRates = async () => {
+      try {
+        const res = await ProductMasterService.getGstRates();
+        setGstOptions(res.data.map((item: any) => ({ label: String(item.gstPercentage), value: String(item.gstPercentage) })));
+      } catch (error) {
+        console.error("Error fetching GST rates:", error);
+      }
+    };
+    fetchGstRates();
 
     const fetchMoleculeStrengths = async () => {
       try {
@@ -347,12 +358,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps
         label="GST"
         required
         placeholder="Select GST"
-        options={[
-          { label: '5%', value: '5' },
-          { label: '12%', value: '12' },
-          { label: '18%', value: '18' },
-          { label: '28%', value: '28' }
-        ]}
+        options={gstOptions}
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"

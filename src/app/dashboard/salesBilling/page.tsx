@@ -49,6 +49,7 @@ import {
   getCurrentPharmacy,
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
+import { parseGstPercentage } from "@/utils/gst";
 
 type Step = "list" | "billing" | "payment" | "invoice" | "settle";
 
@@ -162,10 +163,11 @@ const toBillLines = (bill: BillingRecord): BillLine[] =>
       // Stored on the line. Older bills fall back to the rate implied by the
       // GST sitting inside the taxable value.
       gstPercentage:
-        detail.gstPercentage ??
-        (detail.grossAmount > 0
-          ? (detail.gstAmount / detail.grossAmount) * 100
-          : 0),
+        detail.gstPercentage != null
+          ? parseGstPercentage(detail.gstPercentage)
+          : (detail.grossAmount > 0
+            ? (detail.gstAmount / detail.grossAmount) * 100
+            : 0),
       availableQuantity: 0,
     };
   });
@@ -797,8 +799,8 @@ const Page = () => {
             onClick={startNewBill}
             className="w-52 h-12 flex items-center justify-center gap-2 rounded-lg bg-primary-800 text-label-l4 font-medium text-pneutral-50"
           >
-            <Plus size={18} />
-            Billing
+            {/* <Plus size={18} /> */}
+            Add Billing
           </button>
         )}
       </div>
