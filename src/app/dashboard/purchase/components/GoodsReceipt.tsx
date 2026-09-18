@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import AddProducts from "./AddProducts";
 import Input from "@/app/components/common/Input";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import Image from "next/image";
-import { X } from "lucide-react";
+import { Plus } from "lucide-react";
 import { usePurchaseStore } from "@/store/usePurchaseStore";
-import { getAllSupplier, createSupplier } from "@/services/SupplierService";
+import { getAllSupplier } from "@/services/SupplierService";
 import { PurchaseService } from "@/services/PurchaseService";
 import { SupplierData } from "@/types/SupplierData";
 import toast from "react-hot-toast";
@@ -16,7 +17,12 @@ interface GoodsReceiptProps {
   onClose?: () => void;
 }
 
+/** Where the goods-receipt form lives — used to return here after adding a supplier. */
+const GOODS_RECEIPT_URL = "/dashboard/purchase?view=add";
+
 const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     setPurchaseHeader,
     supplierId,
@@ -39,12 +45,8 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   // Supplier Master states
   const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
   const [selectedSupplierId, setSelectedSupplierId] = useState<number | null>(supplierId || null);
-  const [isAddingNewSupplier, setIsAddingNewSupplier] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState("");
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
-  const [isCreatingSupplier, setIsCreatingSupplier] = useState(false);
 
-  const SUPPLIER_NAME_MAX = 25;
   const INVOICE_NO_MAX = 15;
 
   // Invoice numbers are alphanumeric with optional separators — a value made up
@@ -77,9 +79,6 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   // A trailing separator is typed through, so the value sent is the tidied one.
   const cleanInvoiceNo = invoiceNo.replace(/[/\- ]+$/, "").trim();
   const canCheckInvoiceNo =
-    // A supplier being created has no id to check against yet; handleNext
-    // checks that case once the id exists.
-    !isAddingNewSupplier &&
     !!selectedSupplierId &&
     !!invoiceYear &&
     cleanInvoiceNo.length > 0 &&
@@ -163,17 +162,29 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
   })();
 
   useEffect(() => {
+    // Set when we return here from the Add Supplier page — takes priority
+    // over the store's supplierId so the just-created supplier is the one
+    // reflected in the dropdown.
+    const newSupplierId = searchParams.get("newSupplierId");
+
     const fetchSuppliers = async () => {
       try {
         setIsLoadingSuppliers(true);
         const data = await getAllSupplier();
         setSuppliers(data || []);
-        if (supplierId && data && data.length > 0) {
-          const matched = data.find((s) => s.supplierId === supplierId);
+
+        const idToSelect = newSupplierId ? Number(newSupplierId) : supplierId;
+        if (idToSelect && data && data.length > 0) {
+          const matched = data.find((s) => s.supplierId === idToSelect);
           if (matched && matched.supplierId) {
             setSelectedSupplierId(matched.supplierId);
             setSupplierName(matched.supplierName);
           }
+        }
+
+        if (newSupplierId) {
+          // Consumed — drop it from the URL so a refresh doesn't re-select it.
+          router.replace(GOODS_RECEIPT_URL);
         }
       } catch (error) {
         console.error("Failed to load suppliers:", error);
@@ -182,12 +193,13 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
       }
     };
     fetchSuppliers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
-  const supplierOptions: DropdownOption[] = [
-    ...suppliers.map((s) => ({ label: s.supplierName, value: s.supplierId || "" })),
-    { label: "+ Add New Supplier", value: "ADD_NEW" },
-  ];
+  const supplierOptions: DropdownOption[] = suppliers.map((s) => ({
+    label: s.supplierName,
+    value: s.supplierId || "",
+  }));
 
   const handleNext = async () => {
     if (!invoiceNo.trim()) {
@@ -215,32 +227,12 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
       return;
     }
 
-    let finalSupplierId = selectedSupplierId;
-    let finalSupplierName = supplierName;
+    const finalSupplierId = selectedSupplierId;
+    const finalSupplierName = supplierName;
 
-    if (isAddingNewSupplier) {
-      if (!newSupplierName.trim()) {
-        toast.error("Please enter the new Supplier Name");
-        return;
-      }
-      try {
-        setIsCreatingSupplier(true);
-        const created = await createSupplier({ supplierName: newSupplierName.trim() });
-        finalSupplierId = created.supplierId || null;
-        finalSupplierName = created.supplierName || newSupplierName.trim();
-        toast.success("New supplier created successfully!");
-      } catch (error) {
-        toast.error("Failed to create supplier");
-        setIsCreatingSupplier(false);
-        return;
-      } finally {
-        setIsCreatingSupplier(false);
-      }
-    } else {
-      if (!finalSupplierId) {
-        toast.error("Please select a supplier");
-        return;
-      }
+    if (!finalSupplierId) {
+      toast.error("Please select a supplier");
+      return;
     }
 
     // Checked again here rather than trusting the field: the typing check is
@@ -320,59 +312,46 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
 
         <div className="min-h-[180px] bg-white p-4 border border-pneutral-100 rounded-xl">
           <div className="grid grid-cols-3 gap-4 items-start">
-            {!isAddingNewSupplier ? (
-              <Dropdown
-                label="Supplier Name"
-                placeholder="Select Supplier or Add New"
-                required
-                options={supplierOptions}
-                value={selectedSupplierId || ""}
-                isLoading={isLoadingSuppliers}
-                onChange={(val) => {
-                  if (val === "ADD_NEW") {
-                    setIsAddingNewSupplier(true);
-                    setSelectedSupplierId(null);
-                    setSupplierName("");
-                  } else {
-                    const id = Number(val);
-                    setSelectedSupplierId(id);
-                    const selected = suppliers.find((s) => s.supplierId === id);
-                    if (selected) setSupplierName(selected.supplierName);
-                  }
-                }}
-              />
-            ) : (
-              /* Same label and no extra rows, so this stays aligned with the
-                 other fields in the grid. The trailing × goes back to the
-                 dropdown. */
-              <Input
-                label="Supplier Name"
-                placeholder="e.g. ABC Pharma Distributor"
-                type="text"
-                name="newSupplierName"
-                id="newSupplierName"
-                value={newSupplierName}
-                onChange={(e) =>
-                  setNewSupplierName(e.target.value.slice(0, SUPPLIER_NAME_MAX))
-                }
-                maxLength={SUPPLIER_NAME_MAX}
-                required
-                rightIcon={
-                  <button
-                    type="button"
-                    aria-label="Select an existing supplier instead"
-                    title="Select an existing supplier instead"
-                    onClick={() => {
-                      setIsAddingNewSupplier(false);
-                      setNewSupplierName("");
-                    }}
-                    className="flex items-center text-pneutral-500 hover:text-pneutral-900 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                }
-              />
-            )}
+            <Dropdown
+              label="Supplier Name"
+              placeholder="Select Supplier"
+              required
+              options={supplierOptions}
+              value={selectedSupplierId || ""}
+              isLoading={isLoadingSuppliers}
+              onChange={(val) => {
+                const id = Number(val);
+                setSelectedSupplierId(id);
+                const selected = suppliers.find((s) => s.supplierId === id);
+                if (selected) setSupplierName(selected.supplierName);
+              }}
+              labelAction={
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Persisted so it survives the round trip to the Add
+                    // Supplier page and back — this step's fields aren't
+                    // otherwise saved to the store until "Next" is clicked.
+                    setPurchaseHeader({
+                      supplierId: selectedSupplierId,
+                      supplierName,
+                      invoiceNo,
+                      invoiceDate,
+                      invoiceAmount: invoiceAmount ? Number(invoiceAmount) : 0,
+                      paymentType,
+                      creditDays: creditDays ? Number(creditDays) : 0,
+                    });
+                    router.push(
+                      `/dashboard/suppliers?view=add&returnTo=${encodeURIComponent(GOODS_RECEIPT_URL)}`
+                    );
+                  }}
+                  className="flex items-center gap-1 text-label-l4 font-medium text-secondary-700 hover:text-secondary-900 transition-colors"
+                >
+                  <Plus size={14} />
+                  Add Supplier
+                </button>
+              }
+            />
 
             <Input
               label="Invoice No."
@@ -525,18 +504,9 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
             className="w-27 h-9 text-label-l3 font-medium rounded-lg text-pneutral-50 bg-primary-800 disabled:opacity-50"
             onClick={handleNext}
             // A known duplicate is refused here rather than one screen later.
-            disabled={
-              isCreatingSupplier ||
-              isLoadingSuppliers ||
-              isCheckingInvoiceNo ||
-              isDuplicate
-            }
+            disabled={isLoadingSuppliers || isCheckingInvoiceNo || isDuplicate}
           >
-            {isCreatingSupplier
-              ? "Creating..."
-              : isCheckingInvoiceNo
-              ? "Checking..."
-              : "Next"}
+            {isCheckingInvoiceNo ? "Checking..." : "Next"}
           </button>
         </div>
       </div>

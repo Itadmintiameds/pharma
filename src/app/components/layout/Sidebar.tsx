@@ -28,6 +28,7 @@ import {
   ModuleKey,
   bypassesPermissionChecks,
   denialReason,
+  isWarehouseManagerRole,
   superAdminLockedModules,
 } from "@/access/accessControl";
 import useBusinessRegistration from "@/hooks/useBusinessRegistration";
@@ -56,6 +57,16 @@ const Sidebar = () => {
 
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
+
+  // Suppliers has no backend module of its own yet, so it stays behind the
+  // business-registration lock above for everyone except the warehouse
+  // side: a Super Admin who has toggled into a warehouse, or the Warehouse
+  // Manager role, both of which already reach the other warehouse flows
+  // (Products, Warehouse Distribution, Purchase) unlocked the same way.
+  const isSuperAdmin = bypassesPermissionChecks(roleName);
+  const isWarehouseManager = isWarehouseManagerRole(roleName);
+  const isSuppliersUnlockedForWarehouse =
+    isWarehouseManager || (isSuperAdmin && actingAsWarehouse);
 
   const handleLogout = async () => {
     try {
@@ -161,7 +172,9 @@ const Sidebar = () => {
           name: "Suppliers",
           icon: Truck,
           path: "/dashboard/suppliers",
-          isLocked: !isBusinessRegistered,
+          isLocked: isSuppliersUnlockedForWarehouse
+            ? false
+            : !isBusinessRegistered,
         },
         {
           name: "User Management",
@@ -191,7 +204,6 @@ const Sidebar = () => {
   // Distribution and Purchase under centralized inventory. Modules the inventory
   // shape rules out entirely are hidden, the same as for every other role — a
   // lock there would advertise a flow the organization does not have.
-  const isSuperAdmin = bypassesPermissionChecks(roleName);
   const superAdminLocked = superAdminLockedModules(
     organization,
     actingAsWarehouse

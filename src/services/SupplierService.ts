@@ -31,3 +31,16 @@ export const getSupplierById = async (supplierId: number | string): Promise<Supp
     throw handleApiError(error, 'Failed to fetch supplier.');
   }
 };
+
+// Update an existing supplier
+export const updateSupplier = async (
+  supplierId: number | string,
+  data: SupplierData
+): Promise<SupplierData> => {
+  try {
+    const response = await api.put(`/supplier/update/${supplierId}`, data);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to update supplier.');
+  }
+};
