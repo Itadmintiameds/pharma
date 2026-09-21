@@ -58,11 +58,12 @@ const Sidebar = () => {
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
 
-  // Suppliers has no backend module of its own yet, so it stays behind the
-  // business-registration lock above for everyone except the warehouse
-  // side: a Super Admin who has toggled into a warehouse, or the Warehouse
-  // Manager role, both of which already reach the other warehouse flows
-  // (Products, Warehouse Distribution, Purchase) unlocked the same way.
+  // Suppliers has no backend module of its own yet, so it unlocks the same
+  // way as the other pharmacy-side masters (Products, etc.): once the
+  // account has an approved pharmacy. On the warehouse side, a Super Admin
+  // who has toggled into a warehouse, or the Warehouse Manager role, already
+  // reach the other warehouse flows (Products, Warehouse Distribution,
+  // Purchase) unlocked the same way, so they unlock Suppliers unconditionally.
   const isSuperAdmin = bypassesPermissionChecks(roleName);
   const isWarehouseManager = isWarehouseManagerRole(roleName);
   const isSuppliersUnlockedForWarehouse =
@@ -174,7 +175,7 @@ const Sidebar = () => {
           path: "/dashboard/suppliers",
           isLocked: isSuppliersUnlockedForWarehouse
             ? false
-            : !isBusinessRegistered,
+            : !hasApprovedPharmacy,
         },
         {
           name: "User Management",
