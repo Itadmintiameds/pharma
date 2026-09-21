@@ -196,10 +196,12 @@ const GoodsReceipt: React.FC<GoodsReceiptProps> = ({ onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supplierId]);
 
-  const supplierOptions: DropdownOption[] = suppliers.map((s) => ({
-    label: s.supplierName,
-    value: s.supplierId || "",
-  }));
+  const supplierOptions: DropdownOption[] = suppliers
+    .filter((s) => s.status !== "INACTIVE" && s.status !== "BLOCKED")
+    .map((s) => ({
+      label: s.supplierName,
+      value: s.supplierId || "",
+    }));
 
   const handleNext = async () => {
     if (!invoiceNo.trim()) {
