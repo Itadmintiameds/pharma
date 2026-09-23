@@ -121,6 +121,13 @@ const Sidebar = () => {
           path: "/dashboard/purchase",
           isLocked: !hasApprovedPharmacy,
         },
+        {
+          name: "Purchase Return",
+          moduleKey: "PURCHASE_RETURN" as ModuleKey,
+          icon: ShoppingCart,
+          path: "/dashboard/purchaseReturn",
+          isLocked: !hasApprovedPharmacy,
+        },
         // Stock Management is hidden for now — uncomment to bring it back.
         // {
         //   name: "Stock Management",

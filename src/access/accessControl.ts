@@ -20,6 +20,7 @@ export type PermissionAction =
 
 export type ModuleKey =
   | "PURCHASE"
+  | "PURCHASE_RETURN"
   | "SALES"
   | "WAREHOUSE_DISTRIBUTION"
   | "WAREHOUSE_RECEIPT"
@@ -42,6 +43,12 @@ export const MODULE_ROUTES: ModuleRoute[] = [
     featureKey: "PURCHASE",
     path: "/dashboard/purchase",
     label: "Purchase",
+  },
+  {
+    moduleKey: "PURCHASE_RETURN",
+    featureKey: "PURCHASE_RETURN",
+    path: "/dashboard/purchaseReturn",
+    label: "Purchase Return",
   },
   {
     moduleKey: "SALES",
@@ -228,6 +235,7 @@ export const availableModuleKeys = (
         "PRODUCTS",
         "WAREHOUSE_DISTRIBUTION",
         "PURCHASE",
+        "PURCHASE_RETURN",
         "USER_MANAGEMENT",
         "SET_UP_BUSINESS",
       ]);
@@ -252,7 +260,7 @@ export const availableModuleKeys = (
     if (centralized === true) {
       keys.push("WAREHOUSE_RECEIPT", "INTER_STORE_TRANSFER");
     } else if (centralized === false) {
-      keys.push("PURCHASE");
+      keys.push("PURCHASE", "PURCHASE_RETURN");
     }
     return new Set(keys);
   }
@@ -260,7 +268,8 @@ export const availableModuleKeys = (
   if (isWarehouseManager) {
     const keys: ModuleKey[] = ["PRODUCTS"];
     // Purchase belongs to the warehouse only while inventory is centralized.
-    if (centralized === true) keys.push("WAREHOUSE_DISTRIBUTION", "PURCHASE");
+    if (centralized === true)
+      keys.push("WAREHOUSE_DISTRIBUTION", "PURCHASE", "PURCHASE_RETURN");
     return new Set(keys);
   }
 
@@ -274,7 +283,7 @@ export const availableModuleKeys = (
   if (centralized === true) {
     keys.push("WAREHOUSE_RECEIPT", "INTER_STORE_TRANSFER");
   } else if (centralized === false) {
-    keys.push("PURCHASE");
+    keys.push("PURCHASE", "PURCHASE_RETURN");
   }
 
   return new Set(keys);
@@ -287,6 +296,7 @@ export const availableModuleKeys = (
  */
 const ORGANIZATION_DEPENDENT_MODULES = new Set<ModuleKey>([
   "PURCHASE",
+  "PURCHASE_RETURN",
   "WAREHOUSE_DISTRIBUTION",
   "WAREHOUSE_RECEIPT",
   "INTER_STORE_TRANSFER",
@@ -313,7 +323,7 @@ export const superAdminLockedModules = (
   actingAsWarehouse = false
 ): Set<ModuleKey> =>
   !actingAsWarehouse && (organization.centralizedInventory ?? false) === true
-    ? new Set<ModuleKey>(["WAREHOUSE_DISTRIBUTION", "PURCHASE"])
+    ? new Set<ModuleKey>(["WAREHOUSE_DISTRIBUTION", "PURCHASE", "PURCHASE_RETURN"])
     : new Set<ModuleKey>();
 
 /**
@@ -351,12 +361,16 @@ export const denialReason = (
   if (
     centralized === false &&
     route.moduleKey !== "PURCHASE" &&
+    route.moduleKey !== "PURCHASE_RETURN" &&
     dependsOnOrganization(route.moduleKey)
   ) {
     return `${route.label} is available only with centralized inventory.`;
   }
 
-  if (route.moduleKey === "PURCHASE" && centralized === true) {
+  if (
+    (route.moduleKey === "PURCHASE" || route.moduleKey === "PURCHASE_RETURN") &&
+    centralized === true
+  ) {
     return "Purchasing is handled at the warehouse for centralized inventory.";
   }
 
