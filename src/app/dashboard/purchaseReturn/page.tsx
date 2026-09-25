@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, Clipboard, Download, Info, Printer, Search } from "lucide-react";
+import Image from "next/image";
+import { CalendarDays, Clipboard, Info, Search } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
 import Button from "@/app/components/common/Button";
 import Input from "@/app/components/common/Input";
@@ -15,6 +16,7 @@ import type { SupplierData } from "@/types/SupplierData";
 import type { PurchaseReturnData } from "@/types/PurchaseReturnData";
 import { formatDate } from "@/utils/formatDate";
 import AddPurchaseReturn from "./components/AddPurchaseReturn";
+import PurchaseReturnEdit from "./components/PurchaseReturnEdit";
 
 /** One row of the purchase-return list — Figma node 3543:32380 ("PR Table Card"). */
 interface PurchaseReturnRow {
@@ -87,7 +89,10 @@ const ReturnStatusBadge = ({ status }: { status: PurchaseReturnRow["status"] }) 
   </span>
 );
 
-const returnColumns: ColumnDef<PurchaseReturnRow, any>[] = [
+const buildReturnColumns = (
+  onView: (id: string) => void,
+  onEdit: (id: string) => void
+): ColumnDef<PurchaseReturnRow, any>[] => [
   {
     accessorKey: "returnNo",
     header: "RETURN NO.",
@@ -135,13 +140,21 @@ const returnColumns: ColumnDef<PurchaseReturnRow, any>[] = [
   },
   {
     header: "ACTIONS",
-    cell: () => (
+    cell: ({ row }) => (
       <div className="flex items-center gap-sm">
-        <button type="button" aria-label="Download" title="Download" className="text-pneutral-600 hover:text-pneutral-900">
-          <Download size={20} />
+        <button
+          type="button"
+          aria-label={`View ${row.original.returnNo}`}
+          onClick={() => onView(row.original.id)}
+        >
+          <Image src="/Supplier/EyeIcon.svg" alt="" width={24} height={24} />
         </button>
-        <button type="button" aria-label="Print" title="Print" className="text-pneutral-600 hover:text-pneutral-900">
-          <Printer size={20} />
+        <button
+          type="button"
+          aria-label={`Edit ${row.original.returnNo}`}
+          onClick={() => onEdit(row.original.id)}
+        >
+          <Image src="/Supplier/EditIcon.svg" alt="" width={20} height={20} />
         </button>
       </div>
     ),
@@ -259,6 +272,10 @@ const PurchaseReturnContent = () => {
     );
   }
 
+  if (searchParams.get("view") === "edit" && searchParams.get("id")) {
+    return <PurchaseReturnEdit onBack={() => router.push("/dashboard/purchaseReturn")} />;
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -336,7 +353,10 @@ const PurchaseReturnContent = () => {
 
       <div className="flex w-full flex-col gap-md rounded-lg border border-pneutral-200 bg-white p-md shadow-[0px_0px_12px_4px_#c0c1be33,-4px_-4px_12px_0px_#d5d5d433,4px_4px_12px_-2px_#d5d5d433]">
         <DataTable
-          columns={returnColumns}
+          columns={buildReturnColumns(
+            (id) => router.push(`/dashboard/purchaseReturn?view=view&id=${id}`),
+            (id) => router.push(`/dashboard/purchaseReturn?view=edit&id=${id}`)
+          )}
           data={filteredReturns.slice(
             (currentPage - 1) * PAGE_SIZE,
             currentPage * PAGE_SIZE
