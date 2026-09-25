@@ -8,6 +8,7 @@ import type { PurchaseReturnStatus } from '@/types/PurchaseReturnData'
 import { sumLineAmounts, toMoney } from '@/utils/purchaseReturnAmounts'
 import WizardHeader from './WizardHeader'
 import ConfirmPurchaseReturn from './ConfirmPurchaseReturn'
+import SuccessPurchaseReturnPopUp from './SuccessPurchaseReturnPopUp'
 import { buildCreatePayload, type ReturnDraftLine } from './returnDraft'
 import type { InvoiceRow } from './AddPurchaseReturn'
 
@@ -192,6 +193,9 @@ const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnV
   // Confirming posts the return for real, so it goes through the dialog first;
   // saving a draft is reversible and posts straight away.
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Set from the create response once a CONFIRMED return is posted — holds the
+  // return number the backend assigned, and drives the success dialog.
+  const [postedReturnNo, setPostedReturnNo] = useState<string>()
 
   const lineItems = useMemo(() => lines.map(toLineItem), [lines])
 
@@ -242,8 +246,15 @@ const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnV
     setSubmitting(status)
     setSubmitError('')
     try {
-      await createPurchaseReturn(buildCreatePayload(invoice, lines, status))
+      const created = await createPurchaseReturn(buildCreatePayload(invoice, lines, status))
       setConfirmOpen(false)
+
+      // A draft is just parked, so it goes straight back to the list; a posted
+      // return shows its number and what it did to the supplier account.
+      if (status === 'CONFIRMED') {
+        setPostedReturnNo(created?.returnNo || '—')
+        return
+      }
       onClose?.()
     } catch (err: any) {
       console.error('Failed to create the purchase return:', err)
@@ -463,6 +474,22 @@ const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnV
         isConfirming={submitting === 'CONFIRMED'}
         onGoBack={() => setConfirmOpen(false)}
         onConfirm={() => handleSubmit('CONFIRMED')}
+      />
+
+      <SuccessPurchaseReturnPopUp
+        isOpen={postedReturnNo !== undefined}
+        returnNo={postedReturnNo ?? ''}
+        supplier={invoice?.supplier ?? '—'}
+        invoiceNo={invoice?.invoiceNo ?? '—'}
+        itemsReturned={lines.length}
+        returnAmount={totals.totalPurchaseReturnAmount}
+        outstandingAfterReturn={totals.supplierPayableAfterReturn}
+        isAdjustedAgainstPayable={isAdjustedAgainstPayable}
+        amountAdjustedAgainstPayable={totals.amountAdjustedAgainstPayable}
+        // Nothing reads a single purchase return yet, so both actions land on
+        // the list — the view screen can be pointed at it once it exists.
+        onViewPurchaseReturn={() => onClose?.()}
+        onGoToPurchaseReturns={() => onClose?.()}
       />
 
       {/* Figma node 3543:33430 ("Review Footer Row"). */}

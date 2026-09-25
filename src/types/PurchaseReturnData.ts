@@ -7,7 +7,12 @@ export interface PurchaseReturnData {
   supplierId: number;
   supplierName?: string;
   returnNo: string;
-  returnDate: string;
+  /** The date the return was raised. Newer responses name it
+   *  `purchaseReturnDate`; `returnDate` is the older spelling. */
+  purchaseReturnDate?: string;
+  returnDate?: string;
+  /** DRAFT until posted, then CONFIRMED — or CANCELLED once reversed. */
+  status?: PurchaseReturnStatus;
   grnNo?: string;
   invoiceNo?: string;
   invoiceDate?: string;

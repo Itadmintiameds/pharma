@@ -33,31 +33,49 @@ interface PurchaseReturnRow {
   status: ReturnRowStatus;
 }
 
-// The API carries no approval state — only `isCancel` — so the Figma mock's
-// Approved / Pending / Rejected badge reduces to the one distinction the
-// response actually supports.
-type ReturnRowStatus = "Completed" | "Cancelled";
+type ReturnRowStatus = "Draft" | "Confirmed" | "Cancelled";
 
-const toReturnRow = (purchaseReturn: PurchaseReturnData): PurchaseReturnRow => ({
-  id: String(purchaseReturn.purchaseReturnId ?? purchaseReturn.returnNo),
-  returnNo: purchaseReturn.returnNo,
-  returnDate: formatDate(purchaseReturn.returnDate),
-  returnDateIso: (purchaseReturn.returnDate ?? "").split("T")[0],
-  supplier: purchaseReturn.supplierName ?? "—",
-  supplierId: purchaseReturn.supplierId,
-  invoiceNo: purchaseReturn.invoiceNo ?? "—",
-  invoiceDate: formatDate(purchaseReturn.invoiceDate),
-  // itemCount is the line count the API already computed; the detail array is
-  // the fallback for a response saved before that field existed.
-  items: purchaseReturn.itemCount ?? purchaseReturn.purchaseReturnDetails?.length ?? 0,
-  amount: Number(purchaseReturn.totalNetAmount) || 0,
-  status: purchaseReturn.isCancel ? "Cancelled" : "Completed",
-});
+/** The response's own `status`, title-cased for the badge. `isCancel` is the
+ *  fallback for a row saved before that column existed. */
+const toRowStatus = (purchaseReturn: PurchaseReturnData): ReturnRowStatus => {
+  switch ((purchaseReturn.status ?? "").toUpperCase()) {
+    case "DRAFT":
+      return "Draft";
+    case "CONFIRMED":
+      return "Confirmed";
+    case "CANCELLED":
+      return "Cancelled";
+    default:
+      return purchaseReturn.isCancel ? "Cancelled" : "Confirmed";
+  }
+};
+
+const toReturnRow = (purchaseReturn: PurchaseReturnData): PurchaseReturnRow => {
+  const returnedOn = purchaseReturn.purchaseReturnDate ?? purchaseReturn.returnDate;
+
+  return {
+    id: String(purchaseReturn.purchaseReturnId ?? purchaseReturn.returnNo),
+    returnNo: purchaseReturn.returnNo,
+    returnDate: formatDate(returnedOn),
+    returnDateIso: (returnedOn ?? "").split("T")[0],
+    supplier: purchaseReturn.supplierName ?? "—",
+    supplierId: purchaseReturn.supplierId,
+    invoiceNo: purchaseReturn.invoiceNo ?? "—",
+    invoiceDate: formatDate(purchaseReturn.invoiceDate),
+    // itemCount is the line count the API already computed; the detail array is
+    // the fallback for a response saved before that field existed.
+    items: purchaseReturn.itemCount ?? purchaseReturn.purchaseReturnDetails?.length ?? 0,
+    amount: Number(purchaseReturn.totalNetAmount) || 0,
+    status: toRowStatus(purchaseReturn),
+  };
+};
 
 const RETURN_STATUS_STYLES: Record<ReturnRowStatus, string> = {
-  Completed: "bg-success-50 border-success-600 text-success-800",
-  // The project's "warning" tokens are this Figma file's red scale — matched
-  // by hex, not by name (see figma-design-to-code-project memory).
+  Confirmed: "bg-success-50 border-success-600 text-success-800",
+  // The project's "danger" tokens are this Figma file's yellow scale, and its
+  // "warning" tokens are the red scale — matched by hex, not by name (see
+  // figma-design-to-code-project memory).
+  Draft: "bg-danger-50 border-danger-600 text-danger-600",
   Cancelled: "bg-warning-50 border-warning-600 text-warning-600",
 };
 
@@ -155,8 +173,13 @@ const PurchaseReturnContent = () => {
       .catch((err) => console.error("Failed to fetch suppliers for the filter row:", err));
   }, []);
 
+  // Keyed on showAdd so leaving the wizard refetches: a return raised in there
+  // has to appear in the list behind it.
   useEffect(() => {
+    if (showAdd) return;
+
     let active = true;
+    setIsLoading(true);
 
     getAllPurchaseReturn()
       .then((data) => {
@@ -177,7 +200,7 @@ const PurchaseReturnContent = () => {
     return () => {
       active = false;
     };
-  }, []);
+  }, [showAdd]);
 
   const supplierOptions = useMemo(
     () =>
