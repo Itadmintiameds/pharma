@@ -53,7 +53,7 @@ export interface InvoiceRow {
 const toPaymentType = (value?: string): PaymentType =>
   (value ?? '').toUpperCase() === 'CREDIT' ? 'Credit' : 'Cash'
 
-const buildInvoiceRow = (
+export const buildInvoiceRow = (
   purchase: PurchaseData,
   returnedLines: Map<string, ReturnedQuantities> | undefined
 ): InvoiceRow => {
@@ -300,17 +300,6 @@ const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex items-center gap-2 text-label-l4 font-medium text-pneutral-700 hover:text-pneutral-900"
-        >
-          <ArrowLeft size={20} />
-          Back to Purchase Returns
-        </button>
-      </div>
-
       <WizardHeader
         title="Select Purchase Invoice"
         subtitle="Select the Purchase Invoice against which products are being returned to the supplier."

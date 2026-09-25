@@ -11,7 +11,13 @@ import type {
   PurchaseReturnCreatePayload,
   PurchaseReturnStatus,
 } from '@/types/PurchaseReturnData'
-import { sumLineAmounts, type ReturnLineAmounts } from '@/utils/purchaseReturnAmounts'
+import { formatMonthYear } from '@/utils/formatDate'
+import { returnLineKey } from '@/utils/purchaseReturnTotals'
+import {
+  lineAmounts,
+  sumLineAmounts,
+  type ReturnLineAmounts,
+} from '@/utils/purchaseReturnAmounts'
 import type { InvoiceRow } from './AddPurchaseReturn'
 
 export interface ReturnDraftLine {
@@ -33,6 +39,39 @@ export interface ReturnDraftLine {
 /** The purchase line a draft line was priced from, for anything step 3 needs
  *  beyond the fields above. */
 export type DetailById = Record<string, PurchaseDetailsData>
+
+/** "Blister (12 Tablet)" — the pack as purchased, and what it breaks into. */
+export const describeUnit = (
+  purchaseUnit?: string,
+  unitContains?: number,
+  smallestUnit?: string
+): string => {
+  if (!purchaseUnit) return smallestUnit ?? '—'
+  if (!unitContains || !smallestUnit) return purchaseUnit
+  return `${purchaseUnit} (${unitContains} ${smallestUnit})`
+}
+
+/**
+ * Prices one purchase line at the quantities being returned. Both the wizard
+ * and the draft-edit flow go through here, so a reopened draft is costed by
+ * exactly the same rules that priced it the first time.
+ */
+export const buildDraftLine = (
+  detail: PurchaseDetailsData,
+  entry: { returnPurchaseQty: number; returnFreeQty: number; returnReason: string }
+): ReturnDraftLine => ({
+  id: returnLineKey(detail.productId, detail.batchId),
+  productId: detail.productId,
+  batchId: detail.batchId,
+  productName: detail.productName ?? detail.productId,
+  batchNumber: detail.batchNumber ?? detail.batchId,
+  expiry: formatMonthYear(detail.expiryDate),
+  unit: describeUnit(detail.purchaseUnit, detail.unitContains, detail.smallestUnit),
+  returnPurchaseQty: entry.returnPurchaseQty,
+  returnFreeQty: entry.returnFreeQty,
+  returnReason: entry.returnReason,
+  amounts: lineAmounts(detail, entry.returnPurchaseQty),
+})
 
 /**
  * Exactly one location id travels on the body, matching the header the request

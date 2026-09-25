@@ -74,6 +74,7 @@ export interface PurchaseReturnDetailData {
   /** The API returns this one as a string ("10") while the paid quantity above
    *  is a number, so coerce before doing arithmetic with it. */
   freeReturnQuantity?: number | string;
+  returnReason?: string;
   grossAmount: number;
   gstAmount: number;
   netAmount: number;

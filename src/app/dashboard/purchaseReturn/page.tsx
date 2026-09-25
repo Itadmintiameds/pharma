@@ -17,6 +17,7 @@ import type { PurchaseReturnData } from "@/types/PurchaseReturnData";
 import { formatDate } from "@/utils/formatDate";
 import AddPurchaseReturn from "./components/AddPurchaseReturn";
 import PurchaseReturnEdit from "./components/PurchaseReturnEdit";
+import EditDraftPurchaseReturn from "./components/EditDraftPurchaseReturn";
 
 /** One row of the purchase-return list — Figma node 3543:32380 ("PR Table Card"). */
 interface PurchaseReturnRow {
@@ -167,6 +168,8 @@ const PurchaseReturnContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const showAdd = searchParams.get("view") === "add";
+  const editView = searchParams.get("view");
+  const editId = searchParams.get("id");
   const { canCreate } = useModulePermissions("PURCHASE_RETURN");
 
   const [search, setSearch] = useState("");
@@ -186,10 +189,10 @@ const PurchaseReturnContent = () => {
       .catch((err) => console.error("Failed to fetch suppliers for the filter row:", err));
   }, []);
 
-  // Keyed on showAdd so leaving the wizard refetches: a return raised in there
-  // has to appear in the list behind it.
+  // Keyed on the view param so returning to the list refetches: a return
+  // raised or edited on any of those screens has to appear here behind it.
   useEffect(() => {
-    if (showAdd) return;
+    if (editView) return;
 
     let active = true;
     setIsLoading(true);
@@ -213,7 +216,7 @@ const PurchaseReturnContent = () => {
     return () => {
       active = false;
     };
-  }, [showAdd]);
+  }, [editView]);
 
   const supplierOptions = useMemo(
     () =>
@@ -272,7 +275,19 @@ const PurchaseReturnContent = () => {
     );
   }
 
-  if (searchParams.get("view") === "edit" && searchParams.get("id")) {
+  // A DRAFT has not been posted yet, so editing it is just the wizard's review
+  // step again. A CONFIRMED return has moved stock and money, so it goes
+  // through the revision screen instead.
+  if (editView === "editDraft" && editId) {
+    return (
+      <EditDraftPurchaseReturn
+        purchaseReturnId={Number(editId)}
+        onClose={() => router.push("/dashboard/purchaseReturn")}
+      />
+    );
+  }
+
+  if (editView === "edit" && editId) {
     return <PurchaseReturnEdit onBack={() => router.push("/dashboard/purchaseReturn")} />;
   }
 
@@ -355,7 +370,15 @@ const PurchaseReturnContent = () => {
         <DataTable
           columns={buildReturnColumns(
             (id) => router.push(`/dashboard/purchaseReturn?view=view&id=${id}`),
-            (id) => router.push(`/dashboard/purchaseReturn?view=edit&id=${id}`)
+            (id) => {
+              // A draft reopens on the wizard's review step; anything already
+              // posted goes to the revision screen.
+              const isDraft =
+                returns.find((row) => row.id === id)?.status === "Draft";
+              router.push(
+                `/dashboard/purchaseReturn?view=${isDraft ? "editDraft" : "edit"}&id=${id}`
+              );
+            }
           )}
           data={filteredReturns.slice(
             (currentPage - 1) * PAGE_SIZE,

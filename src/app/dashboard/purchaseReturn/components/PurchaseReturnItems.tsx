@@ -6,15 +6,22 @@ import { getPurchaseById } from '@/services/PurchaseServiceNew'
 import type { PurchaseData, PurchaseDetailsData } from '@/types/PurchaseData'
 import { formatMonthYear } from '@/utils/formatDate'
 import { eligibleForLine, returnedForLine, returnLineKey } from '@/utils/purchaseReturnTotals'
-import { lineAmounts } from '@/utils/purchaseReturnAmounts'
 import WizardHeader from './WizardHeader'
 import PurchaseReturnView from './PurchaseReturnView'
 import type { InvoiceRow } from './AddPurchaseReturn'
-import type { ReturnDraftLine } from './returnDraft'
+import { buildDraftLine, describeUnit, type ReturnDraftLine } from './returnDraft'
 
 interface PurchaseReturnItemsProps {
   /** The invoice picked in step 1 — Figma node 3543:32805 ("Selected Invoice Card"). */
   invoice?: InvoiceRow
+  /**
+   * Quantities from a saved DRAFT being reopened, keyed the same way as a
+   * product card. Each is clamped to what is still returnable before it is
+   * shown — stock may have moved since the draft was parked.
+   */
+  initialEntries?: Record<string, ReturnEntry>
+  /** Set when reopening a DRAFT, so step 3 updates it instead of creating. */
+  editingReturnId?: number
   /** Back to step 1 (Select Purchase Invoice) of the wizard. */
   onBack?: () => void
   /** Out of the wizard entirely, back to the Purchase Return list. */
@@ -50,14 +57,16 @@ interface ProductReturnItem {
   /** Stock on hand, converted from smallest units to the purchase unit the
    *  quantities on this card are counted in. */
   availStock: number
-  /** One figure covering paid and free together: what is left unreturned of
-   *  both, capped by stock. The two quantity fields share it — their sum is
-   *  what gets validated, not each on its own. */
-  eligibleReturn: number
-  /** The paid/free split behind `eligibleReturn`. Not shown; used to fill the
-   *  two fields sensibly when "Return All Eligible Items" is clicked. */
+  /** Purchased less already returned, before stock is considered. */
   unreturnedPurch: number
   unreturnedFree: number
+  /** The most each field may hold on its own: what is left unreturned of that
+   *  kind, and never more than the stock on hand. */
+  maxReturnPurch: number
+  maxReturnFree: number
+  /** The cap on the two together — stock is one pool per batch, so the fields
+   *  cannot each take the full amount. */
+  eligibleReturn: number
   /** The purchase line this card was built from, for pricing the return. */
   detail: PurchaseDetailsData
 }
@@ -71,17 +80,6 @@ const availableInPurchaseUnits = (detail: PurchaseDetailsData): number => {
   const stock = Number(detail.availableStock) || 0
   const perPack = Number(detail.unitContains) || 0
   return perPack > 0 ? Math.floor(stock / perPack) : stock
-}
-
-/** "Blister (12 Tablet)" — the pack as purchased, and what it breaks into. */
-const describeUnit = (
-  purchaseUnit?: string,
-  unitContains?: number,
-  smallestUnit?: string
-): string => {
-  if (!purchaseUnit) return smallestUnit ?? '—'
-  if (!unitContains || !smallestUnit) return purchaseUnit
-  return `${purchaseUnit} (${unitContains} ${smallestUnit})`
 }
 
 /**
@@ -112,15 +110,15 @@ const buildProductItems = (
       prevReturnedPurch: returned.paid,
       prevReturnedFree: returned.free,
       availStock,
+      unreturnedPurch: unreturned.paid,
+      unreturnedFree: unreturned.free,
+      // Neither kind can exceed what was received of it — a purchase return of
+      // 60 against 50 purchased is not a return, it is an invention.
+      maxReturnPurch: Math.min(unreturned.paid, availStock),
+      maxReturnFree: Math.min(unreturned.free, availStock),
       // Stock is held per batch, not split into paid and free, so one pool
-      // caps the two together. With nothing returned yet this is simply
-      // everything received — purchased plus free.
+      // caps the two together.
       eligibleReturn: Math.min(unreturned.paid + unreturned.free, availStock),
-      unreturnedPurch: Math.min(unreturned.paid, availStock),
-      unreturnedFree: Math.min(
-        unreturned.free,
-        Math.max(availStock - Math.min(unreturned.paid, availStock), 0)
-      ),
       detail,
     }
   })
@@ -133,7 +131,7 @@ const emptyEntry = (): ReturnEntry => ({
   returnReason: '',
 })
 
-interface ReturnEntry {
+export interface ReturnEntry {
   selected: boolean
   returnPurchaseQty: number
   returnFreeQty: number
@@ -182,37 +180,57 @@ const StatBlock = ({
   </div>
 )
 
-const EditField = ({
-  label,
-  value,
-  onChange,
-  disabled,
-  placeholder,
-  type = 'text',
-}: {
-  label: string
-  value: string | number
-  onChange: (value: string) => void
-  disabled: boolean
-  placeholder?: string
-  type?: 'text' | 'number'
-}) => (
-  <div className="flex flex-1 flex-col gap-2">
-    <p className="text-p3 font-medium text-pneutral-900">{label}</p>
-    <input
-      type={type}
-      min={type === 'number' ? 0 : undefined}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      placeholder={placeholder}
-      className="min-h-9 w-full rounded-sm border border-pneutral-300 bg-white px-sm py-xsm text-p2 text-pneutral-900 outline-none disabled:cursor-not-allowed disabled:bg-pneutral-50 disabled:text-pneutral-400"
-    />
-  </div>
-)
+/** Per-field messages for one card; absent keys mean that field is fine. */
+interface EntryErrors {
+  purchase?: string
+  free?: string
+}
 
-const clamp = (value: string, max: number): number =>
-  Math.max(Math.min(Number(value) || 0, max), 0)
+/**
+ * Three separate limits apply, and each needs its own message:
+ *   - the paid quantity cannot exceed what was purchased, less earlier returns
+ *   - the free quantity cannot exceed what came free, less earlier returns
+ *   - the two together cannot exceed the stock still on hand
+ * Only a selected card is validated — an unticked one is not being returned.
+ */
+const validateEntry = (item: ProductReturnItem, entry: ReturnEntry): EntryErrors => {
+  if (!entry.selected) return {}
+
+  const errors: EntryErrors = {}
+  const paid = entry.returnPurchaseQty
+  const free = entry.returnFreeQty
+
+  if (paid < 0) {
+    errors.purchase = 'Quantity cannot be negative.'
+  } else if (paid > item.maxReturnPurch) {
+    errors.purchase =
+      item.availStock < item.unreturnedPurch
+        ? `Only ${item.availStock} left in stock.`
+        : `Cannot exceed ${item.maxReturnPurch} — ${item.purchasedQty} purchased, ${item.prevReturnedPurch} already returned.`
+  }
+
+  if (free < 0) {
+    errors.free = 'Quantity cannot be negative.'
+  } else if (free > item.maxReturnFree) {
+    errors.free =
+      item.availStock < item.unreturnedFree
+        ? `Only ${item.availStock} left in stock.`
+        : `Cannot exceed ${item.maxReturnFree} — ${item.freeQty} free, ${item.prevReturnedFree} already returned.`
+  }
+
+  // Only worth saying once both fields are individually valid, otherwise it
+  // piles a second message on top of the real problem.
+  if (!errors.purchase && !errors.free && paid + free > item.eligibleReturn) {
+    errors.purchase = `Purchase and free together cannot exceed ${item.eligibleReturn}.`
+  }
+
+  return errors
+}
+
+const hasErrors = (errors: EntryErrors) => Boolean(errors.purchase || errors.free)
+
+/** Empty string clears the field; anything else is read as a number. */
+const toQty = (value: string): number => (value === '' ? 0 : Number(value) || 0)
 
 const ProductCard = ({
   item,
@@ -227,6 +245,7 @@ const ProductCard = ({
 }) => {
   const status = statusOf(item, entry.selected)
   const disabled = status === 'No Stock' || status === 'Fully Returned'
+  const errors = validateEntry(item, entry)
   // Only "No Stock" mutes the whole card — "Fully Returned" is still live
   // information, it just has nothing left to return.
   const muted = status === 'No Stock'
@@ -288,45 +307,59 @@ const ProductCard = ({
 
       <div className="h-px w-full bg-pneutral-200" />
 
+      {/* The shared Input at its `sm` preset — same 36px field the card used
+          before, now with the app's standard label and error treatment. */}
       <div className="flex w-full flex-col gap-md sm:flex-row sm:items-start">
-        <EditField
+        <Input
           label="Return Purchase Qty"
           type="number"
-          value={entry.returnPurchaseQty}
-          // The two fields share one allowance, so each clamps to what the
-          // other has not already taken rather than letting an over-return be
-          // typed in.
-          onChange={(value) =>
-            onChange({
-              returnPurchaseQty: clamp(value, item.eligibleReturn - entry.returnFreeQty),
-            })
-          }
+          min={0}
+          max={item.maxReturnPurch}
+          sizeVariant="sm"
+          // Blank rather than a literal 0, so the field reads as "nothing
+          // entered yet" instead of an entered zero.
+          value={entry.returnPurchaseQty || ''}
+          onChange={(e) => onChange({ returnPurchaseQty: toQty(e.target.value) })}
           disabled={disabled}
+          error={errors.purchase}
+          labelClassName="text-p3! font-medium!"
+          containerClassName="flex-1"
         />
-        <EditField
+        <Input
           label="Return Free Qty"
           type="number"
-          value={entry.returnFreeQty}
-          onChange={(value) =>
-            onChange({
-              returnFreeQty: clamp(value, item.eligibleReturn - entry.returnPurchaseQty),
-            })
-          }
+          min={0}
+          max={item.maxReturnFree}
+          sizeVariant="sm"
+          value={entry.returnFreeQty || ''}
+          onChange={(e) => onChange({ returnFreeQty: toQty(e.target.value) })}
           disabled={disabled}
+          error={errors.free}
+          labelClassName="text-p3! font-medium!"
+          containerClassName="flex-1"
         />
-        <EditField
+        <Input
           label="Return Reason"
+          sizeVariant="sm"
           value={entry.returnReason}
-          onChange={(value) => onChange({ returnReason: value })}
+          onChange={(e) => onChange({ returnReason: e.target.value })}
           disabled={disabled}
           placeholder="Select reason"
+          labelClassName="text-p3! font-medium!"
+          containerClassName="flex-1"
         />
       </div>
     </div>
   )
 }
 
-const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsProps) => {
+const PurchaseReturnItems = ({
+  invoice,
+  initialEntries,
+  editingReturnId,
+  onBack,
+  onClose,
+}: PurchaseReturnItemsProps) => {
   const [search, setSearch] = useState('')
   const [entries, setEntries] = useState<Record<string, ReturnEntry>>({})
   const [step, setStep] = useState<1 | 2>(1)
@@ -334,6 +367,8 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
   // on its own to find out what is still on hand per batch.
   // Left undefined until it arrives: the step-1 copy has no stock on it, and
   // showing cards from it would flash every line as "No Stock".
+  // Names of the draft lines whose saved quantity no longer fits.
+  const [reducedItems, setReducedItems] = useState<string[]>([])
   const [purchase, setPurchase] = useState<PurchaseData>()
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
@@ -374,11 +409,34 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
     [invoice, purchase]
   )
 
-  // One blank entry per line of the selected invoice, rebuilt if the viewer
-  // goes back to step 1 and picks a different one.
+  // One entry per line of the selected invoice, rebuilt if the viewer goes
+  // back to step 1 and picks a different one. A reopened draft seeds its saved
+  // quantities here, clamped to what is still returnable today.
   useEffect(() => {
-    setEntries(Object.fromEntries(productItems.map((item) => [item.id, emptyEntry()])))
-  }, [productItems])
+    const reduced: string[] = []
+
+    setEntries(
+      Object.fromEntries(
+        productItems.map((item) => {
+          const saved = initialEntries?.[item.id]
+          if (!saved) return [item.id, emptyEntry()]
+
+          const paid = Math.min(saved.returnPurchaseQty, item.maxReturnPurch, item.eligibleReturn)
+          const free = Math.min(
+            saved.returnFreeQty,
+            item.maxReturnFree,
+            Math.max(item.eligibleReturn - paid, 0)
+          )
+          if (paid !== saved.returnPurchaseQty || free !== saved.returnFreeQty) {
+            reduced.push(item.name)
+          }
+
+          return [item.id, { ...saved, returnPurchaseQty: paid, returnFreeQty: free }]
+        })
+      )
+    )
+    setReducedItems(reduced)
+  }, [productItems, initialEntries])
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -393,13 +451,15 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
       const next = { ...prev }
       productItems.forEach((item) => {
         if (item.eligibleReturn <= 0) return
+        // Fill the paid side first, then give the free side whatever is left
+        // of the shared stock allowance — never more than either kind's own
+        // outstanding quantity.
+        const paid = Math.min(item.maxReturnPurch, item.eligibleReturn)
         next[item.id] = {
           ...(next[item.id] ?? emptyEntry()),
           selected: true,
-          // Split the one allowance back out along the paid/free line it came
-          // from, so the amounts priced off the paid quantity stay right.
-          returnPurchaseQty: item.unreturnedPurch,
-          returnFreeQty: item.unreturnedFree,
+          returnPurchaseQty: paid,
+          returnFreeQty: Math.min(item.maxReturnFree, item.eligibleReturn - paid),
         }
       })
       return next
@@ -408,26 +468,19 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
 
   // Only the lines with something actually being returned reach step 3, priced
   // once here so the review screen and the POST body cannot disagree.
+  // Anything still failing validation is held back, and blocks the step.
+  const isInvalid = productItems.some((item) => {
+    const entry = entries[item.id]
+    return entry ? hasErrors(validateEntry(item, entry)) : false
+  })
+
   const draftLines: ReturnDraftLine[] = productItems.flatMap((item) => {
     const entry = entries[item.id]
     if (!entry?.selected) return []
     if (entry.returnPurchaseQty <= 0 && entry.returnFreeQty <= 0) return []
+    if (hasErrors(validateEntry(item, entry))) return []
 
-    return [
-      {
-        id: item.id,
-        productId: item.detail.productId,
-        batchId: item.detail.batchId,
-        productName: item.name,
-        batchNumber: item.batch,
-        expiry: item.exp,
-        unit: item.unit,
-        returnPurchaseQty: entry.returnPurchaseQty,
-        returnFreeQty: entry.returnFreeQty,
-        returnReason: entry.returnReason,
-        amounts: lineAmounts(item.detail, entry.returnPurchaseQty),
-      },
-    ]
+    return [buildDraftLine(item.detail, entry)]
   })
 
   if (step === 2) {
@@ -435,6 +488,7 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
       <PurchaseReturnView
         invoice={invoice}
         lines={draftLines}
+        editingReturnId={editingReturnId}
         onBack={() => setStep(1)}
         onClose={onClose}
       />
@@ -450,6 +504,17 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
         subtitle="Choose the products and batches to return. Enter the return quantities for purchase and free items."
         currentStep={2}
       />
+
+      {reducedItems.length > 0 && (
+        <p
+          role="alert"
+          className="w-full rounded-lg bg-danger-50 p-md text-p3 font-regular text-danger-600"
+        >
+          Stock or earlier returns have changed since this draft was saved, so
+          the quantities on {reducedItems.join(', ')} were reduced to what is
+          still returnable. Review them before continuing.
+        </p>
+      )}
 
       {invoice && (
         <div className="flex w-full flex-col gap-sm rounded-lg bg-white p-md shadow-[0px_0px_12px_4px_#c0c1be33,-4px_-4px_12px_0px_#d5d5d433,4px_4px_12px_-2px_#d5d5d433]">
@@ -570,7 +635,7 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
         <Button
           type="button"
           variant="primary"
-          disabled={draftLines.length === 0}
+          disabled={draftLines.length === 0 || isInvalid}
           onClick={() => setStep(2)}
           className="h-12! w-auto! min-w-27 gap-2 rounded-lg! bg-primary-800! px-4 text-label-l4! font-medium! text-pneutral-50!"
         >

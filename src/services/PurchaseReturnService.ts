@@ -26,3 +26,18 @@ export const createPurchaseReturn = async (
     throw handleApiError(error, 'Failed to create the purchase return.');
   }
 };
+
+// Update a return that is still a DRAFT — saving it again as a draft, or
+// posting it by sending status CONFIRMED. Editing a CONFIRMED return is a
+// separate flow (/{id}/edit) and does not go through here.
+export const updatePurchaseReturn = async (
+  purchaseReturnId: number | string,
+  payload: PurchaseReturnCreatePayload
+): Promise<PurchaseReturnData> => {
+  try {
+    const response = await api.put(`/purchase-return/${purchaseReturnId}`, payload);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to update the purchase return.');
+  }
+};

@@ -3,7 +3,10 @@ import { ArrowLeft, CheckCircle2, Info } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import Button from '@/app/components/common/Button'
 import DataTable from '@/app/components/common/table/DataTable'
-import { createPurchaseReturn } from '@/services/PurchaseReturnService'
+import {
+  createPurchaseReturn,
+  updatePurchaseReturn,
+} from '@/services/PurchaseReturnService'
 import type { PurchaseReturnStatus } from '@/types/PurchaseReturnData'
 import { sumLineAmounts, toMoney } from '@/utils/purchaseReturnAmounts'
 import WizardHeader from './WizardHeader'
@@ -17,6 +20,9 @@ interface PurchaseReturnViewProps {
   invoice?: InvoiceRow
   /** The lines picked on step 2, already priced — this screen only reads them. */
   lines: ReturnDraftLine[]
+  /** Set when reopening a saved DRAFT: the return is updated in place instead
+   *  of a second one being created. */
+  editingReturnId?: number
   /** Back to step 2 (Select Return Items) of the wizard. */
   onBack?: () => void
   /** Out of the wizard entirely, back to the Purchase Return list. */
@@ -187,7 +193,13 @@ const SummaryLine = ({
   </div>
 )
 
-const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnViewProps) => {
+const PurchaseReturnView = ({
+  invoice,
+  lines,
+  editingReturnId,
+  onBack,
+  onClose,
+}: PurchaseReturnViewProps) => {
   const [submitting, setSubmitting] = useState<PurchaseReturnStatus>()
   const [submitError, setSubmitError] = useState('')
   // Confirming posts the return for real, so it goes through the dialog first;
@@ -246,13 +258,17 @@ const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnV
     setSubmitting(status)
     setSubmitError('')
     try {
-      const created = await createPurchaseReturn(buildCreatePayload(invoice, lines, status))
+      const payload = buildCreatePayload(invoice, lines, status)
+      // Reopening a draft updates it in place; a fresh return is created.
+      const saved = editingReturnId
+        ? await updatePurchaseReturn(editingReturnId, payload)
+        : await createPurchaseReturn(payload)
       setConfirmOpen(false)
 
       // A draft is just parked, so it goes straight back to the list; a posted
       // return shows its number and what it did to the supplier account.
       if (status === 'CONFIRMED') {
-        setPostedReturnNo(created?.returnNo || '—')
+        setPostedReturnNo(saved?.returnNo || '—')
         return
       }
       onClose?.()
