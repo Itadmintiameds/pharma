@@ -1,14 +1,21 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { ArrowLeft, CheckCircle2, Info } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import Button from '@/app/components/common/Button'
 import DataTable from '@/app/components/common/table/DataTable'
+import { createPurchaseReturn } from '@/services/PurchaseReturnService'
+import type { PurchaseReturnStatus } from '@/types/PurchaseReturnData'
+import { sumLineAmounts, toMoney } from '@/utils/purchaseReturnAmounts'
 import WizardHeader from './WizardHeader'
+import ConfirmPurchaseReturn from './ConfirmPurchaseReturn'
+import { buildCreatePayload, type ReturnDraftLine } from './returnDraft'
 import type { InvoiceRow } from './AddPurchaseReturn'
 
 interface PurchaseReturnViewProps {
   /** The invoice picked in step 1, carried through for the read-only reference card. */
   invoice?: InvoiceRow
+  /** The lines picked on step 2, already priced — this screen only reads them. */
+  lines: ReturnDraftLine[]
   /** Back to step 2 (Select Return Items) of the wizard. */
   onBack?: () => void
   /** Out of the wizard entirely, back to the Purchase Return list. */
@@ -58,41 +65,23 @@ interface ReturnLineItem {
   isTotal?: boolean
 }
 
-// The items and quantities picked on step 2 aren't threaded through yet, so
-// this is seeded with the same two lines carried by the sample data on that
-// step (Crocin / Augmentin) — node 3543:33310 ("Amount Calculation Card").
-const RETURN_LINE_ITEMS: ReturnLineItem[] = [
-  {
-    id: 'crocin',
-    product: 'Crocin 500 mg Tablet',
-    batch: 'BCH001',
-    expiry: 'Dec 2027',
-    unit: 'Strip (10)',
-    retQty: 10,
-    freeQty: 0,
-    rate: 50,
-    discount: 0,
-    taxable: 500,
-    gst: 25,
-    lineAmount: 525,
-    reason: 'Near Expiry',
-  },
-  {
-    id: 'augmentin',
-    product: 'Augmentin 625 mg Tablet',
-    batch: 'BCH002',
-    expiry: 'Mar 2028',
-    unit: 'Strip (10)',
-    retQty: 5,
-    freeQty: 0,
-    rate: 80,
-    discount: 0,
-    taxable: 400,
-    gst: 20,
-    lineAmount: 420,
-    reason: 'Damaged',
-  },
-]
+const toLineItem = (line: ReturnDraftLine): ReturnLineItem => ({
+  id: line.id,
+  product: line.productName,
+  batch: line.batchNumber,
+  expiry: line.expiry,
+  unit: line.unit,
+  retQty: line.returnPurchaseQty,
+  freeQty: line.returnFreeQty,
+  rate: line.amounts.rate,
+  // Purchase-level discount is not apportioned to the line on the purchase
+  // response, so a return is credited at the undiscounted line rate.
+  discount: 0,
+  taxable: line.amounts.grossAmount,
+  gst: line.amounts.gstAmount,
+  lineAmount: line.amounts.netAmount,
+  reason: line.returnReason,
+})
 
 const returnLineColumns: ColumnDef<ReturnLineItem, any>[] = [
   {
@@ -197,18 +186,31 @@ const SummaryLine = ({
   </div>
 )
 
-const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProps) => {
-  const totals = useMemo(() => {
-    const retQty = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.retQty, 0)
-    const freeQty = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.freeQty, 0)
-    const discount = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.discount, 0)
-    const taxable = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.taxable, 0)
-    const gst = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.gst, 0)
-    const lineAmount = RETURN_LINE_ITEMS.reduce((sum, item) => sum + item.lineAmount, 0)
+const PurchaseReturnView = ({ invoice, lines, onBack, onClose }: PurchaseReturnViewProps) => {
+  const [submitting, setSubmitting] = useState<PurchaseReturnStatus>()
+  const [submitError, setSubmitError] = useState('')
+  // Confirming posts the return for real, so it goes through the dialog first;
+  // saving a draft is reversible and posts straight away.
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
-    const grossReturnValue = taxable + discount
-    const cgst = gst / 2
-    const sgst = gst / 2
+  const lineItems = useMemo(() => lines.map(toLineItem), [lines])
+
+  const totals = useMemo(() => {
+    const retQty = lineItems.reduce((sum, item) => sum + item.retQty, 0)
+    const freeQty = lineItems.reduce((sum, item) => sum + item.freeQty, 0)
+    const discount = toMoney(lineItems.reduce((sum, item) => sum + item.discount, 0))
+
+    // The same sum the POST body carries, so the screen and the payload agree.
+    const { totalGrossAmount, totalGstAmount, totalNetAmount } = sumLineAmounts(
+      lines.map((line) => line.amounts)
+    )
+    const taxable = totalGrossAmount
+    const gst = totalGstAmount
+    const lineAmount = totalNetAmount
+
+    const grossReturnValue = toMoney(taxable + discount)
+    const cgst = toMoney(gst / 2)
+    const sgst = toMoney(gst - cgst)
     const totalPurchaseReturnAmount = lineAmount
 
     const currentSupplierPayable = invoice?.outstanding ?? 0
@@ -232,10 +234,35 @@ const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProp
       supplierPayableAfterReturn,
       amountDueFromSupplier,
     }
-  }, [invoice])
+  }, [invoice, lines, lineItems])
+
+  const handleSubmit = async (status: PurchaseReturnStatus) => {
+    if (!invoice || lines.length === 0) return
+
+    setSubmitting(status)
+    setSubmitError('')
+    try {
+      await createPurchaseReturn(buildCreatePayload(invoice, lines, status))
+      setConfirmOpen(false)
+      onClose?.()
+    } catch (err: any) {
+      console.error('Failed to create the purchase return:', err)
+      setSubmitError(err?.message || 'Failed to create the purchase return.')
+      // Drop back to the review screen so the error is read against the
+      // figures it applies to.
+      setConfirmOpen(false)
+    } finally {
+      setSubmitting(undefined)
+    }
+  }
+
+  const isSubmitting = submitting !== undefined
+  // Nothing is owed on a paid invoice, so the credit cannot be netted off — it
+  // becomes recoverable from the supplier instead.
+  const isAdjustedAgainstPayable = totals.amountAdjustedAgainstPayable > 0
 
   const tableRows: ReturnLineItem[] = [
-    ...RETURN_LINE_ITEMS,
+    ...lineItems,
     {
       id: 'total',
       product: 'Total',
@@ -304,7 +331,9 @@ const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProp
             Purchase Return Value Summary
           </p>
           <SummaryLine label="Gross Return Value (₹)" value={inr(totals.grossReturnValue)} />
-          <SummaryLine label="Applicable Discount (₹)" value={inr(totals.discount)} />
+          {/* The purchase carries a total discount but does not apportion it to
+              the lines, so there is no per-return share to show yet. */}
+          {/* <SummaryLine label="Applicable Discount (₹)" value={inr(totals.discount)} /> */}
           <SummaryLine label="Taxable Return Value (₹)" value={inr(totals.taxable)} />
           <SummaryLine label="CGST (₹)" value={inr(totals.cgst)} />
           <SummaryLine label="SGST (₹)" value={inr(totals.sgst)} />
@@ -379,8 +408,9 @@ const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProp
           <div className="flex w-full items-center gap-sm rounded-sm bg-secondary-50 px-md py-sm">
             <Info size={24} className="shrink-0 text-secondary-700" />
             <p className="text-p3 font-regular text-secondary-700">
-              This return will be automatically adjusted against the supplier payable since this
-              is a credit purchase.
+              {isAdjustedAgainstPayable
+                ? 'This return will be automatically adjusted against the supplier payable since there is an outstanding balance on this invoice.'
+                : 'There is no outstanding balance on this invoice, so the return will be recorded as supplier credit / refund receivable.'}
             </p>
           </div>
 
@@ -394,15 +424,46 @@ const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProp
           <div className="flex w-full flex-col items-start justify-center gap-sm">
             <p className="text-p3 font-semibold text-pneutral-900">Financial Treatment:</p>
             <span className="inline-flex items-start rounded-sm bg-success-50 px-sm py-1 text-p3 font-semibold text-success-600">
-              Adjusted Against Supplier Payable
+              {isAdjustedAgainstPayable
+                ? 'Adjusted Against Supplier Payable'
+                : 'Supplier Credit / Refund Receivable'}
             </span>
             <p className="text-p3 font-regular text-pneutral-500">
-              The return amount will be adjusted against the current outstanding payable to this
-              supplier.
+              {isAdjustedAgainstPayable
+                ? 'The return amount will be adjusted against the current outstanding payable to this supplier.'
+                : 'This invoice is fully paid, so the return amount becomes recoverable from the supplier.'}
             </p>
           </div>
         </div>
       </div>
+
+      {submitError && (
+        <p
+          role="alert"
+          className="w-full rounded-lg bg-warning-50 p-md text-label-l4 font-medium text-warning-600"
+        >
+          {submitError}
+        </p>
+      )}
+
+      {/* Every figure here is the one already reviewed above — the dialog
+          recomputes nothing. */}
+      <ConfirmPurchaseReturn
+        isOpen={confirmOpen}
+        supplier={invoice?.supplier ?? '—'}
+        invoiceNo={invoice?.invoiceNo ?? '—'}
+        itemCount={lines.length}
+        returnPurchaseQty={totals.retQty}
+        returnAmount={totals.totalPurchaseReturnAmount}
+        unitsDeducted={totals.retQty + totals.freeQty}
+        gstReversed={totals.gst}
+        amountAdjustedAgainstPayable={totals.amountAdjustedAgainstPayable}
+        outstandingBefore={totals.currentSupplierPayable}
+        outstandingAfter={totals.supplierPayableAfterReturn}
+        isConfirming={submitting === 'CONFIRMED'}
+        onGoBack={() => setConfirmOpen(false)}
+        onConfirm={() => handleSubmit('CONFIRMED')}
+      />
 
       {/* Figma node 3543:33430 ("Review Footer Row"). */}
       <div className="flex w-full flex-col items-stretch gap-sm sm:flex-row sm:items-center sm:justify-between">
@@ -420,17 +481,24 @@ const PurchaseReturnView = ({ invoice, onBack, onClose }: PurchaseReturnViewProp
           <Button
             type="button"
             variant="outline"
+            disabled={isSubmitting}
+            onClick={() => handleSubmit('DRAFT')}
             className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-secondary-700! bg-transparent! px-4 text-label-l4! font-medium! text-secondary-700! sm:w-37.5!"
           >
-            Save as Draft
+            {submitting === 'DRAFT' ? 'Saving...' : 'Save as Draft'}
           </Button>
 
           <Button
             type="button"
             variant="primary"
+            disabled={isSubmitting}
+            onClick={() => {
+              setSubmitError('')
+              setConfirmOpen(true)
+            }}
             className="h-12! w-full! min-w-27 gap-2 rounded-lg! bg-primary-800! px-4 text-label-l4! font-medium! text-pneutral-50! sm:w-auto!"
           >
-            Confirm Purchase Return
+            {submitting === 'CONFIRMED' ? 'Confirming...' : 'Confirm Purchase Return'}
             <CheckCircle2 size={20} className="shrink-0" />
           </Button>
         </div>

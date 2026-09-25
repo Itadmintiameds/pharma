@@ -10,7 +10,10 @@ import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { getAllSupplier } from "@/services/SupplierService";
+import { getAllPurchaseReturn } from "@/services/PurchaseReturnService";
 import type { SupplierData } from "@/types/SupplierData";
+import type { PurchaseReturnData } from "@/types/PurchaseReturnData";
+import { formatDate } from "@/utils/formatDate";
 import AddPurchaseReturn from "./components/AddPurchaseReturn";
 
 /** One row of the purchase-return list — Figma node 3543:32380 ("PR Table Card"). */
@@ -18,70 +21,44 @@ interface PurchaseReturnRow {
   id: string;
   returnNo: string;
   returnDate: string;
+  /** The `yyyy-mm-dd` part of the API value, kept for the date-range filter —
+   *  `returnDate` above is already formatted for display. */
+  returnDateIso: string;
   supplier: string;
+  supplierId: number;
   invoiceNo: string;
   invoiceDate: string;
   items: number;
   amount: number;
-  status: "Approved" | "Pending" | "Rejected";
+  status: ReturnRowStatus;
 }
 
-// No purchase-return API exists yet, so the table is seeded with the same
-// sample rows shown in the Figma mock until a real service lands.
-const SAMPLE_RETURNS: PurchaseReturnRow[] = [
-  {
-    id: "1",
-    returnNo: "PR-2024-0089",
-    returnDate: "March 20, 2024",
-    supplier: "MedPlus Distributors",
-    invoiceNo: "INV-2024-1123",
-    invoiceDate: "March 10, 2024",
-    items: 3,
-    amount: 4850,
-    status: "Approved",
-  },
-  {
-    id: "2",
-    returnNo: "PR-2024-0088",
-    returnDate: "March 18, 2024",
-    supplier: "HealthCare Supplies Co.",
-    invoiceNo: "INV-2024-1098",
-    invoiceDate: "March 5, 2024",
-    items: 2,
-    amount: 1200,
-    status: "Pending",
-  },
-  {
-    id: "3",
-    returnNo: "PR-2024-0087",
-    returnDate: "March 15, 2024",
-    supplier: "Wellness Pharma",
-    invoiceNo: "INV-2024-1076",
-    invoiceDate: "March 1, 2024",
-    items: 5,
-    amount: 8320,
-    status: "Approved",
-  },
-  {
-    id: "4",
-    returnNo: "PR-2024-0086",
-    returnDate: "March 10, 2024",
-    supplier: "Grace Pharma Distributors",
-    invoiceNo: "INV-2024-1042",
-    invoiceDate: "Feb 25, 2024",
-    items: 1,
-    amount: 450,
-    status: "Rejected",
-  },
-];
+// The API carries no approval state — only `isCancel` — so the Figma mock's
+// Approved / Pending / Rejected badge reduces to the one distinction the
+// response actually supports.
+type ReturnRowStatus = "Completed" | "Cancelled";
 
-const RETURN_STATUS_STYLES: Record<PurchaseReturnRow["status"], string> = {
-  Approved: "bg-success-50 border-success-600 text-success-800",
-  // The project's "danger" tokens are this Figma file's yellow scale, and its
-  // "warning" tokens are the red scale — matched by hex, not by name (see
-  // figma-design-to-code-project memory).
-  Pending: "bg-danger-50 border-danger-600 text-danger-600",
-  Rejected: "bg-warning-50 border-warning-600 text-warning-600",
+const toReturnRow = (purchaseReturn: PurchaseReturnData): PurchaseReturnRow => ({
+  id: String(purchaseReturn.purchaseReturnId ?? purchaseReturn.returnNo),
+  returnNo: purchaseReturn.returnNo,
+  returnDate: formatDate(purchaseReturn.returnDate),
+  returnDateIso: (purchaseReturn.returnDate ?? "").split("T")[0],
+  supplier: purchaseReturn.supplierName ?? "—",
+  supplierId: purchaseReturn.supplierId,
+  invoiceNo: purchaseReturn.invoiceNo ?? "—",
+  invoiceDate: formatDate(purchaseReturn.invoiceDate),
+  // itemCount is the line count the API already computed; the detail array is
+  // the fallback for a response saved before that field existed.
+  items: purchaseReturn.itemCount ?? purchaseReturn.purchaseReturnDetails?.length ?? 0,
+  amount: Number(purchaseReturn.totalNetAmount) || 0,
+  status: purchaseReturn.isCancel ? "Cancelled" : "Completed",
+});
+
+const RETURN_STATUS_STYLES: Record<ReturnRowStatus, string> = {
+  Completed: "bg-success-50 border-success-600 text-success-800",
+  // The project's "warning" tokens are this Figma file's red scale — matched
+  // by hex, not by name (see figma-design-to-code-project memory).
+  Cancelled: "bg-warning-50 border-warning-600 text-warning-600",
 };
 
 const ReturnStatusBadge = ({ status }: { status: PurchaseReturnRow["status"] }) => (
@@ -111,7 +88,7 @@ const returnColumns: ColumnDef<PurchaseReturnRow, any>[] = [
   },
   {
     accessorKey: "invoiceNo",
-    header: "INVOICE DATE",
+    header: "INVOICE NO.",
     cell: ({ row }) => (
       <div className="flex flex-col gap-1">
         <span>{row.original.invoiceNo}</span>
@@ -167,12 +144,39 @@ const PurchaseReturnContent = () => {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [suppliers, setSuppliers] = useState<SupplierData[]>([]);
+  const [returns, setReturns] = useState<PurchaseReturnRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     getAllSupplier()
       .then(setSuppliers)
       .catch((err) => console.error("Failed to fetch suppliers for the filter row:", err));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    getAllPurchaseReturn()
+      .then((data) => {
+        if (!active) return;
+        setReturns(data.map(toReturnRow));
+        setLoadError("");
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error("Failed to fetch purchase returns:", err);
+        setLoadError(err?.message || "Failed to fetch purchase returns.");
+        setReturns([]);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const supplierOptions = useMemo(
@@ -191,6 +195,38 @@ const PurchaseReturnContent = () => {
       ),
     [suppliers]
   );
+
+  // The endpoint takes no query parameters, so every filter in the row above
+  // is applied here over the full list it returns.
+  const filteredReturns = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    // A return carries a supplierId but no address, so the state filter has to
+    // go through the supplier list to find out where each one sits.
+    const stateBySupplierId = new Map(
+      suppliers.map((supplier) => [supplier.supplierId, supplier.state])
+    );
+
+    return returns.filter((row) => {
+      if (
+        query &&
+        ![row.supplier, row.returnNo, row.invoiceNo].some((field) =>
+          field.toLowerCase().includes(query)
+        )
+      ) {
+        return false;
+      }
+      if (supplierId !== "" && row.supplierId !== Number(supplierId)) return false;
+      if (state !== "" && stateBySupplierId.get(row.supplierId) !== state) return false;
+      if (dateFrom && row.returnDateIso && row.returnDateIso < dateFrom) return false;
+      if (dateTo && row.returnDateIso && row.returnDateIso > dateTo) return false;
+      return true;
+    });
+  }, [returns, suppliers, search, supplierId, state, dateFrom, dateTo]);
+
+  // Narrowing the list can leave the viewer on a page that no longer exists.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, supplierId, state, dateFrom, dateTo]);
 
   if (showAdd) {
     return (
@@ -278,19 +314,21 @@ const PurchaseReturnContent = () => {
       <div className="flex w-full flex-col gap-md rounded-lg border border-pneutral-200 bg-white p-md shadow-[0px_0px_12px_4px_#c0c1be33,-4px_-4px_12px_0px_#d5d5d433,4px_4px_12px_-2px_#d5d5d433]">
         <DataTable
           columns={returnColumns}
-          data={SAMPLE_RETURNS.slice(
+          data={filteredReturns.slice(
             (currentPage - 1) * PAGE_SIZE,
             currentPage * PAGE_SIZE
           )}
           emptyState={
             <div className="flex h-40 items-center justify-center text-label-l4 text-pneutral-500">
-              No purchase returns found.
+              {isLoading
+                ? "Loading purchase returns..."
+                : loadError || "No purchase returns found."}
             </div>
           }
           pagination={{
             page: currentPage,
             pageSize: PAGE_SIZE,
-            totalItems: SAMPLE_RETURNS.length,
+            totalItems: filteredReturns.length,
             onPageChange: setCurrentPage,
           }}
         />

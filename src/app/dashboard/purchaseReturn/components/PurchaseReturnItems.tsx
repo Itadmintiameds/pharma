@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Info, Search } from 'lucide-react'
 import Button from '@/app/components/common/Button'
 import Input from '@/app/components/common/Input'
+import { getPurchaseById } from '@/services/PurchaseServiceNew'
+import type { PurchaseData, PurchaseDetailsData } from '@/types/PurchaseData'
+import { formatMonthYear } from '@/utils/formatDate'
+import { eligibleForLine, returnedForLine, returnLineKey } from '@/utils/purchaseReturnTotals'
+import { lineAmounts } from '@/utils/purchaseReturnAmounts'
 import WizardHeader from './WizardHeader'
 import PurchaseReturnView from './PurchaseReturnView'
 import type { InvoiceRow } from './AddPurchaseReturn'
+import type { ReturnDraftLine } from './returnDraft'
 
 interface PurchaseReturnItemsProps {
   /** The invoice picked in step 1 — Figma node 3543:32805 ("Selected Invoice Card"). */
@@ -31,9 +37,9 @@ const InvoiceField = ({
 )
 
 interface ProductReturnItem {
+  /** product + batch, matching how a return line is keyed. */
   id: string
   name: string
-  composition: string
   batch: string
   exp: string
   unit: string
@@ -41,11 +47,91 @@ interface ProductReturnItem {
   freeQty: number
   prevReturnedPurch: number
   prevReturnedFree: number
-  availStockPurch: number
-  availStockFree: number
-  eligibleReturnPurch: number
-  eligibleReturnFree: number
+  /** Stock on hand, converted from smallest units to the purchase unit the
+   *  quantities on this card are counted in. */
+  availStock: number
+  /** One figure covering paid and free together: what is left unreturned of
+   *  both, capped by stock. The two quantity fields share it — their sum is
+   *  what gets validated, not each on its own. */
+  eligibleReturn: number
+  /** The paid/free split behind `eligibleReturn`. Not shown; used to fill the
+   *  two fields sensibly when "Return All Eligible Items" is clicked. */
+  unreturnedPurch: number
+  unreturnedFree: number
+  /** The purchase line this card was built from, for pricing the return. */
+  detail: PurchaseDetailsData
 }
+
+/**
+ * Stock is held in smallest units (tablets) while everything on this card is
+ * counted in purchase units (blisters), so it is divided by the pack size.
+ * Rounded down: half a pack cannot go back to the supplier.
+ */
+const availableInPurchaseUnits = (detail: PurchaseDetailsData): number => {
+  const stock = Number(detail.availableStock) || 0
+  const perPack = Number(detail.unitContains) || 0
+  return perPack > 0 ? Math.floor(stock / perPack) : stock
+}
+
+/** "Blister (12 Tablet)" — the pack as purchased, and what it breaks into. */
+const describeUnit = (
+  purchaseUnit?: string,
+  unitContains?: number,
+  smallestUnit?: string
+): string => {
+  if (!purchaseUnit) return smallestUnit ?? '—'
+  if (!unitContains || !smallestUnit) return purchaseUnit
+  return `${purchaseUnit} (${unitContains} ${smallestUnit})`
+}
+
+/**
+ * The products shown on this step are the lines of the purchase picked on step
+ * 1, netted off against everything already returned on that purchase and
+ * capped by what is still in stock — you cannot send back goods you have
+ * already sold.
+ */
+const buildProductItems = (
+  invoice: InvoiceRow | undefined,
+  purchase: PurchaseData | undefined
+): ProductReturnItem[] => {
+  if (!invoice || !purchase) return []
+
+  return (purchase.purchaseDetails ?? []).map((detail) => {
+    const returned = returnedForLine(invoice.returnedLines, detail)
+    const unreturned = eligibleForLine(detail, returned)
+    const availStock = availableInPurchaseUnits(detail)
+
+    return {
+      id: returnLineKey(detail.productId, detail.batchId),
+      name: detail.productName ?? detail.productId,
+      batch: detail.batchNumber ?? detail.batchId,
+      exp: formatMonthYear(detail.expiryDate),
+      unit: describeUnit(detail.purchaseUnit, detail.unitContains, detail.smallestUnit),
+      purchasedQty: Number(detail.purchaseQuantity) || 0,
+      freeQty: Number(detail.freeQuantity) || 0,
+      prevReturnedPurch: returned.paid,
+      prevReturnedFree: returned.free,
+      availStock,
+      // Stock is held per batch, not split into paid and free, so one pool
+      // caps the two together. With nothing returned yet this is simply
+      // everything received — purchased plus free.
+      eligibleReturn: Math.min(unreturned.paid + unreturned.free, availStock),
+      unreturnedPurch: Math.min(unreturned.paid, availStock),
+      unreturnedFree: Math.min(
+        unreturned.free,
+        Math.max(availStock - Math.min(unreturned.paid, availStock), 0)
+      ),
+      detail,
+    }
+  })
+}
+
+const emptyEntry = (): ReturnEntry => ({
+  selected: false,
+  returnPurchaseQty: 0,
+  returnFreeQty: 0,
+  returnReason: '',
+})
 
 interface ReturnEntry {
   selected: boolean
@@ -54,107 +140,14 @@ interface ReturnEntry {
   returnReason: string
 }
 
-// No products-received API exists yet, so this is seeded with the same
-// sample items shown in the Figma mock — node 3543:32829 ("Products
-// Received Card").
-const PRODUCT_ITEMS: ProductReturnItem[] = [
-  {
-    id: 'crocin',
-    name: 'Crocin 500 mg Tablet',
-    composition: 'Paracetamol 500 mg',
-    batch: 'BCH001',
-    exp: 'Dec 2027',
-    unit: 'Strip (10)',
-    purchasedQty: 100,
-    freeQty: 10,
-    prevReturnedPurch: 20,
-    prevReturnedFree: 0,
-    availStockPurch: 80,
-    availStockFree: 10,
-    eligibleReturnPurch: 80,
-    eligibleReturnFree: 10,
-  },
-  {
-    id: 'augmentin',
-    name: 'Augmentin 625 mg Tablet',
-    composition: 'Amoxicillin 500 mg + Clavulanic Acid 125 mg',
-    batch: 'BCH002',
-    exp: 'Mar 2028',
-    unit: 'Strip (10)',
-    purchasedQty: 50,
-    freeQty: 5,
-    prevReturnedPurch: 0,
-    prevReturnedFree: 0,
-    availStockPurch: 50,
-    availStockFree: 5,
-    eligibleReturnPurch: 50,
-    eligibleReturnFree: 5,
-  },
-  {
-    id: 'pantop',
-    name: 'Pantop 40 mg Tablet',
-    composition: 'Pantoprazole 40 mg',
-    batch: 'BCH003',
-    exp: 'Jan 2028',
-    unit: 'Strip (10)',
-    purchasedQty: 200,
-    freeQty: 20,
-    prevReturnedPurch: 50,
-    prevReturnedFree: 0,
-    availStockPurch: 0,
-    availStockFree: 0,
-    eligibleReturnPurch: 0,
-    eligibleReturnFree: 0,
-  },
-  {
-    id: 'azithral',
-    name: 'Azithral 500 mg Tablet',
-    composition: 'Azithromycin 500 mg',
-    batch: 'BCH004',
-    exp: 'Feb 2028',
-    unit: 'Strip (3)',
-    purchasedQty: 30,
-    freeQty: 3,
-    prevReturnedPurch: 30,
-    prevReturnedFree: 3,
-    availStockPurch: 15,
-    availStockFree: 0,
-    eligibleReturnPurch: 0,
-    eligibleReturnFree: 0,
-  },
-  {
-    id: 'ors',
-    name: 'ORS Powder',
-    composition: 'Oral Rehydration Salts',
-    batch: 'BCH005',
-    exp: 'Jun 2028',
-    unit: 'Sachet',
-    purchasedQty: 100,
-    freeQty: 10,
-    prevReturnedPurch: 0,
-    prevReturnedFree: 0,
-    availStockPurch: 100,
-    availStockFree: 10,
-    eligibleReturnPurch: 100,
-    eligibleReturnFree: 10,
-  },
-]
-
-const INITIAL_ENTRIES: Record<string, ReturnEntry> = {
-  crocin: { selected: true, returnPurchaseQty: 10, returnFreeQty: 0, returnReason: 'Near Expiry' },
-  augmentin: { selected: true, returnPurchaseQty: 5, returnFreeQty: 0, returnReason: 'Damaged' },
-  pantop: { selected: false, returnPurchaseQty: 0, returnFreeQty: 0, returnReason: '' },
-  azithral: { selected: false, returnPurchaseQty: 0, returnFreeQty: 0, returnReason: '' },
-  ors: { selected: false, returnPurchaseQty: 0, returnFreeQty: 0, returnReason: '' },
-}
-
 type ProductStatus = 'Eligible' | 'Not Selected' | 'No Stock' | 'Fully Returned'
 
-/** No API-driven status field exists, so it's derived from the same stock
- * numbers the card itself displays. */
+/** No API-driven status field exists, so it's derived from the same numbers
+ * the card itself displays. */
 const statusOf = (item: ProductReturnItem, selected: boolean): ProductStatus => {
-  const hasEligibleStock = item.eligibleReturnPurch > 0 || item.eligibleReturnFree > 0
-  if (!hasEligibleStock) {
+  if (item.eligibleReturn <= 0) {
+    // Nothing can go back either because it already has, or because the stock
+    // is gone — two different things to tell the viewer.
     const fullyReturned =
       item.prevReturnedPurch >= item.purchasedQty && item.prevReturnedFree >= item.freeQty
     return fullyReturned ? 'Fully Returned' : 'No Stock'
@@ -218,6 +211,9 @@ const EditField = ({
   </div>
 )
 
+const clamp = (value: string, max: number): number =>
+  Math.max(Math.min(Number(value) || 0, max), 0)
+
 const ProductCard = ({
   item,
   entry,
@@ -263,7 +259,7 @@ const ProductCard = ({
         <div className="flex flex-1 flex-col gap-1">
           <p className="text-label-l4 font-semibold text-pneutral-900">{item.name}</p>
           <p className="text-p2 font-regular text-pneutral-500">
-            {item.composition} · Batch {item.batch} · Exp {item.exp} · Unit: {item.unit}
+            Batch {item.batch} · Exp {item.exp} · Unit: {item.unit}
           </p>
         </div>
 
@@ -274,22 +270,19 @@ const ProductCard = ({
         </span>
       </div>
 
-      <div className="grid w-full grid-cols-2 gap-md sm:grid-cols-4">
+      {/* Stock is one pool per batch, so the design's separate AVAIL. STOCK
+          (PURCH.) / (FREE) tiles collapse into the single figure the API
+          reports. */}
+      <div className="grid w-full grid-cols-2 gap-md sm:grid-cols-3">
         <StatBlock label="PURCHASED QTY" value={item.purchasedQty} />
         <StatBlock label="FREE QTY" value={item.freeQty} />
         <StatBlock label="PREV. RETURNED (PURCH.)" value={item.prevReturnedPurch} />
         <StatBlock label="PREV. RETURNED (FREE)" value={item.prevReturnedFree} />
-        <StatBlock label="AVAIL. STOCK (PURCH.)" value={item.availStockPurch} />
-        <StatBlock label="AVAIL. STOCK (FREE)" value={item.availStockFree} />
+        <StatBlock label="AVAIL. STOCK" value={item.availStock} />
         <StatBlock
-          label="ELIGIBLE RETURN (PURCH.)"
-          value={item.eligibleReturnPurch}
-          highlight={item.eligibleReturnPurch > 0}
-        />
-        <StatBlock
-          label="ELIGIBLE RETURN (FREE)"
-          value={item.eligibleReturnFree}
-          highlight={item.eligibleReturnFree > 0}
+          label="ELIGIBLE RETURN"
+          value={item.eligibleReturn}
+          highlight={item.eligibleReturn > 0}
         />
       </div>
 
@@ -300,14 +293,25 @@ const ProductCard = ({
           label="Return Purchase Qty"
           type="number"
           value={entry.returnPurchaseQty}
-          onChange={(value) => onChange({ returnPurchaseQty: Number(value) || 0 })}
+          // The two fields share one allowance, so each clamps to what the
+          // other has not already taken rather than letting an over-return be
+          // typed in.
+          onChange={(value) =>
+            onChange({
+              returnPurchaseQty: clamp(value, item.eligibleReturn - entry.returnFreeQty),
+            })
+          }
           disabled={disabled}
         />
         <EditField
           label="Return Free Qty"
           type="number"
           value={entry.returnFreeQty}
-          onChange={(value) => onChange({ returnFreeQty: Number(value) || 0 })}
+          onChange={(value) =>
+            onChange({
+              returnFreeQty: clamp(value, item.eligibleReturn - entry.returnPurchaseQty),
+            })
+          }
           disabled={disabled}
         />
         <EditField
@@ -324,36 +328,117 @@ const ProductCard = ({
 
 const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsProps) => {
   const [search, setSearch] = useState('')
-  const [entries, setEntries] = useState<Record<string, ReturnEntry>>(INITIAL_ENTRIES)
+  const [entries, setEntries] = useState<Record<string, ReturnEntry>>({})
   const [step, setStep] = useState<1 | 2>(1)
+  // /purchase/allPurchase carries no stock, so the picked purchase is re-read
+  // on its own to find out what is still on hand per batch.
+  // Left undefined until it arrives: the step-1 copy has no stock on it, and
+  // showing cards from it would flash every line as "No Stock".
+  const [purchase, setPurchase] = useState<PurchaseData>()
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
+  const purchaseId = invoice?.purchase.purchaseId
+
+  useEffect(() => {
+    if (purchaseId === undefined) {
+      setIsLoading(false)
+      return
+    }
+
+    let active = true
+    setIsLoading(true)
+
+    getPurchaseById(purchaseId)
+      .then((data) => {
+        if (!active) return
+        setPurchase(data)
+        setLoadError('')
+      })
+      .catch((err) => {
+        if (!active) return
+        console.error('Failed to fetch the purchase for its stock:', err)
+        setLoadError(err?.message || 'Failed to fetch stock for this invoice.')
+      })
+      .finally(() => {
+        if (active) setIsLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [purchaseId])
+
+  const productItems = useMemo(
+    () => buildProductItems(invoice, purchase),
+    [invoice, purchase]
+  )
+
+  // One blank entry per line of the selected invoice, rebuilt if the viewer
+  // goes back to step 1 and picks a different one.
+  useEffect(() => {
+    setEntries(Object.fromEntries(productItems.map((item) => [item.id, emptyEntry()])))
+  }, [productItems])
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return PRODUCT_ITEMS
-    return PRODUCT_ITEMS.filter((item) =>
-      [item.name, item.composition, item.batch].some((field) => field.toLowerCase().includes(query))
+    if (!query) return productItems
+    return productItems.filter((item) =>
+      [item.name, item.batch].some((field) => field.toLowerCase().includes(query))
     )
-  }, [search])
+  }, [productItems, search])
 
   const handleReturnAllEligible = () => {
     setEntries((prev) => {
       const next = { ...prev }
-      PRODUCT_ITEMS.forEach((item) => {
-        const hasEligibleStock = item.eligibleReturnPurch > 0 || item.eligibleReturnFree > 0
-        if (!hasEligibleStock) return
+      productItems.forEach((item) => {
+        if (item.eligibleReturn <= 0) return
         next[item.id] = {
-          ...next[item.id],
+          ...(next[item.id] ?? emptyEntry()),
           selected: true,
-          returnPurchaseQty: item.eligibleReturnPurch,
-          returnFreeQty: item.eligibleReturnFree,
+          // Split the one allowance back out along the paid/free line it came
+          // from, so the amounts priced off the paid quantity stay right.
+          returnPurchaseQty: item.unreturnedPurch,
+          returnFreeQty: item.unreturnedFree,
         }
       })
       return next
     })
   }
 
+  // Only the lines with something actually being returned reach step 3, priced
+  // once here so the review screen and the POST body cannot disagree.
+  const draftLines: ReturnDraftLine[] = productItems.flatMap((item) => {
+    const entry = entries[item.id]
+    if (!entry?.selected) return []
+    if (entry.returnPurchaseQty <= 0 && entry.returnFreeQty <= 0) return []
+
+    return [
+      {
+        id: item.id,
+        productId: item.detail.productId,
+        batchId: item.detail.batchId,
+        productName: item.name,
+        batchNumber: item.batch,
+        expiry: item.exp,
+        unit: item.unit,
+        returnPurchaseQty: entry.returnPurchaseQty,
+        returnFreeQty: entry.returnFreeQty,
+        returnReason: entry.returnReason,
+        amounts: lineAmounts(item.detail, entry.returnPurchaseQty),
+      },
+    ]
+  })
+
   if (step === 2) {
-    return <PurchaseReturnView invoice={invoice} onBack={() => setStep(1)} onClose={onClose} />
+    return (
+      <PurchaseReturnView
+        invoice={invoice}
+        lines={draftLines}
+        onBack={() => setStep(1)}
+        onClose={onClose}
+      />
+    )
   }
 
   return (
@@ -428,22 +513,30 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
         <div className="flex w-full flex-col gap-md">
           {filteredItems.length === 0 ? (
             <p className="py-8 text-center text-label-l4 text-pneutral-500">
-              No products match your search.
+              {isLoading
+                ? 'Loading products...'
+                : loadError ||
+                  (productItems.length === 0
+                    ? 'This invoice has no products recorded against it.'
+                    : 'No products match your search.')}
             </p>
           ) : (
             filteredItems.map((item) => (
               <ProductCard
                 key={item.id}
                 item={item}
-                entry={entries[item.id]}
+                entry={entries[item.id] ?? emptyEntry()}
                 onToggle={() =>
-                  setEntries((prev) => ({
-                    ...prev,
-                    [item.id]: { ...prev[item.id], selected: !prev[item.id].selected },
-                  }))
+                  setEntries((prev) => {
+                    const current = prev[item.id] ?? emptyEntry()
+                    return { ...prev, [item.id]: { ...current, selected: !current.selected } }
+                  })
                 }
                 onChange={(patch) =>
-                  setEntries((prev) => ({ ...prev, [item.id]: { ...prev[item.id], ...patch } }))
+                  setEntries((prev) => ({
+                    ...prev,
+                    [item.id]: { ...(prev[item.id] ?? emptyEntry()), ...patch },
+                  }))
                 }
               />
             ))
@@ -477,6 +570,7 @@ const PurchaseReturnItems = ({ invoice, onBack, onClose }: PurchaseReturnItemsPr
         <Button
           type="button"
           variant="primary"
+          disabled={draftLines.length === 0}
           onClick={() => setStep(2)}
           className="h-12! w-auto! min-w-27 gap-2 rounded-lg! bg-primary-800! px-4 text-label-l4! font-medium! text-pneutral-50!"
         >

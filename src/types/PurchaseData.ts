@@ -28,6 +28,16 @@ export interface PurchaseDetailsData {
   packagingId?: number;
   packagingName?: string;
   purchaseQuantity: number;
+  /** The pack the quantity was bought in ("Blister"), what it breaks down into
+   *  ("Tablet") and how many of the latter are in one of the former. */
+  purchaseUnit?: string;
+  smallestUnit?: string;
+  unitContains?: number;
+  expiryDate?: string;
+  /** Stock still on hand for this batch, in smallest units — returned by
+   *  GET /purchase/{id} only, not by /purchase/allPurchase. Divide by
+   *  unitContains to get it in purchase units. */
+  availableStock?: number;
   freeUnit?: string;
   freeQuantity?: number;
   grossAmount: number;
