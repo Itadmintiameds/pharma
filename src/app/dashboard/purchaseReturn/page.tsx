@@ -18,6 +18,7 @@ import { formatDate } from "@/utils/formatDate";
 import AddPurchaseReturn from "./components/AddPurchaseReturn";
 import PurchaseReturnEdit from "./components/PurchaseReturnEdit";
 import EditDraftPurchaseReturn from "./components/EditDraftPurchaseReturn";
+import ViewPurchaseReturn from "./components/ViewPurchaseReturn";
 
 /** One row of the purchase-return list — Figma node 3543:32380 ("PR Table Card"). */
 interface PurchaseReturnRow {
@@ -150,10 +151,15 @@ const buildReturnColumns = (
         >
           <Image src="/Supplier/EyeIcon.svg" alt="" width={24} height={24} />
         </button>
+        {/* Editing is turned off for now — a confirmed return has no
+            revision flow yet, and a draft's is still being settled. */}
         <button
           type="button"
           aria-label={`Edit ${row.original.returnNo}`}
+          disabled
+          title="Editing is not available yet"
           onClick={() => onEdit(row.original.id)}
+          className="cursor-not-allowed opacity-40"
         >
           <Image src="/Supplier/EditIcon.svg" alt="" width={20} height={20} />
         </button>
@@ -278,6 +284,15 @@ const PurchaseReturnContent = () => {
   // A DRAFT has not been posted yet, so editing it is just the wizard's review
   // step again. A CONFIRMED return has moved stock and money, so it goes
   // through the revision screen instead.
+  if (editView === "view" && editId) {
+    return (
+      <ViewPurchaseReturn
+        purchaseReturnId={Number(editId)}
+        onClose={() => router.push("/dashboard/purchaseReturn")}
+      />
+    );
+  }
+
   if (editView === "editDraft" && editId) {
     return (
       <EditDraftPurchaseReturn

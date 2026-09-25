@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Info } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { ArrowLeft, CheckCircle2, Download, Info, Printer } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import Button from '@/app/components/common/Button'
 import DataTable from '@/app/components/common/table/DataTable'
@@ -9,6 +9,7 @@ import {
 } from '@/services/PurchaseReturnService'
 import type { PurchaseReturnStatus } from '@/types/PurchaseReturnData'
 import { sumLineAmounts, toMoney } from '@/utils/purchaseReturnAmounts'
+import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
 import WizardHeader from './WizardHeader'
 import ConfirmPurchaseReturn from './ConfirmPurchaseReturn'
 import SuccessPurchaseReturnPopUp from './SuccessPurchaseReturnPopUp'
@@ -23,6 +24,13 @@ interface PurchaseReturnViewProps {
   /** Set when reopening a saved DRAFT: the return is updated in place instead
    *  of a second one being created. */
   editingReturnId?: number
+  /**
+   * Renders the same figures as a record of a return already raised: nothing
+   * is submitted, and the footer offers print and PDF instead of save/confirm.
+   */
+  readOnly?: boolean
+  /** Shown in place of the wizard header when `readOnly`. */
+  returnNo?: string
   /** Back to step 2 (Select Return Items) of the wizard. */
   onBack?: () => void
   /** Out of the wizard entirely, back to the Purchase Return list. */
@@ -197,9 +205,15 @@ const PurchaseReturnView = ({
   invoice,
   lines,
   editingReturnId,
+  readOnly = false,
+  returnNo,
   onBack,
   onClose,
 }: PurchaseReturnViewProps) => {
+  // Wraps everything above the footer, so the buttons stay out of the print
+  // and the PDF.
+  const documentRef = useRef<HTMLDivElement>(null)
+  const [exporting, setExporting] = useState(false)
   const [submitting, setSubmitting] = useState<PurchaseReturnStatus>()
   const [submitError, setSubmitError] = useState('')
   // Confirming posts the return for real, so it goes through the dialog first;
@@ -251,6 +265,42 @@ const PurchaseReturnView = ({
       amountDueFromSupplier,
     }
   }, [invoice, lines, lineItems])
+
+  const documentTitle = returnNo ? `Purchase Return ${returnNo}` : 'Purchase Return'
+
+  // Printing goes through the same page-planning pass as the download rather
+  // than re-flowing the markup at paper width, so the printout matches the PDF
+  // sheet for sheet instead of coming out as a differently laid-out page.
+  const handlePrint = async () => {
+    if (!documentRef.current || exporting) return
+
+    setExporting(true)
+    setSubmitError('')
+    try {
+      await printElementAsPdf(documentRef.current)
+    } catch (err: any) {
+      console.error('Failed to print the purchase return:', err)
+      setSubmitError(err?.message || 'Could not prepare the printout.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleDownloadPdf = async () => {
+    if (!documentRef.current || exporting) return
+
+    setExporting(true)
+    setSubmitError('')
+    try {
+      const safeName = documentTitle.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
+      await downloadElementAsPdf(documentRef.current, `${safeName}.pdf`)
+    } catch (err: any) {
+      console.error('Failed to export the purchase return:', err)
+      setSubmitError(err?.message || 'Could not prepare the PDF.')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const handleSubmit = async (status: PurchaseReturnStatus) => {
     if (!invoice || lines.length === 0) return
@@ -310,13 +360,26 @@ const PurchaseReturnView = ({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Step 3 of the wizard — Select Invoice and Return Items are now
-          complete, Review & Confirm is active. */}
-      <WizardHeader
-        title="Review & Financial Impact"
-        subtitle="Verify the return details, tax calculations and supplier account impact before confirming."
-        currentStep={3}
-      />
+      <div ref={documentRef} className="flex flex-col gap-4">
+      {/* A saved return is a record, not a step, so the wizard indicator is
+          replaced by a plain heading. */}
+      {readOnly ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-h5 font-semibold text-pneutral-900">
+            {returnNo ? `Purchase Return ${returnNo}` : 'Purchase Return'}
+          </p>
+          <p className="text-label-l4 font-regular text-pneutral-500">
+            The return details, tax calculations and supplier account impact as
+            recorded.
+          </p>
+        </div>
+      ) : (
+        <WizardHeader
+          title="Review & Financial Impact"
+          subtitle="Verify the return details, tax calculations and supplier account impact before confirming."
+          currentStep={3}
+        />
+      )}
 
       {invoice && (
         <div className="flex w-full flex-col gap-sm rounded-lg bg-white p-md shadow-[4px_4px_12px_-2px_#d5d5d433,-4px_-4px_12px_0px_#d5d5d433,0px_0px_12px_4px_#c0c1be33]">
@@ -464,6 +527,8 @@ const PurchaseReturnView = ({
         </div>
       </div>
 
+      </div>
+
       {submitError && (
         <p
           role="alert"
@@ -474,7 +539,10 @@ const PurchaseReturnView = ({
       )}
 
       {/* Every figure here is the one already reviewed above — the dialog
-          recomputes nothing. */}
+          recomputes nothing. A saved return submits nothing, so neither
+          dialog belongs on it. */}
+      {!readOnly && (
+        <>
       <ConfirmPurchaseReturn
         isOpen={confirmOpen}
         supplier={invoice?.supplier ?? '—'}
@@ -507,6 +575,8 @@ const PurchaseReturnView = ({
         onViewPurchaseReturn={() => onClose?.()}
         onGoToPurchaseReturns={() => onClose?.()}
       />
+        </>
+      )}
 
       {/* Figma node 3543:33430 ("Review Footer Row"). */}
       <div className="flex w-full flex-col items-stretch gap-sm sm:flex-row sm:items-center sm:justify-between">
@@ -520,6 +590,31 @@ const PurchaseReturnView = ({
           Back
         </Button>
 
+        {readOnly ? (
+          <div className="flex w-full flex-col items-stretch gap-sm sm:w-auto sm:flex-row sm:items-center">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exporting}
+              onClick={handlePrint}
+              className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-secondary-700! bg-transparent! px-4 text-label-l4! font-medium! text-secondary-700! sm:w-37.5!"
+            >
+              <Printer size={20} className="shrink-0" />
+              Print
+            </Button>
+
+            <Button
+              type="button"
+              variant="primary"
+              disabled={exporting}
+              onClick={handleDownloadPdf}
+              className="h-12! w-full! min-w-27 gap-2 rounded-lg! bg-primary-800! px-4 text-label-l4! font-medium! text-pneutral-50! sm:w-auto!"
+            >
+              <Download size={20} className="shrink-0" />
+              {exporting ? 'Preparing...' : 'Download as PDF'}
+            </Button>
+          </div>
+        ) : (
         <div className="flex w-full flex-col items-stretch gap-sm sm:w-auto sm:flex-row sm:items-center">
           <Button
             type="button"
@@ -545,6 +640,7 @@ const PurchaseReturnView = ({
             <CheckCircle2 size={20} className="shrink-0" />
           </Button>
         </div>
+        )}
       </div>
     </div>
   )
