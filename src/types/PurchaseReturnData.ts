@@ -20,6 +20,9 @@ export interface PurchaseReturnData {
   returnRemarks?: string | null;
   isCancel?: boolean;
   cancelRemark?: string | null;
+  cancelReason?: string | null;
+  /** Why the latest revision was made — set by PUT /{id}/edit. */
+  editReason?: string | null;
   totalGrossAmount: number;
   totalGstAmount: number;
   totalNetAmount: number;
@@ -79,8 +82,25 @@ export interface PurchaseReturnDetailData {
   gstAmount: number;
   netAmount: number;
 
+  /** Read-only revision info. Only a line's latest revision is returned; a
+   *  row saved before revisioning reads as revision 1. */
+  revisionNo?: number;
+  isActive?: boolean;
+  previousDetailId?: number | null;
+
   createdBy?: string;
   createdAt?: string;
   modifiedBy?: string | null;
   modifiedAt?: string | null;
+}
+
+/** The body PUT to /purchase-return/{id}/edit. The server reads only these
+ *  fields; a line left out keeps its current quantities. */
+export interface PurchaseReturnEditPayload {
+  editReason: string;
+  purchaseReturnDetails: {
+    purchaseReturnDetailId: number;
+    purchaseReturnQuantity: number;
+    freeReturnQuantity: number;
+  }[];
 }
