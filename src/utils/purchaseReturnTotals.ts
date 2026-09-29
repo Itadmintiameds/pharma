@@ -54,6 +54,29 @@ export const buildReturnedByPurchase = (
     return byPurchase;
 };
 
+/**
+ * Net value already returned against each purchase, for netting off what is
+ * still payable to the supplier. Cancelled returns are skipped on the same
+ * grounds as above — the credit was reversed with them.
+ */
+export const buildReturnedAmountByPurchase = (
+    returns: PurchaseReturnData[]
+): Map<number, number> => {
+    const byPurchase = new Map<number, number>();
+
+    returns.forEach((purchaseReturn) => {
+        if (purchaseReturn.isCancel) return;
+
+        const running = byPurchase.get(purchaseReturn.purchaseId) ?? 0;
+        byPurchase.set(
+            purchaseReturn.purchaseId,
+            running + (Number(purchaseReturn.totalNetAmount) || 0)
+        );
+    });
+
+    return byPurchase;
+};
+
 export const returnedForLine = (
     lines: Map<string, ReturnedQuantities> | undefined,
     detail: PurchaseDetailsData

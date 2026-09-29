@@ -5,6 +5,7 @@ import { getPurchaseById } from '@/services/PurchaseServiceNew'
 import { getAllPurchaseReturn } from '@/services/PurchaseReturnService'
 import type { PurchaseDetailsData } from '@/types/PurchaseData'
 import {
+  buildReturnedAmountByPurchase,
   buildReturnedByPurchase,
   returnLineKey,
   type ReturnedQuantities,
@@ -48,10 +49,16 @@ const ViewPurchaseReturn = ({ purchaseReturnId, onClose }: ViewPurchaseReturnPro
 
       // The invoice card wants the supplier account as it stands apart from
       // this return, so this one is left out of the totals behind it.
+      const otherReturns = returns.filter(
+        (item) => item.purchaseReturnId !== purchaseReturnId
+      )
       const consumedByOthers =
-        buildReturnedByPurchase(
-          returns.filter((item) => item.purchaseReturnId !== purchaseReturnId)
-        ).get(saved.purchaseId) ?? new Map<string, ReturnedQuantities>()
+        buildReturnedByPurchase(otherReturns).get(saved.purchaseId) ??
+        new Map<string, ReturnedQuantities>()
+      // Likewise for the payable: the outstanding shown is the position
+      // before this return is applied, so its own value is left out.
+      const returnedAmountByOthers =
+        buildReturnedAmountByPurchase(otherReturns).get(saved.purchaseId) ?? 0
 
       const detailByKey = new Map<string, PurchaseDetailsData>(
         (purchase.purchaseDetails ?? []).map((detail) => [
@@ -75,7 +82,7 @@ const ViewPurchaseReturn = ({ purchaseReturnId, onClose }: ViewPurchaseReturnPro
       })
 
       if (!active) return
-      setInvoice(buildInvoiceRow(purchase, consumedByOthers))
+      setInvoice(buildInvoiceRow(purchase, consumedByOthers, returnedAmountByOthers))
       setLines(savedLines)
       setReturnNo(saved.returnNo)
       setLoadError('')

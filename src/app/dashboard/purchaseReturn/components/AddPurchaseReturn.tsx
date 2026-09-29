@@ -12,6 +12,7 @@ import type { SupplierData } from '@/types/SupplierData'
 import type { PurchaseData } from '@/types/PurchaseData'
 import { formatDate } from '@/utils/formatDate'
 import {
+  buildReturnedAmountByPurchase,
   buildReturnedByPurchase,
   deriveReturnStatus,
   type ReturnedQuantities,
@@ -55,14 +56,21 @@ const toPaymentType = (value?: string): PaymentType =>
 
 export const buildInvoiceRow = (
   purchase: PurchaseData,
-  returnedLines: Map<string, ReturnedQuantities> | undefined
+  returnedLines: Map<string, ReturnedQuantities> | undefined,
+  /** Net value of returns already raised against this purchase. */
+  returnedAmount = 0
 ): InvoiceRow => {
   // The net of the purchase lines, not the total printed on the supplier's own
   // invoice — a return is credited against what was actually received.
   const amount = Number(purchase.totalNetAmount) || 0
-  // There is no outstanding-amount field on a purchase — only a payment
-  // status — so an unpaid invoice is treated as outstanding in full.
-  const isPaid = (purchase.supplierPaymentStatus ?? '').toUpperCase() === 'PAID'
+  const paymentType = toPaymentType(purchase.paymentType)
+  // There is no outstanding-amount field on a purchase. A cash purchase was
+  // settled at the counter, so nothing is owed; a credit one is outstanding
+  // for its net value, less whatever has already been returned against it —
+  // those returns have reduced the payable. Floored at zero: a return worth
+  // more than the invoice leaves supplier credit, not a negative payable.
+  const outstanding =
+    paymentType === 'Cash' ? 0 : Math.max(amount - returnedAmount, 0)
   const returnStatus = deriveReturnStatus(purchase, returnedLines)
 
   return {
@@ -73,9 +81,9 @@ export const buildInvoiceRow = (
     supplierId: purchase.supplierId,
     invoiceNo: purchase.invoiceNo,
     grnNo: purchase.grnNo,
-    paymentType: toPaymentType(purchase.paymentType),
+    paymentType,
     amount,
-    outstanding: isPaid ? 0 : amount,
+    outstanding,
     returnStatus,
     selectable: returnStatus !== 'Fully Returned',
     purchase,
@@ -234,9 +242,14 @@ const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
       .then(([purchases, returns]) => {
         if (!active) return
         const returnedByPurchase = buildReturnedByPurchase(returns)
+        const returnedAmountByPurchase = buildReturnedAmountByPurchase(returns)
         setInvoices(
           purchases.map((purchase) =>
-            buildInvoiceRow(purchase, returnedByPurchase.get(purchase.purchaseId ?? -1))
+            buildInvoiceRow(
+              purchase,
+              returnedByPurchase.get(purchase.purchaseId ?? -1),
+              returnedAmountByPurchase.get(purchase.purchaseId ?? -1)
+            )
           )
         )
         setLoadError('')

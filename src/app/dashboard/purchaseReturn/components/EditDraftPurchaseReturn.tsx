@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { getPurchaseById } from '@/services/PurchaseServiceNew'
 import { getAllPurchaseReturn } from '@/services/PurchaseReturnService'
 import {
+  buildReturnedAmountByPurchase,
   buildReturnedByPurchase,
   returnLineKey,
   type ReturnedQuantities,
@@ -52,10 +53,16 @@ const EditDraftPurchaseReturn = ({
       // Everything returned on this purchase *except* this draft — its own
       // quantities are what is being edited, so they must not count against
       // themselves.
+      const otherReturns = returns.filter(
+        (item) => item.purchaseReturnId !== purchaseReturnId
+      )
       const consumedByOthers =
-        buildReturnedByPurchase(
-          returns.filter((item) => item.purchaseReturnId !== purchaseReturnId)
-        ).get(draft.purchaseId) ?? new Map<string, ReturnedQuantities>()
+        buildReturnedByPurchase(otherReturns).get(draft.purchaseId) ??
+        new Map<string, ReturnedQuantities>()
+      // Likewise for the payable: the outstanding shown is the position
+      // before this return is applied, so its own value is left out.
+      const returnedAmountByOthers =
+        buildReturnedAmountByPurchase(otherReturns).get(draft.purchaseId) ?? 0
 
       const seeded: Record<string, ReturnEntry> = {}
       ;(draft.purchaseReturnDetails ?? []).forEach((line) => {
@@ -68,7 +75,7 @@ const EditDraftPurchaseReturn = ({
       })
 
       if (!active) return
-      setInvoice(buildInvoiceRow(purchase, consumedByOthers))
+      setInvoice(buildInvoiceRow(purchase, consumedByOthers, returnedAmountByOthers))
       setEntries(seeded)
       setLoadError('')
     }

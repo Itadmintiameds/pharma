@@ -334,6 +334,12 @@ const PurchaseReturnView = ({
   }
 
   const isSubmitting = submitting !== undefined
+  // On a saved return the payable has already moved, so the reference card
+  // shows where the supplier account stands now. In the wizard the return has
+  // not been posted, so "now" is still the pre-return figure.
+  const outstandingNow = readOnly
+    ? totals.supplierPayableAfterReturn
+    : (invoice?.outstanding ?? 0)
   // Nothing is owed on a paid invoice, so the credit cannot be netted off — it
   // becomes recoverable from the supplier instead.
   const isAdjustedAgainstPayable = totals.amountAdjustedAgainstPayable > 0
@@ -399,8 +405,8 @@ const PurchaseReturnView = ({
             />
             <InvoiceField
               label="Outstanding (₹)"
-              value={invoice.outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              valueClassName={invoice.outstanding > 0 ? 'text-warning-600' : 'text-success-600'}
+              value={outstandingNow.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              valueClassName={outstandingNow > 0 ? 'text-warning-600' : 'text-success-600'}
             />
             <InvoiceField label="Return Date" value={formatReturnDate(new Date())} />
           </div>
@@ -443,7 +449,7 @@ const PurchaseReturnView = ({
             value={inr(totals.totalPurchaseReturnAmount)}
           />
           <SummaryLine
-            label="Current Supplier Payable (₹)"
+            label={readOnly ? 'Supplier Payable Before Return (₹)' : 'Current Supplier Payable (₹)'}
             value={inr(totals.currentSupplierPayable)}
           />
           <SummaryLine
