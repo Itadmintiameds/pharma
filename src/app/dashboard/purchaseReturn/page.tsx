@@ -151,15 +151,18 @@ const buildReturnColumns = (
         >
           <Image src="/Supplier/EyeIcon.svg" alt="" width={24} height={24} />
         </button>
-        {/* Editing is turned off for now — a confirmed return has no
-            revision flow yet, and a draft's is still being settled. */}
+        {/* A cancelled return is closed, so there is nothing left to revise. */}
         <button
           type="button"
           aria-label={`Edit ${row.original.returnNo}`}
-          disabled
-          title="Editing is not available yet"
+          disabled={row.original.status === "Cancelled"}
+          title={
+            row.original.status === "Cancelled"
+              ? "A cancelled return cannot be edited"
+              : undefined
+          }
           onClick={() => onEdit(row.original.id)}
-          className="cursor-not-allowed opacity-40"
+          className="disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Image src="/Supplier/EditIcon.svg" alt="" width={20} height={20} />
         </button>
@@ -303,7 +306,12 @@ const PurchaseReturnContent = () => {
   }
 
   if (editView === "edit" && editId) {
-    return <PurchaseReturnEdit onBack={() => router.push("/dashboard/purchaseReturn")} />;
+    return (
+      <PurchaseReturnEdit
+        purchaseReturnId={Number(editId)}
+        onBack={() => router.push("/dashboard/purchaseReturn")}
+      />
+    );
   }
 
   return (

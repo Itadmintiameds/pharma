@@ -3,6 +3,7 @@ import { handleApiError } from '@/utils/errorHandler';
 import {
   PurchaseReturnCreatePayload,
   PurchaseReturnData,
+  PurchaseReturnEditPayload,
 } from '@/types/PurchaseReturnData';
 
 // Fetch all purchase returns for the selected pharmacy
@@ -12,6 +13,32 @@ export const getAllPurchaseReturn = async (): Promise<PurchaseReturnData[]> => {
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch purchase returns.');
+  }
+};
+
+// Fetch one purchase return with its current (latest-revision) lines
+export const getPurchaseReturnById = async (
+  purchaseReturnId: number | string
+): Promise<PurchaseReturnData> => {
+  try {
+    const response = await api.get(`/purchase-return/${purchaseReturnId}`);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the purchase return.');
+  }
+};
+
+// Revise line quantities on a return. Each changed line is saved as a new
+// revision; a CONFIRMED return also has its stock squared up by the server.
+export const editPurchaseReturn = async (
+  purchaseReturnId: number | string,
+  payload: PurchaseReturnEditPayload
+): Promise<PurchaseReturnData> => {
+  try {
+    const response = await api.put(`/purchase-return/${purchaseReturnId}/edit`, payload);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to save the purchase return edit.');
   }
 };
 
