@@ -57,7 +57,9 @@ export const buildInvoiceRow = (
   purchase: PurchaseData,
   returnedLines: Map<string, ReturnedQuantities> | undefined
 ): InvoiceRow => {
-  const amount = Number(purchase.invoiceAmount ?? purchase.totalNetAmount) || 0
+  // The net of the purchase lines, not the total printed on the supplier's own
+  // invoice — a return is credited against what was actually received.
+  const amount = Number(purchase.totalNetAmount) || 0
   // There is no outstanding-amount field on a purchase — only a payment
   // status — so an unpaid invoice is treated as outstanding in full.
   const isPaid = (purchase.supplierPaymentStatus ?? '').toUpperCase() === 'PAID'

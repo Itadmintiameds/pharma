@@ -9,6 +9,7 @@ import { warehouseLabel } from "@/types/UserData";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 import ConfirmDialog from "../common/ConfirmDialog";
+import DevTestIds from "./DevTestIds";
 
 interface NavbarProps {
   userRole?: string;
@@ -260,15 +261,10 @@ const Navbar = ({ userRole }: NavbarProps) => {
           </div>
         </div>
 
-        <button className="relative w-7 h-7 flex items-center justify-center hover:opacity-80 transition-opacity">
-          <Image
-            src="/dashboard/icons/notification bell.svg"
-            alt="Notifications"
-            width={28}
-            height={28}
-            className="object-contain"
-          />
-        </button>
+        {/* DEVELOPMENT ONLY — the bell is standing in for a sample-identifier
+            list while forms are being built. Restore the plain button and
+            delete DevTestIds.tsx when notifications are implemented. */}
+        <DevTestIds />
 
         <div className="w-[40px] h-[40px] rounded-full overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-100 transition-all select-none shrink-0">
           <Image
