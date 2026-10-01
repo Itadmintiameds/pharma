@@ -25,6 +25,7 @@ export type ModuleKey =
   | "WAREHOUSE_DISTRIBUTION"
   | "WAREHOUSE_RECEIPT"
   | "INTER_STORE_TRANSFER"
+  | "WAREHOUSE_STOCK_RETURN"
   | "PRODUCTS"
   | "USER_MANAGEMENT"
   | "SET_UP_BUSINESS";
@@ -73,6 +74,12 @@ export const MODULE_ROUTES: ModuleRoute[] = [
     featureKey: "INTER_STORE_TRANSFER",
     path: "/dashboard/interStoreTransfer",
     label: "Inter Store Transfer",
+  },
+  {
+    moduleKey: "WAREHOUSE_STOCK_RETURN",
+    featureKey: "WAREHOUSE_STOCK_RETURN",
+    path: "/dashboard/wearhouseStockReturn",
+    label: "Stock Return",
   },
   {
     moduleKey: "PRODUCTS",
@@ -257,8 +264,14 @@ export const availableModuleKeys = (
     // Purchase only without it — each is withheld when its inventory shape does
     // not apply, that being the organization having no such flow rather than
     // the role lacking rights.
+    // Stock Return sends a pharmacy's stock back to its warehouse, so it joins
+    // the warehouse pair on the pharmacy side and is gone once acting as one.
     if (centralized === true) {
-      keys.push("WAREHOUSE_RECEIPT", "INTER_STORE_TRANSFER");
+      keys.push(
+        "WAREHOUSE_RECEIPT",
+        "INTER_STORE_TRANSFER",
+        "WAREHOUSE_STOCK_RETURN"
+      );
     } else if (centralized === false) {
       keys.push("PURCHASE", "PURCHASE_RETURN");
     }
@@ -281,7 +294,11 @@ export const availableModuleKeys = (
   ];
 
   if (centralized === true) {
-    keys.push("WAREHOUSE_RECEIPT", "INTER_STORE_TRANSFER");
+    keys.push(
+      "WAREHOUSE_RECEIPT",
+      "INTER_STORE_TRANSFER",
+      "WAREHOUSE_STOCK_RETURN"
+    );
   } else if (centralized === false) {
     keys.push("PURCHASE", "PURCHASE_RETURN");
   }
@@ -300,6 +317,7 @@ const ORGANIZATION_DEPENDENT_MODULES = new Set<ModuleKey>([
   "WAREHOUSE_DISTRIBUTION",
   "WAREHOUSE_RECEIPT",
   "INTER_STORE_TRANSFER",
+  "WAREHOUSE_STOCK_RETURN",
 ]);
 
 export const dependsOnOrganization = (moduleKey: ModuleKey): boolean =>

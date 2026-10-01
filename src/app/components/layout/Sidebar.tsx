@@ -18,6 +18,7 @@ import {
   ClipboardList,
   PackageCheck,
   ArrowLeftRight,
+  Undo2,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -161,6 +162,13 @@ const Sidebar = () => {
           moduleKey: "INTER_STORE_TRANSFER" as ModuleKey,
           icon: ArrowLeftRight,
           path: "/dashboard/interStoreTransfer",
+          isLocked: !hasApprovedPharmacy,
+        },
+        {
+          name: "Stock Return",
+          moduleKey: "WAREHOUSE_STOCK_RETURN" as ModuleKey,
+          icon: Undo2,
+          path: "/dashboard/wearhouseStockReturn",
           isLocked: !hasApprovedPharmacy,
         },
       ],
