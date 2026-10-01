@@ -26,6 +26,7 @@ export type ModuleKey =
   | "WAREHOUSE_RECEIPT"
   | "INTER_STORE_TRANSFER"
   | "WAREHOUSE_STOCK_RETURN"
+  | "STOCK_RETURN_RECEIPT"
   | "PRODUCTS"
   | "USER_MANAGEMENT"
   | "SET_UP_BUSINESS";
@@ -80,6 +81,12 @@ export const MODULE_ROUTES: ModuleRoute[] = [
     featureKey: "WAREHOUSE_STOCK_RETURN",
     path: "/dashboard/wearhouseStockReturn",
     label: "Stock Return",
+  },
+  {
+    moduleKey: "STOCK_RETURN_RECEIPT",
+    featureKey: "STOCK_RETURN_RECEIPT",
+    path: "/dashboard/StockReturnReciept",
+    label: "Stock Return Receipt",
   },
   {
     moduleKey: "PRODUCTS",
@@ -243,6 +250,7 @@ export const availableModuleKeys = (
         "WAREHOUSE_DISTRIBUTION",
         "PURCHASE",
         "PURCHASE_RETURN",
+        "STOCK_RETURN_RECEIPT",
         "USER_MANAGEMENT",
         "SET_UP_BUSINESS",
       ]);
@@ -281,8 +289,14 @@ export const availableModuleKeys = (
   if (isWarehouseManager) {
     const keys: ModuleKey[] = ["PRODUCTS"];
     // Purchase belongs to the warehouse only while inventory is centralized.
+    // Stock returns from the pharmacies are received here, at the warehouse.
     if (centralized === true)
-      keys.push("WAREHOUSE_DISTRIBUTION", "PURCHASE", "PURCHASE_RETURN");
+      keys.push(
+        "WAREHOUSE_DISTRIBUTION",
+        "PURCHASE",
+        "PURCHASE_RETURN",
+        "STOCK_RETURN_RECEIPT"
+      );
     return new Set(keys);
   }
 
@@ -318,6 +332,7 @@ const ORGANIZATION_DEPENDENT_MODULES = new Set<ModuleKey>([
   "WAREHOUSE_RECEIPT",
   "INTER_STORE_TRANSFER",
   "WAREHOUSE_STOCK_RETURN",
+  "STOCK_RETURN_RECEIPT",
 ]);
 
 export const dependsOnOrganization = (moduleKey: ModuleKey): boolean =>

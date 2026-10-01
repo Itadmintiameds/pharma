@@ -19,6 +19,7 @@ import {
   PackageCheck,
   ArrowLeftRight,
   Undo2,
+  PackageOpen,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -170,6 +171,15 @@ const Sidebar = () => {
           icon: Undo2,
           path: "/dashboard/wearhouseStockReturn",
           isLocked: !hasApprovedPharmacy,
+        },
+        {
+          name: "Stock Return Receipt",
+          moduleKey: "STOCK_RETURN_RECEIPT" as ModuleKey,
+          icon: PackageOpen,
+          path: "/dashboard/StockReturnReciept",
+          // The warehouse side reaches its other flows without an approved
+          // pharmacy, the same as Suppliers above.
+          isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
         },
       ],
     },
