@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { CalendarDays, Clipboard, Info, Search } from "lucide-react";
@@ -11,6 +11,9 @@ import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import StockReturnType, { type StockReturnSource } from "./components/StockReturnType";
+import CreateStockReturn from "./components/CreateStockReturn";
+import StockReturnReview from "./components/StockReturnReview";
+import type { StockReturnDraft } from "./stockReturnDraft";
 
 const LIST_PATH = "/dashboard/wearhouseStockReturn";
 
@@ -108,7 +111,7 @@ const StatusBadge = ({ status }: { status: StockReturnStatus }) => (
 const buildColumns = (
   rowOffset: number,
   onView: (id: string) => void
-): ColumnDef<StockReturnRow, any>[] => [
+): ColumnDef<StockReturnRow>[] => [
   {
     id: "slNo",
     header: "SL. NO.",
@@ -178,12 +181,26 @@ const WarehouseStockReturnContent = () => {
   const view = searchParams.get("view");
   const { canCreate } = useModulePermissions("WAREHOUSE_STOCK_RETURN");
 
-  const [search, setSearch] = useState("");
-  const [returnType, setReturnType] = useState<string | number>("");
-  const [status, setStatus] = useState<string | number>("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [search, setSearchValue] = useState("");
+  const [returnType, setReturnTypeValue] = useState<string | number>("");
+  const [status, setStatusValue] = useState<string | number>("");
+  const [dateFrom, setDateFromValue] = useState("");
+  const [dateTo, setDateToValue] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Narrowing the list can leave the viewer on a page that no longer exists,
+  // so every filter change goes back to the first one.
+  const resettingPage =
+    <T,>(set: (value: T) => void) =>
+    (value: T) => {
+      set(value);
+      setCurrentPage(1);
+    };
+  const setSearch = resettingPage(setSearchValue);
+  const setReturnType = resettingPage(setReturnTypeValue);
+  const setStatus = resettingPage(setStatusValue);
+  const setDateFrom = resettingPage(setDateFromValue);
+  const setDateTo = resettingPage(setDateToValue);
 
   const returns = SAMPLE_RETURNS;
 
@@ -210,24 +227,60 @@ const WarehouseStockReturnContent = () => {
     });
   }, [returns, search, returnType, status, dateFrom, dateTo]);
 
-  // Narrowing the list can leave the viewer on a page that no longer exists.
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, returnType, status, dateFrom, dateTo]);
-
   const rowOffset = (currentPage - 1) * PAGE_SIZE;
 
-  const handleCreate = () => router.push(`${LIST_PATH}?view=add`);
+  // The return being built. Null until a return type is picked; kept while
+  // moving between Create and Review so going back loses nothing.
+  const [draft, setDraft] = useState<StockReturnDraft | null>(null);
+  const [step, setStep] = useState<"items" | "review">("items");
+
+  // Every Create starts fresh, whatever a previous visit left behind.
+  const handleCreate = () => {
+    setDraft(null);
+    router.push(`${LIST_PATH}?view=add`);
+  };
   // TODO: wire to the view screen once it exists.
-  const handleView = (_id: string) => {};
-  // TODO: each source opens its own screen — to be built next.
-  const handleSelectSource = (_source: StockReturnSource) => {};
+  const handleView = (id: string) => console.info("View stock return", id);
+
+  const handleSelectSource = (source: StockReturnSource) => {
+    // TODO: the Inter-Store Transfer source gets its own screen — to be built next.
+    if (source !== "PHARMACY_INVENTORY") return;
+    setDraft({ source, lines: [] });
+    setStep("items");
+  };
+
+  // TODO: call the stock-return endpoints once the backend has them.
+  const handleSaveDraft = () => {};
+  const handleConfirm = () => {};
 
   if (view === "add") {
+    if (!draft) {
+      return (
+        <StockReturnType
+          onSelect={handleSelectSource}
+          onBack={() => router.push(LIST_PATH)}
+        />
+      );
+    }
+
+    if (step === "review") {
+      return (
+        <StockReturnReview
+          draft={draft}
+          onBack={() => setStep("items")}
+          onSaveDraft={handleSaveDraft}
+          onConfirm={handleConfirm}
+        />
+      );
+    }
+
     return (
-      <StockReturnType
-        onSelect={handleSelectSource}
-        onBack={() => router.push(LIST_PATH)}
+      <CreateStockReturn
+        draft={draft}
+        onChange={(lines) => setDraft({ ...draft, lines })}
+        onBack={() => setDraft(null)}
+        onSaveDraft={handleSaveDraft}
+        onReview={() => setStep("review")}
       />
     );
   }
