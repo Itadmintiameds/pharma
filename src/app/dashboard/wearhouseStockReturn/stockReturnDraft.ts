@@ -29,7 +29,39 @@ export interface StockReturnLine {
   /** As typed, in purchase units. Kept as a string so the box can be cleared. */
   returnQty: string;
   reason: string;
+  /** Set only for damaged stock returned from an Inter-Store Transfer receipt. */
+  transfer?: TransferOrigin;
 }
+
+/** The Inter-Store Transfer receipt a damaged line was recorded against. */
+export interface TransferOrigin {
+  distributionId: number;
+  distributionDetailsId?: number;
+  transferNo: string;
+  /** yyyy-mm-dd. */
+  transferDate: string;
+  fromStore: string;
+  /** Recorded as damaged at receipt, in smallest units. */
+  damagedBase: number;
+  /** Already sent back on earlier stock returns, in smallest units. */
+  alreadyReturnedBase: number;
+}
+
+/** Smallest units → purchase units, for a qty the screen shows. */
+export const toPurchaseQty = (line: StockReturnLine, baseQty: number): number =>
+  Number((baseQty / line.unitContains).toFixed(2));
+
+/** "Strip (10)" — the purchase unit with its pack size, as the design shows it. */
+export const purchaseUnitLabel = (line: StockReturnLine): string => {
+  const unit = line.purchaseUnit || line.smallestUnit || "—";
+  return line.unitContains > 1 ? `${unit} (${line.unitContains})` : unit;
+};
+
+/** dd-mm-yyyy, the date format the stock-return screens use. */
+export const formatDisplayDate = (isoDate: string): string => {
+  const match = (isoDate || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}-${match[2]}-${match[1]}` : isoDate || "—";
+};
 
 export const SOURCE_LABELS: Record<StockReturnSource, string> = {
   PHARMACY_INVENTORY: "Pharmacy Inventory",
@@ -46,7 +78,7 @@ export const RETURN_REASONS = [
 
 /** The screen works in purchase units; stock is stored in smallest units. */
 export const availablePurchaseQty = (line: StockReturnLine): number =>
-  Number((line.availableBase / line.unitContains).toFixed(2));
+  toPurchaseQty(line, line.availableBase);
 
 /** What the backend will need: the return qty converted to smallest units. */
 export const returnBaseQty = (line: StockReturnLine): number =>

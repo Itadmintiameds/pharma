@@ -13,6 +13,8 @@ import { useModulePermissions } from "@/hooks/useModulePermissions";
 import StockReturnType, { type StockReturnSource } from "./components/StockReturnType";
 import CreateStockReturn from "./components/CreateStockReturn";
 import StockReturnReview from "./components/StockReturnReview";
+import CreateDamagedStockReturn from "./components/CreateDamagedStockReturn";
+import DamagedStockReturnReview from "./components/DamagedStockReturnReview";
 import type { StockReturnDraft } from "./stockReturnDraft";
 
 const LIST_PATH = "/dashboard/wearhouseStockReturn";
@@ -243,8 +245,6 @@ const WarehouseStockReturnContent = () => {
   const handleView = (id: string) => console.info("View stock return", id);
 
   const handleSelectSource = (source: StockReturnSource) => {
-    // TODO: the Inter-Store Transfer source gets its own screen — to be built next.
-    if (source !== "PHARMACY_INVENTORY") return;
     setDraft({ source, lines: [] });
     setStep("items");
   };
@@ -263,9 +263,14 @@ const WarehouseStockReturnContent = () => {
       );
     }
 
+    // Each return type has its own pair of screens; they share the draft.
+    const isDamaged = draft.source === "DAMAGED_INTER_STORE";
+    const Review = isDamaged ? DamagedStockReturnReview : StockReturnReview;
+    const Create = isDamaged ? CreateDamagedStockReturn : CreateStockReturn;
+
     if (step === "review") {
       return (
-        <StockReturnReview
+        <Review
           draft={draft}
           onBack={() => setStep("items")}
           onSaveDraft={handleSaveDraft}
@@ -275,7 +280,7 @@ const WarehouseStockReturnContent = () => {
     }
 
     return (
-      <CreateStockReturn
+      <Create
         draft={draft}
         onChange={(lines) => setDraft({ ...draft, lines })}
         onBack={() => setDraft(null)}

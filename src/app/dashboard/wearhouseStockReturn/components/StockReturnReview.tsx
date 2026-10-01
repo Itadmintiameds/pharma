@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { ColumnDef } from "@tanstack/react-table";
 import Button from "@/app/components/common/Button";
 import DataTable from "@/app/components/common/table/DataTable";
 import { usePharmacyStore } from "@/store/pharmacyStore";
-import { getById } from "@/services/UserManagementService";
+import { useCurrentUserName } from "../useCurrentUserName";
 import {
   SOURCE_LABELS,
   StockReturnDraft,
@@ -50,25 +50,9 @@ const StockReturnReview = ({
   isSubmitting = false,
 }: StockReturnReviewProps) => {
   const selectedPharmacy = usePharmacyStore((state) => state.selectedPharmacy);
-  const [createdBy, setCreatedBy] = useState("—");
+  const createdBy = useCurrentUserName();
   const [currentPage, setCurrentPage] = useState(1);
   const [isDispatchOpen, setIsDispatchOpen] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-
-    fetch("/api/user-info")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((info) => (info?.userId ? getById(info.userId) : null))
-      .then((user) => {
-        if (active && user?.fullName) setCreatedBy(user.fullName);
-      })
-      .catch((err) => console.error("Failed to fetch the current user:", err));
-
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const rowOffset = (currentPage - 1) * PAGE_SIZE;
 
