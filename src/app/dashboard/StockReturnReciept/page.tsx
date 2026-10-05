@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { CalendarDays, Search } from "lucide-react";
@@ -16,7 +16,6 @@ import {
   IncomingStockReturn,
   RECEIPT_STATUSES,
   ReceiptLine,
-  SAMPLE_INCOMING_RETURNS,
   formatDateTime,
   receiptTotals,
 } from "./stockReturnReceipt";
@@ -36,12 +35,11 @@ interface Filters {
   dateTo: string;
 }
 
-// The list opens on what still needs the warehouse's attention.
 const DEFAULT_FILTERS: Filters = {
   search: "",
   pharmacy: "",
   type: "",
-  status: "Pending Receipt",
+  status: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -79,8 +77,45 @@ const StockReturnRecieptContent = () => {
   const selectedId = searchParams.get("id");
   const currentUserName = useCurrentUserName("Warehouse User");
 
-  // TODO: load from the incoming stock-return endpoint once the backend has one.
-  const [returns, setReturns] = useState<IncomingStockReturn[]>(SAMPLE_INCOMING_RETURNS);
+  const [returns, setReturns] = useState<IncomingStockReturn[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      import("@/services/WarehouseStockReturnService").then((m) => m.getAllWarehouseReturns()),
+      import("@/services/PharmacyService").then((m) => m.getUserPharmacies()),
+    ])
+      .then(([returnsData, pharmacies]) => {
+        const pharmacyMap = new Map(pharmacies.map((p) => [p.pharmacyId, p.pharmacyName]));
+
+        const mapped: IncomingStockReturn[] = returnsData.map((item) => ({
+          id: String(item.warehouseReturnId),
+          returnNo: item.stockReturnNo || "",
+          source: (item.stockReturnType as StockReturnSource) || "PHARMACY_INVENTORY",
+          fromPharmacy:
+            (item.fromPharmacyId && pharmacyMap.get(item.fromPharmacyId)) ||
+            item.fromPharmacyId ||
+            "Unknown Pharmacy",
+          createdAt: item.stockReturnDate || "",
+          dispatchedAt: item.stockReturnDate || "",
+          createdBy: "Admin User",
+          status: item.stockReturnStatus?.toLowerCase() === "complete" ? "Completed" : "Pending Receipt",
+          lines: (item.warehouseReturnDetails || []).map((detail, index) => ({
+            id: String(detail.warehouseReturnDetailId || index),
+            productName: (detail as any).productName || `Product ${detail.productId}`,
+            batchNo: (detail as any).batchNo || `Batch ${detail.batchId}`,
+            batchId: String(detail.batchId || ""),
+            expiryDate: (detail as any).expiryDate || "",
+            purchaseUnitLabel: (detail as any).purchaseUnitLabel || "Unit",
+            dispatchedQty: detail.dispatchQuantity ?? detail.returnQuantity ?? 0,
+            receivedQty: detail.receivedQuantity,
+          })),
+        }));
+        setReturns(mapped);
+      })
+      .catch(console.error)
+      .finally(() => setIsLoading(false));
+  }, []);
 
   // The filter row only takes effect on Search, as the design's button implies.
   const [pendingFilters, setPendingFilters] = useState<Filters>(DEFAULT_FILTERS);
@@ -117,26 +152,44 @@ const StockReturnRecieptContent = () => {
 
   const selected = returns.find((row) => row.id === selectedId);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   if (view === "verify" && selected) {
     return (
       <VerifyStockReturnReciept
         stockReturn={selected}
+        isSubmitting={isSubmitting}
         onBack={() => router.push(LIST_PATH)}
-        // TODO: persist through the receipt-draft endpoint once it exists.
-        onSaveDraft={(lines) => {
-          updateReturn(selected.id, { lines });
-          router.push(LIST_PATH);
-        }}
-        // TODO: post the receipt to the backend once the endpoint exists.
         onConfirm={(lines) => {
-          updateReturn(selected.id, {
-            lines,
-            status: "Completed",
-            receivedAt: new Date().toISOString(),
-            receivedBy: currentUserName,
-            remarks: remarksFor(lines),
-          });
-          router.push(`${LIST_PATH}?view=details&id=${selected.id}`);
+          setIsSubmitting(true);
+          const totals = receiptTotals(lines);
+          
+          import("@/services/WarehouseStockReturnService")
+            .then(({ receiveWarehouseReturn }) => 
+              receiveWarehouseReturn(selected.id, {
+                totalReceivedQuantity: totals.received,
+                totalNotReceivedQuantity: totals.notReceived,
+                warehouseReturnDetails: lines.map((line) => ({
+                  warehouseReturnDetailId: Number(line.id),
+                  receivedQuantity: line.receivedQty ?? line.dispatchedQty,
+                  notReceivedQuantity: line.dispatchedQty - (line.receivedQty ?? line.dispatchedQty),
+                }))
+              })
+            )
+            .then(() => {
+              updateReturn(selected.id, {
+                lines,
+                status: "Completed",
+                receivedAt: new Date().toISOString(),
+                receivedBy: currentUserName,
+                remarks: remarksFor(lines),
+              });
+              router.push(`${LIST_PATH}?view=details&id=${selected.id}`);
+            })
+            .catch((error) => {
+              console.error("Failed to receive warehouse return", error);
+            })
+            .finally(() => setIsSubmitting(false));
         }}
       />
     );
@@ -188,7 +241,11 @@ const StockReturnRecieptContent = () => {
     {
       id: "type",
       header: "RETURN TYPE",
-      cell: ({ row }) => <span className="text-p2">{SOURCE_LABELS[row.original.source]}</span>,
+      cell: ({ row }) => (
+        <span className="text-p2">
+          {SOURCE_LABELS[row.original.source as StockReturnSource] || row.original.source}
+        </span>
+      ),
     },
     {
       id: "products",

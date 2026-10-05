@@ -21,6 +21,7 @@ interface DataTableProps<TData> {
   emptyState?: React.ReactNode;
   /** Controlled pagination. Omit for a table that shows everything it is given. */
   pagination?: TablePagination;
+  meta?: any;
 }
 
 export default function DataTable<TData>({
@@ -28,11 +29,13 @@ export default function DataTable<TData>({
   data,
   emptyState,
   pagination,
+  meta,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     columns,
     data,
     getCoreRowModel: getCoreRowModel(),
+    meta,
   });
 
   return (

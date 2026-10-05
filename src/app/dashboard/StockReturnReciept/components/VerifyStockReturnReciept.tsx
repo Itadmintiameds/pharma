@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { ColumnDef } from "@tanstack/react-table";
 import Button from "@/app/components/common/Button";
@@ -31,8 +31,6 @@ const receivedQtyError = (line: ReceiptLine, raw: string): string | undefined =>
 interface VerifyStockReturnRecieptProps {
   stockReturn: IncomingStockReturn;
   onBack: () => void;
-  /** Keeps the verified quantities without completing the receipt. */
-  onSaveDraft: (lines: ReceiptLine[]) => void;
   /** Runs once the confirm dialog is accepted. */
   onConfirm: (lines: ReceiptLine[]) => void;
   isSubmitting?: boolean;
@@ -41,7 +39,6 @@ interface VerifyStockReturnRecieptProps {
 const VerifyStockReturnReciept = ({
   stockReturn,
   onBack,
-  onSaveDraft,
   onConfirm,
   isSubmitting = false,
 }: VerifyStockReturnRecieptProps) => {
@@ -52,17 +49,46 @@ const VerifyStockReturnReciept = ({
     )
   );
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [batchDetails, setBatchDetails] = useState<Record<string, { expiryDate: string; purchaseUnitLabel: string }>>({});
+
+  useEffect(() => {
+    import("@/services/ProductService").then(({ ProductService }) => {
+      stockReturn.lines.forEach((line) => {
+        if (line.batchId && !batchDetails[line.id]) {
+          ProductService.getBatchById(line.batchId).then((data) => {
+            if (data) {
+              const innerData = data.data ?? data;
+              const batch = Array.isArray(innerData) ? innerData[0] : innerData;
+              
+              if (batch) {
+                setBatchDetails((prev) => ({
+                  ...prev,
+                  [line.id]: {
+                    expiryDate: batch.expiryDate || line.expiryDate,
+                    purchaseUnitLabel: batch.purchaseUnit || batch.purchaseUnitLabel || batch.unit || batch.packagingId || line.purchaseUnitLabel,
+                  }
+                }));
+              }
+            }
+          }).catch(console.error);
+        }
+      });
+    });
+  }, [stockReturn.lines]);
 
   const verifiedLines: ReceiptLine[] = stockReturn.lines.map((line) => ({
     ...line,
+    expiryDate: batchDetails[line.id]?.expiryDate || line.expiryDate,
+    purchaseUnitLabel: batchDetails[line.id]?.purchaseUnitLabel || line.purchaseUnitLabel,
     receivedQty: Number(receivedById[line.id]) || 0,
   }));
+  
   const hasErrors = stockReturn.lines.some((line) =>
     receivedQtyError(line, receivedById[line.id] ?? "")
   );
   const totals = receiptTotals(verifiedLines);
 
-  const columns: ColumnDef<ReceiptLine>[] = [
+  const columns = useMemo<ColumnDef<ReceiptLine>[]>(() => [
     {
       accessorKey: "productName",
       header: "PRODUCT NAME",
@@ -94,8 +120,9 @@ const VerifyStockReturnReciept = ({
     {
       id: "receivedQty",
       header: "RECEIVED QTY",
-      cell: ({ row }) => {
+      cell: ({ row, table }) => {
         const line = row.original;
+        const { receivedById, setReceivedById } = table.options.meta as any;
         const raw = receivedById[line.id] ?? "";
         return (
           <Input
@@ -104,9 +131,14 @@ const VerifyStockReturnReciept = ({
             max={line.dispatchedQty}
             sizeVariant="sm"
             value={raw}
-            onChange={(e) =>
-              setReceivedById((prev) => ({ ...prev, [line.id]: e.target.value }))
-            }
+            onChange={(e) => {
+              let val = e.target.value;
+              if (val.length > 1 && val.startsWith("0") && !val.startsWith("0.")) {
+                val = val.replace(/^0+/, "");
+                if (val === "") val = "0";
+              }
+              setReceivedById((prev: any) => ({ ...prev, [line.id]: val }));
+            }}
             aria-label={`Received quantity for ${line.productName}`}
             error={receivedQtyError(line, raw)}
             containerClassName="min-w-24 py-sm"
@@ -117,8 +149,9 @@ const VerifyStockReturnReciept = ({
     {
       id: "notReceived",
       header: "NOT RECEIVED QTY",
-      cell: ({ row }) => {
-        const verified = verifiedLines.find((line) => line.id === row.original.id);
+      cell: ({ row, table }) => {
+        const { verifiedLines } = table.options.meta as any;
+        const verified = verifiedLines.find((line: any) => line.id === row.original.id);
         const missing = verified ? notReceivedQty(verified) : 0;
         return (
           <span className={`font-semibold ${missing > 0 ? "text-warning-600" : ""}`}>
@@ -127,7 +160,7 @@ const VerifyStockReturnReciept = ({
         );
       },
     },
-  ];
+  ], []);
 
   return (
     <div className="flex min-h-full flex-col gap-4">
@@ -143,7 +176,10 @@ const VerifyStockReturnReciept = ({
 
       <DetailsCard title="Stock Return Details (Read Only)">
         <DetailItem label="Stock Return No." value={stockReturn.returnNo} />
-        <DetailItem label="Stock Return Type" value={SOURCE_LABELS[stockReturn.source]} />
+        <DetailItem
+          label="Stock Return Type"
+          value={SOURCE_LABELS[stockReturn.source as keyof typeof SOURCE_LABELS] || stockReturn.source}
+        />
         <DetailItem label="From Pharmacy" value={stockReturn.fromPharmacy} />
         <DetailItem label="To (Destination)" value="Central Warehouse" />
         <DetailItem label="Dispatch Date & Time" value={formatDateTime(stockReturn.dispatchedAt)} />
@@ -155,7 +191,11 @@ const VerifyStockReturnReciept = ({
       <p className="text-label-l5 font-semibold text-pneutral-900">Products to Receive</p>
 
       <div className="w-full overflow-x-auto">
-        <DataTable columns={columns} data={stockReturn.lines} />
+        <DataTable 
+          columns={columns} 
+          data={verifiedLines} 
+          meta={{ receivedById, setReceivedById, verifiedLines }} 
+        />
       </div>
 
       <TotalsCard totals={totals} dispatchedLabel="Total Return Qty (Dispatched)" />
@@ -165,22 +205,13 @@ const VerifyStockReturnReciept = ({
           type="button"
           variant="outline"
           onClick={onBack}
-          className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-35.25!"
+          className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-42.5! whitespace-nowrap"
         >
           <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
           Back to List
         </Button>
 
         <div className="flex flex-col gap-sm sm:flex-row">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onSaveDraft(verifiedLines)}
-            disabled={hasErrors}
-            className="w-full! border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-45!"
-          >
-            Save Receipt Draft
-          </Button>
           <Button
             type="button"
             variant="primary"

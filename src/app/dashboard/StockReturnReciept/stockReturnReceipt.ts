@@ -7,6 +7,7 @@ export interface ReceiptLine {
   id: string;
   productName: string;
   batchNo: string;
+  batchId?: string;
   /** yyyy-mm-dd. */
   expiryDate: string;
   /** e.g. "Strip (10)". */

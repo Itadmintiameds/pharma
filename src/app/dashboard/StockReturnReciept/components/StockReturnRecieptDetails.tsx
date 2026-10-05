@@ -55,7 +55,7 @@ const columns: ColumnDef<ReceiptLine>[] = [
   },
   {
     id: "notReceived",
-    header: "NOT RECEIVED QTY",
+    header: "NOT RECEIVED QTYyyyy",
     cell: ({ row }) => {
       const missing = notReceivedQty(row.original);
       return (
@@ -70,8 +70,45 @@ interface StockReturnRecieptDetailsProps {
   onBack: () => void;
 }
 
+import { useState, useEffect } from "react";
+import { ProductService } from "@/services/ProductService";
+
 /** The read-only record of a completed stock return — Figma node 3832:46976. */
-const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDetailsProps) => (
+const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDetailsProps) => {
+  const [batchDetails, setBatchDetails] = useState<Record<string, { expiryDate: string; purchaseUnitLabel: string }>>({});
+
+  useEffect(() => {
+    let mounted = true;
+    stockReturn.lines.forEach((line) => {
+      if (line.batchId && !batchDetails[line.id]) {
+        ProductService.getBatchById(line.batchId).then((data) => {
+          if (mounted && data) {
+            const innerData = data.data ?? data;
+            const batch = Array.isArray(innerData) ? innerData[0] : innerData;
+            
+            if (batch) {
+              setBatchDetails((prev) => ({
+                ...prev,
+                [line.id]: {
+                  expiryDate: batch.expiryDate || line.expiryDate,
+                  purchaseUnitLabel: batch.purchaseUnit || batch.purchaseUnitLabel || batch.unit || batch.packagingId || line.purchaseUnitLabel,
+                }
+              }));
+            }
+          }
+        }).catch(console.error);
+      }
+    });
+    return () => { mounted = false; };
+  }, [stockReturn.lines]);
+
+  const displayLines: ReceiptLine[] = stockReturn.lines.map((line) => ({
+    ...line,
+    expiryDate: batchDetails[line.id]?.expiryDate || line.expiryDate,
+    purchaseUnitLabel: batchDetails[line.id]?.purchaseUnitLabel || line.purchaseUnitLabel,
+  }));
+
+  return (
   <div className="flex min-h-full flex-col gap-4">
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-sm">
@@ -89,7 +126,10 @@ const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDe
 
     <DetailsCard title="Stock Return Information">
       <DetailItem label="Stock Return No." value={stockReturn.returnNo} />
-      <DetailItem label="Return Type" value={SOURCE_LABELS[stockReturn.source]} />
+      <DetailItem
+        label="Return Type"
+        value={SOURCE_LABELS[stockReturn.source as keyof typeof SOURCE_LABELS] || stockReturn.source}
+      />
       <DetailItem label="From Pharmacy" value={stockReturn.fromPharmacy} />
       <DetailItem label="To (Destination)" value="Central Warehouse" />
       <DetailItem label="Created Date & Time" value={formatDateTime(stockReturn.createdAt)} />
@@ -107,11 +147,11 @@ const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDe
     <p className="text-label-l5 font-semibold text-pneutral-900">Products and Final Quantities</p>
 
     <div className="w-full overflow-x-auto">
-      <DataTable columns={columns} data={stockReturn.lines} />
+      <DataTable columns={columns} data={displayLines} />
     </div>
 
     <TotalsCard
-      totals={receiptTotals(stockReturn.lines)}
+      totals={receiptTotals(displayLines)}
       dispatchedLabel="Total Return Qty / Dispatched Qty"
     />
 
@@ -127,6 +167,7 @@ const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDe
       </Button>
     </div>
   </div>
-);
+  );
+};
 
 export default StockReturnRecieptDetails;
