@@ -3,7 +3,7 @@ export interface WarehouseReturn {
   fromPharmacyId?: string;
   toWarehouseId?: string;
   stockReturnNo?: string;
-  stockReturnDate?: string; // ISO datetime
+  stockReturnDate?: string;
   stockReturnType?: string;
   stockReturnStatus?: StockReturnStatus;
   totalReturnProducts?: number;
@@ -16,7 +16,6 @@ export interface WarehouseReturn {
 
 export interface WarehouseReturnDetails {
   warehouseReturnDetailId: number;
-  // These are IDs because the backend entity uses @ManyToOne
   productId?: number;
   batchId?: number;
   returnQuantity?: number;
@@ -26,8 +25,14 @@ export interface WarehouseReturnDetails {
   returnReason?: string;
 }
 
+export interface WarehouseReturnReceivePayload {
+  totalReceivedQuantity: number;
+  totalNotReceivedQuantity: number;
+  warehouseReturnDetails: WarehouseReturnDetails[];
+}
+
 export enum StockReturnStatus {
-  DRAFT = "Draft",
-  PENDING_RECEIPT = "Pending Receipt",
-  COMPLETE = "Complete",
+  DRAFT = 'Draft',
+  PENDING_RECEIPT = 'Pending Receipt',
+  COMPLETE = 'Complete',
 }
