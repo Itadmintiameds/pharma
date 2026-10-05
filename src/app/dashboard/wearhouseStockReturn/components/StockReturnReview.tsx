@@ -40,6 +40,10 @@ interface StockReturnReviewProps {
   /** Runs once the dispatch dialog is accepted. */
   onConfirm: () => void;
   isSubmitting?: boolean;
+  /** When true, hide all action buttons (view-only mode for Pending/Completed). */
+  readOnly?: boolean;
+  /** Cancel button callback — shown in draft edit mode instead of Back to Return Type. */
+  onCancel?: () => void;
 }
 
 const StockReturnReview = ({
@@ -48,6 +52,8 @@ const StockReturnReview = ({
   onSaveDraft,
   onConfirm,
   isSubmitting = false,
+  readOnly = false,
+  onCancel,
 }: StockReturnReviewProps) => {
   const selectedPharmacy = usePharmacyStore((state) => state.selectedPharmacy);
   const createdBy = useCurrentUserName();
@@ -142,37 +148,52 @@ const StockReturnReview = ({
         />
       </div>
 
-      <div className="mt-auto flex flex-col gap-sm pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-          className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
-        >
-          <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
-          Back to Edit Products
-        </Button>
-
-        <div className="flex flex-col gap-sm sm:flex-row">
+      {!readOnly && (
+        <div className="mt-auto flex flex-col gap-sm pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"
-            onClick={onSaveDraft}
-            className="w-full! border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-35.25!"
+            onClick={onBack}
+            className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
           >
-            Save as Draft
+            <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
+            Back to Edit Products
           </Button>
+
+          <div className="flex flex-col gap-sm sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onSaveDraft}
+              className="w-full! border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-35.25!"
+            >
+              Save as Draft
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => setIsDispatchOpen(true)}
+              className="w-full! gap-2 bg-primary-800! px-4 font-medium! text-pneutral-50! sm:w-57.5!"
+            >
+              Confirm Stock Return
+              <Image src="/StockReturn/CheckCircleIcon.svg" alt="" width={20} height={20} />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {readOnly && onCancel && (
+        <div className="mt-auto flex pt-4">
           <Button
             type="button"
-            variant="primary"
-            onClick={() => setIsDispatchOpen(true)}
-            className="w-full! gap-2 bg-primary-800! px-4 font-medium! text-pneutral-50! sm:w-57.5!"
+            variant="outline"
+            onClick={onCancel}
+            className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
           >
-            Confirm Stock Return
-            <Image src="/StockReturn/CheckCircleIcon.svg" alt="" width={20} height={20} />
+            Close
           </Button>
         </div>
-      </div>
+      )}
 
       <ConfirmDispatchModal
         isOpen={isDispatchOpen}

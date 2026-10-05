@@ -127,6 +127,8 @@ interface CreateDamagedStockReturnProps {
   onBack: () => void;
   onSaveDraft: () => void;
   onReview: () => void;
+  /** When provided (edit mode), show Cancel instead of Back to Return Type. */
+  onCancel?: () => void;
 }
 
 const CreateDamagedStockReturn = ({
@@ -135,6 +137,7 @@ const CreateDamagedStockReturn = ({
   onBack,
   onSaveDraft,
   onReview,
+  onCancel,
 }: CreateDamagedStockReturnProps) => {
   const [candidates, setCandidates] = useState<StockReturnLine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -554,15 +557,26 @@ const CreateDamagedStockReturn = ({
 
       <div className="mt-auto flex flex-col gap-sm pt-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-sm sm:flex-row">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onBack}
-            className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-70!"
-          >
-            <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
-            Back to Select Return Type
-          </Button>
+          {onCancel ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
+            >
+              Cancel
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onBack}
+              className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-70!"
+            >
+              <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
+              Back to Select Return Type
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"

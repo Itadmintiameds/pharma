@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { CalendarDays, Clipboard, Info, Search } from "lucide-react";
@@ -175,12 +175,22 @@ const buildColumns = (
   },
 ];
 
+import { 
+  getAllWarehouseReturns, 
+  createWarehouseReturn, 
+  submitWarehouseReturn, 
+  getWarehouseReturnById 
+} from "@/services/WarehouseStockReturnService";
+import { usePharmacyStore } from "@/store/pharmacyStore";
+import { ProductService } from "@/services/ProductService";
+
 const PAGE_SIZE = 10;
 
 const WarehouseStockReturnContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
+  const editId = searchParams.get("id");
   const { canCreate } = useModulePermissions("WAREHOUSE_STOCK_RETURN");
 
   const [search, setSearchValue] = useState("");
@@ -189,6 +199,129 @@ const WarehouseStockReturnContent = () => {
   const [dateFrom, setDateFromValue] = useState("");
   const [dateTo, setDateToValue] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [returnsData, setReturnsData] = useState<StockReturnRow[]>([]);
+
+  useEffect(() => {
+    const fetchReturns = async () => {
+      try {
+        const data = await getAllWarehouseReturns();
+        const mapped: StockReturnRow[] = data.map((item: any) => {
+          const date = item.stockReturnDate ? new Date(item.stockReturnDate) : new Date();
+          const day = String(date.getDate()).padStart(2, "0");
+          const month = String(date.getMonth() + 1).padStart(2, "0");
+          const year = date.getFullYear();
+          const isoDate = `${year}-${month}-${day}`;
+          const formattedDate = `${day}-${month}-${year}`;
+          
+          let returnType: StockReturnType = "Pharmacy Inventory";
+          if (item.stockReturnType === "DAMAGED") {
+            returnType = "Damaged – Inter-Store Transfer";
+          }
+          
+          let status: StockReturnStatus = "Draft";
+          if (
+            item.stockReturnStatus === "Pending Receipt" ||
+            item.stockReturnStatus === "PENDING_RECEIPT"
+          ) {
+            status = "Pending Receipt";
+          }
+          if (
+            item.stockReturnStatus === "Complete" ||
+            item.stockReturnStatus === "Completed" ||
+            item.stockReturnStatus === "COMPLETED"
+          ) {
+            status = "Completed";
+          }
+
+          return {
+            id: String(item.warehouseReturnId),
+            returnNo: item.stockReturnNo || "N/A",
+            returnType: returnType,
+            to: item.toWarehouseName || "Central Warehouse",
+            products: item.totalReturnProducts || 0,
+            returnQty: item.totalReturnQuantity || 0,
+            returnDate: formattedDate,
+            returnDateIso: isoDate,
+            status: status,
+          };
+        });
+        setReturnsData(mapped);
+      } catch (err) {
+        console.error("Failed to fetch warehouse returns", err);
+      }
+    };
+    fetchReturns();
+  }, []);
+
+  // The return being built. Null until a return type is picked; kept while
+  // moving between Create and Review so going back loses nothing.
+  const [draft, setDraft] = useState<StockReturnDraft | null>(null);
+  const [step, setStep] = useState<"items" | "review">("items");
+
+  // Effect to load details for view or edit
+  useEffect(() => {
+    if ((view === "edit" || view === "view") && editId && !draft) {
+      const fetchDetails = async () => {
+        try {
+          const data: any = await getWarehouseReturnById(editId);
+          let allBatches: any[] = [];
+          try {
+            const batchesResponse = await ProductService.getAllBatches();
+            // API returns { data: [...], count, message }
+            allBatches = batchesResponse?.data || batchesResponse || [];
+          } catch (err) {
+            console.error("Failed to fetch all batches", err);
+          }
+          
+          const lines = (data.warehouseReturnDetails || []).map((d: any) => {
+            let expiryDate = "";
+            let availableBase = 0;
+            let purchaseUnit = "";
+            let smallestUnit = "";
+            let packagingId = "";
+            
+            if (d.batchId && allBatches.length > 0) {
+              const batchInfo = allBatches.find((b: any) => String(b.batchId) === String(d.batchId));
+              if (batchInfo) {
+                expiryDate = batchInfo.expiryDate || "";
+                purchaseUnit = batchInfo.purchaseUnit || "";
+                smallestUnit = batchInfo.purchaseSmallestUnitName || "";
+                packagingId = batchInfo.packagingId || "";
+                availableBase = batchInfo.purchaseUnitContains
+                  ? Math.floor(batchInfo.totalStock / batchInfo.purchaseUnitContains)
+                  : batchInfo.totalStock || 0;
+              }
+            }
+
+            return {
+              id: String(d.warehouseReturnDetailId || Math.random()),
+              productId: String(d.productId),
+              productName: d.productName || "",
+              batchId: String(d.batchId),
+              batchNo: d.batchNumber || "",
+              packagingId,
+              expiryDate,
+              purchaseUnit,
+              smallestUnit,
+              unitContains: 1,
+              availableBase,
+              returnQty: String(d.returnQuantity || 0),
+              reason: d.returnReason || "",
+            };
+          });
+
+          setDraft({
+            source: data.stockReturnType === "DAMAGED" ? "DAMAGED_INTER_STORE" : "PHARMACY_INVENTORY",
+            lines,
+          });
+          setStep(view === "view" ? "review" : "items");
+        } catch (err) {
+          console.error("Failed to fetch warehouse return details", err);
+        }
+      };
+      fetchDetails();
+    }
+  }, [view, editId, draft]);
 
   // Narrowing the list can leave the viewer on a page that no longer exists,
   // so every filter change goes back to the first one.
@@ -204,7 +337,7 @@ const WarehouseStockReturnContent = () => {
   const setDateFrom = resettingPage(setDateFromValue);
   const setDateTo = resettingPage(setDateToValue);
 
-  const returns = SAMPLE_RETURNS;
+  const returns = returnsData;
 
   const typeOptions = useMemo(
     () => RETURN_TYPES.map((type) => ({ label: type, value: type })),
@@ -231,30 +364,137 @@ const WarehouseStockReturnContent = () => {
 
   const rowOffset = (currentPage - 1) * PAGE_SIZE;
 
-  // The return being built. Null until a return type is picked; kept while
-  // moving between Create and Review so going back loses nothing.
-  const [draft, setDraft] = useState<StockReturnDraft | null>(null);
-  const [step, setStep] = useState<"items" | "review">("items");
-
   // Every Create starts fresh, whatever a previous visit left behind.
   const handleCreate = () => {
     setDraft(null);
     router.push(`${LIST_PATH}?view=add`);
   };
   // TODO: wire to the view screen once it exists.
-  const handleView = (id: string) => console.info("View stock return", id);
+  const handleView = (id: string) => {
+    const returnRow = returnsData.find(r => r.id === id);
+    if (!returnRow) return;
+    if (returnRow.status === "Draft") {
+      router.push(`${LIST_PATH}?view=edit&id=${id}`);
+    } else {
+      router.push(`${LIST_PATH}?view=view&id=${id}`);
+    }
+  };
 
   const handleSelectSource = (source: StockReturnSource) => {
     setDraft({ source, lines: [] });
     setStep("items");
   };
 
-  // TODO: call the stock-return endpoints once the backend has them.
-  const handleSaveDraft = () => {};
-  const handleConfirm = () => {};
+  const buildPayload = (status: "DRAFT" | "PENDING_RECEIPT") => {
+    if (!draft) return null;
+    const pharmacy = usePharmacyStore.getState().selectedPharmacy;
+    
+    let totalReturnQuantity = 0;
+    const details = draft.lines.map((line) => {
+      const rq = Number(line.returnQty) || 0;
+      totalReturnQuantity += rq;
+      return {
+        productId: line.productId,
+        productName: line.productName,
+        batchId: line.batchId,
+        batchNumber: line.batchNo,
+        returnQuantity: rq,
+        dispatchQuantity: 0,
+        receivedQuantity: 0,
+        notReceivedQuantity: 0,
+        returnReason: line.reason,
+      };
+    });
 
-  if (view === "add") {
+    return {
+      fromPharmacyId: pharmacy?.pharmacyId || "",
+      toWarehouseId: "MARMAWH0001", // Defaulted warehouse ID
+      stockReturnType: draft.source === "DAMAGED_INTER_STORE" ? "Damaged – Inter-Store Transfer" : "Pharmacy Inventory",
+      stockReturnStatus: status,
+      totalReturnProducts: draft.lines.length,
+      totalReturnQuantity: totalReturnQuantity,
+      totalReceivedQuantity: 0,
+      totalNotReceivedQuantity: 0,
+      isDelete: false,
+      warehouseReturnDetails: details,
+    };
+  };
+
+  const handleSaveDraft = async () => {
+    if (view === "edit" && editId && draft) {
+      const payload = {
+        stockReturnStatus: "DRAFT",
+        warehouseReturnDetails: draft.lines.map((line) => ({
+          productId: line.productId,
+          productName: line.productName,
+          batchId: line.batchId,
+          batchNumber: line.batchNo,
+          returnQuantity: Number(line.returnQty) || 0,
+          returnReason: line.reason,
+        })),
+        totalReturnProducts: draft.lines.length,
+        totalReturnQuantity: draft.lines.reduce((sum, line) => sum + (Number(line.returnQty) || 0), 0),
+      };
+      try {
+        await submitWarehouseReturn(editId, payload);
+        setDraft(null);
+        router.push(LIST_PATH);
+      } catch (err) {
+        console.error("Failed to update draft", err);
+      }
+    } else {
+      const payload = buildPayload("DRAFT");
+      if (!payload) return;
+      try {
+        await createWarehouseReturn(payload as any);
+        setDraft(null);
+        router.push(LIST_PATH);
+      } catch (err) {
+        console.error("Failed to save draft", err);
+      }
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (view === "edit" && editId && draft) {
+      const payload = {
+        stockReturnStatus: "PENDING_RECEIPT",
+        warehouseReturnDetails: draft.lines.map((line) => ({
+          productId: line.productId,
+          productName: line.productName,
+          batchId: line.batchId,
+          batchNumber: line.batchNo,
+          returnQuantity: Number(line.returnQty) || 0,
+          returnReason: line.reason,
+        })),
+        totalReturnProducts: draft.lines.length,
+        totalReturnQuantity: draft.lines.reduce((sum, line) => sum + (Number(line.returnQty) || 0), 0),
+      };
+      try {
+        await submitWarehouseReturn(editId, payload);
+        setDraft(null);
+        router.push(LIST_PATH);
+      } catch (err) {
+        console.error("Failed to submit", err);
+      }
+    } else {
+      const payload = buildPayload("PENDING_RECEIPT");
+      if (!payload) return;
+      try {
+        await createWarehouseReturn(payload as any);
+        setDraft(null);
+        router.push(LIST_PATH);
+      } catch (err) {
+        console.error("Failed to confirm", err);
+      }
+    }
+  };
+
+  if (view === "add" || view === "edit" || view === "view") {
     if (!draft) {
+      // If we are in view or edit mode but the effect hasn't loaded the draft yet, show nothing or a loader
+      if (view !== "add") return null;
+
       return (
         <StockReturnType
           onSelect={handleSelectSource}
@@ -267,6 +507,20 @@ const WarehouseStockReturnContent = () => {
     const isDamaged = draft.source === "DAMAGED_INTER_STORE";
     const Review = isDamaged ? DamagedStockReturnReview : StockReturnReview;
     const Create = isDamaged ? CreateDamagedStockReturn : CreateStockReturn;
+
+    // View mode (Pending Receipt / Completed) — read-only, no actions
+    if (view === "view") {
+      return (
+        <Review
+          draft={draft}
+          onBack={() => {}}
+          onSaveDraft={() => {}}
+          onConfirm={() => {}}
+          readOnly={true}
+          onCancel={() => { setDraft(null); router.push(LIST_PATH); }}
+        />
+      );
+    }
 
     if (step === "review") {
       return (
@@ -286,6 +540,7 @@ const WarehouseStockReturnContent = () => {
         onBack={() => setDraft(null)}
         onSaveDraft={handleSaveDraft}
         onReview={() => setStep("review")}
+        onCancel={view === "edit" ? () => { setDraft(null); router.push(LIST_PATH); } : undefined}
       />
     );
   }

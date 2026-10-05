@@ -110,3 +110,23 @@ export const receiveWarehouseReturn = async (
     );
   }
 };
+
+// Submit a warehouse return (e.g. from DRAFT to PENDING_RECEIPT with edited details)
+export const submitWarehouseReturn = async (
+  warehouseReturnId: number | string,
+  payload: any
+): Promise<WarehouseReturn> => {
+  try {
+    const response = await api.put(
+      `/warehouse-return/${warehouseReturnId}/submit`,
+      payload
+    );
+
+    return response.data;
+  } catch (error) {
+    throw handleApiError(
+      error,
+      'Failed to submit the warehouse return.'
+    );
+  }
+};

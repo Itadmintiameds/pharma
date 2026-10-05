@@ -80,6 +80,8 @@ interface CreateStockReturnProps {
   onBack: () => void;
   onSaveDraft: () => void;
   onReview: () => void;
+  /** When provided (edit mode), show Cancel instead of Back to Return Type. */
+  onCancel?: () => void;
 }
 
 const CreateStockReturn = ({
@@ -88,6 +90,7 @@ const CreateStockReturn = ({
   onBack,
   onSaveDraft,
   onReview,
+  onCancel,
 }: CreateStockReturnProps) => {
   const [search, setSearch] = useState("");
   const [isPickerOpen, setIsPickerOpen] = useState(false);
@@ -373,15 +376,26 @@ const CreateStockReturn = ({
       </div>
 
       <div className="mt-auto flex flex-col gap-sm pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onBack}
-          className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
-        >
-          <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
-          Back to Select Return Type
-        </Button>
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
+          >
+            Cancel
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onBack}
+            className="w-full! gap-2 border-secondary-700! px-4 font-medium! text-secondary-700! sm:w-auto!"
+          >
+            <Image src="/StockReturn/ArrowLeftIcon.svg" alt="" width={20} height={20} />
+            Back to Select Return Type
+          </Button>
+        )}
 
         <div className="flex flex-col gap-sm sm:flex-row">
           <Button
