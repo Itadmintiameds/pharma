@@ -24,6 +24,9 @@ import {
   type StockReturnLine,
 } from "./stockReturnDraft";
 import { getDamagedStockNotReturned } from "@/services/WarehouseDistributionService";
+import { getUserOrganization } from "@/services/SetupBusinessService";
+import { getWarehousesByOrganizationId } from "@/services/SetupWarehouseService";
+import { useWarehouseStore } from "@/store/warehouseStore";
 
 const LIST_PATH = "/dashboard/wearhouseStockReturn";
 
@@ -205,6 +208,24 @@ import { usePharmacyStore } from "@/store/pharmacyStore";
 import { ProductService } from "@/services/ProductService";
 
 const PAGE_SIZE = 10;
+
+/**
+ * The organization's Central Warehouse — where every stock return goes. Uses the
+ * warehouses already loaded into the store when there are any, otherwise asks
+ * the backend for the organization's warehouses.
+ */
+const resolveCentralWarehouseId = async (): Promise<string> => {
+  const loaded = useWarehouseStore.getState().warehouses;
+  if (loaded[0]?.warehouseId) return loaded[0].warehouseId;
+
+  const org = await getUserOrganization();
+  if (org?.organizationId) {
+    const orgWarehouses = await getWarehousesByOrganizationId(org.organizationId);
+    const id = orgWarehouses.find((w) => !!w.warehouseId)?.warehouseId;
+    if (id) return id;
+  }
+  throw new Error("No Central Warehouse found for this organization.");
+};
 
 /**
  * Saved return details don't carry the transfer they came from, so match each
@@ -495,7 +516,7 @@ const WarehouseStockReturnContent = () => {
     setStep("items");
   };
 
-  const buildPayload = (status: "DRAFT" | "PENDING_RECEIPT") => {
+  const buildPayload = (status: "DRAFT" | "PENDING_RECEIPT", toWarehouseId: string) => {
     if (!draft) return null;
     const pharmacy = usePharmacyStore.getState().selectedPharmacy;
     
@@ -521,7 +542,7 @@ const WarehouseStockReturnContent = () => {
 
     return {
       fromPharmacyId: pharmacy?.pharmacyId || "",
-      toWarehouseId: "MARMAWH0001", // Defaulted warehouse ID
+      toWarehouseId,
       stockReturnType: draft.source === "DAMAGED_INTER_STORE" ? "Damaged – Inter-Store Transfer" : "Pharmacy Inventory",
       stockReturnStatus: status,
       totalReturnProducts: draft.lines.length,
@@ -557,9 +578,9 @@ const WarehouseStockReturnContent = () => {
         console.error("Failed to update draft", err);
       }
     } else {
-      const payload = buildPayload("DRAFT");
-      if (!payload) return;
       try {
+        const payload = buildPayload("DRAFT", await resolveCentralWarehouseId());
+        if (!payload) return;
         await createWarehouseReturn(payload as any);
         setDraft(null);
         router.push(LIST_PATH);
@@ -593,9 +614,9 @@ const WarehouseStockReturnContent = () => {
         console.error("Failed to submit", err);
       }
     } else {
-      const payload = buildPayload("PENDING_RECEIPT");
-      if (!payload) return;
       try {
+        const payload = buildPayload("PENDING_RECEIPT", await resolveCentralWarehouseId());
+        if (!payload) return;
         await createWarehouseReturn(payload as any);
         setDraft(null);
         router.push(LIST_PATH);
