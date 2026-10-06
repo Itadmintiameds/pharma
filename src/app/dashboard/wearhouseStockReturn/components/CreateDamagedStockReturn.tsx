@@ -8,19 +8,14 @@ import Button from "@/app/components/common/Button";
 import Input from "@/app/components/common/Input";
 import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
-import {
-  getDestinationDistributions,
-  getWarehouseDistribution,
-} from "@/services/WarehouseDistributionService";
-import type {
-  WarehouseDistributionData,
-  WarehouseDistributionSummary,
-} from "@/types/WarehouseDistributionData";
+import { getDamagedStockNotReturned } from "@/services/WarehouseDistributionService";
+import { ProductService } from "@/services/ProductService";
 import {
   SOURCE_LABELS,
   StockReturnDraft,
   StockReturnLine,
   availablePurchaseQty,
+  damagedItemToLine,
   formatDisplayDate,
   formatExpiry,
   isLineValid,
@@ -28,50 +23,6 @@ import {
   returnQtyError,
   toPurchaseQty,
 } from "../stockReturnDraft";
-
-/**
- * Every damaged line on a received Inter-Store Transfer into this pharmacy.
- * Pharmacy-to-pharmacy transfers carry their quantities in smallest units, so
- * damagedQuantity is converted to purchase units only for display.
- */
-const toDamagedLines = (
-  summary: WarehouseDistributionSummary,
-  detail: WarehouseDistributionData
-): StockReturnLine[] =>
-  (detail.lines ?? [])
-    .filter((line) => (Number(line.damagedQuantity) || 0) > 0)
-    .map((line) => {
-      const damagedBase = Number(line.damagedQuantity) || 0;
-      // TODO: the backend does not yet report how much of a damaged line earlier
-      // stock returns already sent back, so all of it is treated as eligible.
-      const alreadyReturnedBase = 0;
-      const contains = Number(line.packaging?.purchaseUnitContains) || 0;
-
-      return {
-        id: `${summary.warehouseDistributionId}-${line.warehouseDistributionDetailsId ?? line.batchId}-${line.packagingId ?? ""}`,
-        productId: line.productId,
-        productName: line.product?.productName || "Unknown Product",
-        batchId: line.batchId || "",
-        batchNo: line.batch?.batchNumber || "N/A",
-        packagingId: line.packagingId || "",
-        expiryDate: line.batch?.expiryDate || "",
-        purchaseUnit: line.packaging?.purchaseUnit || "",
-        smallestUnit: line.packaging?.purchaseSmallestUnit || "",
-        unitContains: contains > 0 ? contains : 1,
-        availableBase: Math.max(0, damagedBase - alreadyReturnedBase),
-        returnQty: "",
-        reason: "Damaged",
-        transfer: {
-          distributionId: summary.warehouseDistributionId,
-          distributionDetailsId: line.warehouseDistributionDetailsId,
-          transferNo: summary.allocationNo,
-          transferDate: (summary.allocationDate ?? detail.allocationDate ?? "").split("T")[0],
-          fromStore: summary.fromStore,
-          damagedBase,
-          alreadyReturnedBase,
-        },
-      };
-    });
 
 interface Filters {
   search: string;
@@ -159,18 +110,26 @@ const CreateDamagedStockReturn = ({
 
     const load = async () => {
       try {
-        const received = (await getDestinationDistributions()).filter(
-          (summary) => summary.fromType === "PHARMACY" && summary.currentStatus === "STOCK_RECEIVED"
+        const items = await getDamagedStockNotReturned();
+
+        let allBatches: any[] = [];
+        try {
+          const res = await ProductService.getAllBatches();
+          allBatches = res?.data || res || [];
+        } catch (bErr) {
+          console.error("Failed to fetch batches for fallback", bErr);
+        }
+
+        const candidateLines: StockReturnLine[] = items.map((item) =>
+          damagedItemToLine(item, allBatches)
         );
-        const details = await Promise.all(
-          received.map((summary) => getWarehouseDistribution(summary.warehouseDistributionId))
-        );
+
         if (!active) return;
-        setCandidates(received.flatMap((summary, index) => toDamagedLines(summary, details[index])));
+        setCandidates(candidateLines);
         setLoadError("");
       } catch (err) {
         if (!active) return;
-        console.error("Failed to fetch damaged inter-store transfer stock:", err);
+        console.error("Failed to fetch damaged stock not returned:", err);
         setLoadError("Could not load damaged stock.");
       } finally {
         if (active) setIsLoading(false);
@@ -324,31 +283,32 @@ const CreateDamagedStockReturn = ({
         </Dimmed>
       ),
     },
-    {
-      id: "alreadyReturned",
-      header: "ALREADY DISPATCHED/ RETURNED",
-      cell: ({ row }) => (
-        <Dimmed line={row.original}>
-          {toPurchaseQty(row.original, row.original.transfer?.alreadyReturnedBase ?? 0)}
-        </Dimmed>
-      ),
-    },
-    {
-      id: "eligible",
-      header: "ELIGIBLE QTY (REMAINING)",
-      cell: ({ row }) => {
-        const eligible = availablePurchaseQty(row.original);
-        return (
-          <Dimmed line={row.original}>
-            <span
-              className={`font-semibold ${eligible > 0 ? "text-success-600" : "text-pneutral-900"}`}
-            >
-              {eligible}
-            </span>
-          </Dimmed>
-        );
-      },
-    },
+    // Hidden for now — kept for when these columns come back.
+    // {
+    //   id: "alreadyReturned",
+    //   header: "ALREADY DISPATCHED/ RETURNED",
+    //   cell: ({ row }) => (
+    //     <Dimmed line={row.original}>
+    //       {toPurchaseQty(row.original, row.original.transfer?.alreadyReturnedBase ?? 0)}
+    //     </Dimmed>
+    //   ),
+    // },
+    // {
+    //   id: "eligible",
+    //   header: "ELIGIBLE QTY (REMAINING)",
+    //   cell: ({ row }) => {
+    //     const eligible = availablePurchaseQty(row.original);
+    //     return (
+    //       <Dimmed line={row.original}>
+    //         <span
+    //           className={`font-semibold ${eligible > 0 ? "text-success-600" : "text-pneutral-900"}`}
+    //         >
+    //           {eligible}
+    //         </span>
+    //       </Dimmed>
+    //     );
+    //   },
+    // },
     {
       id: "returnQty",
       header: "RETURN QTY (PURCHASE UNITS)",

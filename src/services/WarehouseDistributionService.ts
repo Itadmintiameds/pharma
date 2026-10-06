@@ -164,3 +164,31 @@ export const dispatchAllocation = async (
     throw handleApiError(error, 'Failed to dispatch the allocation.');
   }
 };
+
+export interface DamagedStockNotReturnedItem {
+  warehouseDistributionDetailsId: number;
+  productId?: string;
+  batchId?: string;
+  packagingId?: string;
+  transferNo: string;
+  transferDate: string;
+  fromStore: string;
+  productName: string;
+  batchNo: string;
+  expiryDate: string;
+  purchaseUnit: string;
+  damagedQty: number;
+}
+
+// GET /warehouse/distribution/damaged-not-returned
+export const getDamagedStockNotReturned = async (): Promise<
+  DamagedStockNotReturnedItem[]
+> => {
+  try {
+    const response = await api.get('/warehouse/distribution/damaged-not-returned');
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch damaged stock not returned.');
+  }
+};
+

@@ -15,7 +15,15 @@ import CreateStockReturn from "./components/CreateStockReturn";
 import StockReturnReview from "./components/StockReturnReview";
 import CreateDamagedStockReturn from "./components/CreateDamagedStockReturn";
 import DamagedStockReturnReview from "./components/DamagedStockReturnReview";
-import type { StockReturnDraft } from "./stockReturnDraft";
+import StockReturnView from "./components/StockReturnView";
+import {
+  damagedItemToLine,
+  returnBaseQty,
+  toPurchaseQty,
+  type StockReturnDraft,
+  type StockReturnLine,
+} from "./stockReturnDraft";
+import { getDamagedStockNotReturned } from "@/services/WarehouseDistributionService";
 
 const LIST_PATH = "/dashboard/wearhouseStockReturn";
 
@@ -131,6 +139,18 @@ const buildColumns = (
   {
     accessorKey: "returnType",
     header: "STOCK RETURN TYPE",
+    cell: ({ row }) => {
+      const typeStr = row.original.returnType;
+      if (typeStr === "Damaged – Inter-Store Transfer" || (typeStr && typeStr.includes("Damaged"))) {
+        return (
+          <div className="flex flex-col text-pneutral-900 leading-tight">
+            <span>Damaged –</span>
+            <span>Inter-Store Transfer</span>
+          </div>
+        );
+      }
+      return <span>{typeStr}</span>;
+    },
   },
   {
     accessorKey: "to",
@@ -186,6 +206,63 @@ import { ProductService } from "@/services/ProductService";
 
 const PAGE_SIZE = 10;
 
+/**
+ * Saved return details don't carry the transfer they came from, so match each
+ * damaged line back to its damaged-not-returned row (same batch, preferring the
+ * row whose damaged qty equals the return qty). That restores the transfer no.,
+ * pack size and the row id the Create screen uses to hide already-added rows.
+ * Lines with no match (e.g. already dispatched) are kept as they are.
+ */
+const withTransferOrigin = async (
+  lines: StockReturnLine[],
+  /** warehouseDistributionDetailsId per line (same order), when the backend returns it. */
+  detailIds: (number | undefined)[],
+  allBatches: any[]
+): Promise<StockReturnLine[]> => {
+  let candidates: StockReturnLine[] = [];
+  try {
+    const items = await getDamagedStockNotReturned();
+    candidates = items.map((item) => damagedItemToLine(item, allBatches));
+  } catch (err) {
+    console.error("Failed to fetch damaged stock for draft", err);
+    return lines;
+  }
+
+  const used = new Set<string>();
+  return lines.map((line, index) => {
+    const base = returnBaseQty(line);
+    const detailId = detailIds[index];
+    const exact =
+      detailId != null
+        ? candidates.find((c) => !used.has(c.id) && c.transfer?.distributionDetailsId === Number(detailId))
+        : undefined;
+    if (exact) {
+      used.add(exact.id);
+      return {
+        ...exact,
+        returnQty: String(toPurchaseQty(exact, base)),
+        reason: line.reason || exact.reason,
+      };
+    }
+
+    const sameBatch = candidates.filter(
+      (c) =>
+        !used.has(c.id) &&
+        c.batchNo === line.batchNo &&
+        (!line.productName || c.productName === line.productName)
+    );
+    const match =
+      sameBatch.find((c) => (c.transfer?.damagedBase ?? 0) === base) ?? sameBatch[0];
+    if (!match) return line;
+    used.add(match.id);
+    return {
+      ...match,
+      returnQty: String(toPurchaseQty(match, base)),
+      reason: line.reason || match.reason,
+    };
+  });
+};
+
 const WarehouseStockReturnContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -201,7 +278,10 @@ const WarehouseStockReturnContent = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [returnsData, setReturnsData] = useState<StockReturnRow[]>([]);
 
+  // The page stays mounted across ?view= changes, so refetch every time we land
+  // back on the list — that is how a saved draft or a confirmed return shows up.
   useEffect(() => {
+    if (view) return;
     const fetchReturns = async () => {
       try {
         const data = await getAllWarehouseReturns();
@@ -214,8 +294,15 @@ const WarehouseStockReturnContent = () => {
           const formattedDate = `${day}-${month}-${year}`;
           
           let returnType: StockReturnType = "Pharmacy Inventory";
-          if (item.stockReturnType === "DAMAGED") {
+          if (
+            item.stockReturnType === "Damaged – Inter-Store Transfer" ||
+            item.stockReturnType === "DAMAGED" ||
+            item.stockReturnType === "DAMAGED_INTER_STORE" ||
+            (item.stockReturnType && item.stockReturnType.toLowerCase().includes("damaged"))
+          ) {
             returnType = "Damaged – Inter-Store Transfer";
+          } else if (item.stockReturnType) {
+            returnType = item.stockReturnType as StockReturnType;
           }
           
           let status: StockReturnStatus = "Draft";
@@ -251,7 +338,7 @@ const WarehouseStockReturnContent = () => {
       }
     };
     fetchReturns();
-  }, []);
+  }, [view]);
 
   // The return being built. Null until a return type is picked; kept while
   // moving between Create and Review so going back loses nothing.
@@ -260,7 +347,8 @@ const WarehouseStockReturnContent = () => {
 
   // Effect to load details for view or edit
   useEffect(() => {
-    if ((view === "edit" || view === "view") && editId && !draft) {
+    // Only drafts are rebuilt into an editable draft; view mode loads its own data.
+    if (view === "edit" && editId && !draft) {
       const fetchDetails = async () => {
         try {
           const data: any = await getWarehouseReturnById(editId);
@@ -279,7 +367,8 @@ const WarehouseStockReturnContent = () => {
             let purchaseUnit = "";
             let smallestUnit = "";
             let packagingId = "";
-            
+            let unitContains = 1;
+
             if (d.batchId && allBatches.length > 0) {
               const batchInfo = allBatches.find((b: any) => String(b.batchId) === String(d.batchId));
               if (batchInfo) {
@@ -287,11 +376,17 @@ const WarehouseStockReturnContent = () => {
                 purchaseUnit = batchInfo.purchaseUnit || "";
                 smallestUnit = batchInfo.purchaseSmallestUnitName || "";
                 packagingId = batchInfo.packagingId || "";
-                availableBase = batchInfo.purchaseUnitContains
-                  ? Math.floor(batchInfo.totalStock / batchInfo.purchaseUnitContains)
-                  : batchInfo.totalStock || 0;
+                if (Number(batchInfo.purchaseUnitContains) > 0) {
+                  unitContains = Number(batchInfo.purchaseUnitContains);
+                }
+                availableBase = Number(batchInfo.totalStock) || 0;
               }
             }
+
+            // The backend stores smallest units; the screens work in purchase units.
+            const returnPurchaseQty = Number(
+              ((Number(d.returnQuantity) || 0) / unitContains).toFixed(2)
+            );
 
             return {
               id: String(d.warehouseReturnDetailId || Math.random()),
@@ -303,18 +398,32 @@ const WarehouseStockReturnContent = () => {
               expiryDate,
               purchaseUnit,
               smallestUnit,
-              unitContains: 1,
+              unitContains,
               availableBase,
-              returnQty: String(d.returnQuantity || 0),
+              returnQty: String(returnPurchaseQty),
               reason: d.returnReason || "",
             };
           });
 
+          const isDamagedType =
+            data.stockReturnType === "DAMAGED" ||
+            data.stockReturnType === "Damaged – Inter-Store Transfer" ||
+            data.stockReturnType === "DAMAGED_INTER_STORE" ||
+            (data.stockReturnType && data.stockReturnType.toLowerCase().includes("damaged"));
+
           setDraft({
-            source: data.stockReturnType === "DAMAGED" ? "DAMAGED_INTER_STORE" : "PHARMACY_INVENTORY",
-            lines,
+            source: isDamagedType ? "DAMAGED_INTER_STORE" : "PHARMACY_INVENTORY",
+            lines: isDamagedType
+              ? await withTransferOrigin(
+                  lines,
+                  (data.warehouseReturnDetails || []).map(
+                    (d: any) => d.warehouseDistributionDetailsId
+                  ),
+                  allBatches
+                )
+              : lines,
           });
-          setStep(view === "view" ? "review" : "items");
+          setStep("items");
         } catch (err) {
           console.error("Failed to fetch warehouse return details", err);
         }
@@ -369,10 +478,11 @@ const WarehouseStockReturnContent = () => {
     setDraft(null);
     router.push(`${LIST_PATH}?view=add`);
   };
-  // TODO: wire to the view screen once it exists.
+  // Drafts reopen in the edit flow; Pending Receipt / Completed open read-only.
   const handleView = (id: string) => {
     const returnRow = returnsData.find(r => r.id === id);
     if (!returnRow) return;
+    setDraft(null);
     if (returnRow.status === "Draft") {
       router.push(`${LIST_PATH}?view=edit&id=${id}`);
     } else {
@@ -398,7 +508,10 @@ const WarehouseStockReturnContent = () => {
         productName: line.productName,
         batchId: line.batchId,
         batchNumber: line.batchNo,
-        returnQuantity: rq,
+        // Damaged lines only — undefined is dropped from the JSON for pharmacy lines.
+        warehouseDistributionDetailsId: line.transfer?.distributionDetailsId,
+        // Sent in smallest units: 1 Strip (10) → 10.
+        returnQuantity: returnBaseQty(line),
         dispatchQuantity: 0,
         receivedQuantity: 0,
         notReceivedQuantity: 0,
@@ -429,7 +542,8 @@ const WarehouseStockReturnContent = () => {
           productName: line.productName,
           batchId: line.batchId,
           batchNumber: line.batchNo,
-          returnQuantity: Number(line.returnQty) || 0,
+          warehouseDistributionDetailsId: line.transfer?.distributionDetailsId,
+          returnQuantity: returnBaseQty(line),
           returnReason: line.reason,
         })),
         totalReturnProducts: draft.lines.length,
@@ -464,7 +578,8 @@ const WarehouseStockReturnContent = () => {
           productName: line.productName,
           batchId: line.batchId,
           batchNumber: line.batchNo,
-          returnQuantity: Number(line.returnQty) || 0,
+          warehouseDistributionDetailsId: line.transfer?.distributionDetailsId,
+          returnQuantity: returnBaseQty(line),
           returnReason: line.reason,
         })),
         totalReturnProducts: draft.lines.length,
@@ -490,7 +605,11 @@ const WarehouseStockReturnContent = () => {
     }
   };
 
-  if (view === "add" || view === "edit" || view === "view") {
+  if (view === "view" && editId) {
+    return <StockReturnView id={editId} onClose={() => router.push(LIST_PATH)} />;
+  }
+
+  if (view === "add" || view === "edit") {
     if (!draft) {
       // If we are in view or edit mode but the effect hasn't loaded the draft yet, show nothing or a loader
       if (view !== "add") return null;
@@ -507,20 +626,6 @@ const WarehouseStockReturnContent = () => {
     const isDamaged = draft.source === "DAMAGED_INTER_STORE";
     const Review = isDamaged ? DamagedStockReturnReview : StockReturnReview;
     const Create = isDamaged ? CreateDamagedStockReturn : CreateStockReturn;
-
-    // View mode (Pending Receipt / Completed) — read-only, no actions
-    if (view === "view") {
-      return (
-        <Review
-          draft={draft}
-          onBack={() => {}}
-          onSaveDraft={() => {}}
-          onConfirm={() => {}}
-          readOnly={true}
-          onCancel={() => { setDraft(null); router.push(LIST_PATH); }}
-        />
-      );
-    }
 
     if (step === "review") {
       return (
