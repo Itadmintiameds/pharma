@@ -9,7 +9,8 @@
  * everything the cashier already typed.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { ColumnDef } from "@tanstack/react-table";
 import Image from "next/image";
@@ -267,7 +268,16 @@ const EMPTY_DRAFT: BillDraft = {
 /** Rows per page in the bill list. */
 const PAGE_SIZE = 10;
 
-const Page = () => {
+const SalesBillingContent = () => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Another screen (e.g. Sales Return Details) can link straight to a saved
+  // bill's invoice view with ?billingId=, and name where Back should go with
+  // ?returnTo= — only paths inside the dashboard are honoured.
+  const linkedBillingId = searchParams.get("billingId");
+  const returnToParam = searchParams.get("returnTo");
+  const returnTo = returnToParam?.startsWith("/dashboard/") ? returnToParam : null;
+
   // CREATE starts a new bill; EXPORT covers the per-row invoice download.
   // Settling a pending bill is part of creating/collecting a sale, so it rides
   // on CREATE too. Viewing an invoice needs only VIEW, already guarded.
@@ -421,6 +431,16 @@ const Page = () => {
       showToast.error(err instanceof Error ? err.message : "Failed to fetch the bill.");
     }
   };
+
+  // Open the linked bill's view once, when the page is reached with ?billingId=
+  useEffect(() => {
+    const billingId = Number(linkedBillingId);
+    if (!linkedBillingId || !Number.isFinite(billingId)) return;
+    // Run from a callback: openSavedBill sets state once the bill has loaded
+    Promise.resolve().then(() => openSavedBill(billingId, "view"));
+    // openSavedBill is recreated each render; only a new id should re-open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedBillingId]);
 
   // A saved bill shows the totals it was stored with; a bill being built is
   // costed from its lines.
@@ -686,7 +706,10 @@ const Page = () => {
         mode={summaryMode}
         prescriptionUrl={draft.prescriptionUrl}
         onBack={() => {
-          if (summaryMode === "view" || summaryMode === "download") {
+          if (summaryMode === "view" && returnTo) {
+            // Reached from another screen's link — go back there
+            router.push(returnTo);
+          } else if (summaryMode === "view" || summaryMode === "download") {
             setDraft(EMPTY_DRAFT);
             setStep("list");
           } else {
@@ -831,5 +854,12 @@ const Page = () => {
     </div>
   );
 };
+
+// useSearchParams needs a Suspense boundary in an App Router page.
+const Page = () => (
+  <Suspense fallback={null}>
+    <SalesBillingContent />
+  </Suspense>
+);
 
 export default Page;

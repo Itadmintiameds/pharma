@@ -6,6 +6,8 @@
  * reshaping the UI.
  */
 
+import type { BillReturnStatus } from "./SalesReturnData";
+
 /** Mirrors the backend CustomerType enum exactly. */
 export type CustomerType =
   | "WALK_IN"
@@ -239,6 +241,9 @@ export interface BillingDetailRecord {
   expiryDate?: string | null;
   unit: string;
   billQuantity: number;
+  /** Units of this line already returned through sales returns, in the same
+   *  unit as billQuantity. Filled on the bill view endpoints. */
+  returnedQuantity?: number;
   /** Stored on the line, so nothing has to be derived back out of the amounts.
    *  The API's own display text ("18%", "Exempted"), not a plain rate — run it
    *  through parseGstPercentage() before using it in arithmetic. */
@@ -275,6 +280,9 @@ export interface BillingRecord {
   customerPhoneNo: string | null;
   customerAddress: string | null;
   customerType: CustomerType | null;
+  /** IP / OP patients only. */
+  patientNumber?: string | null;
+  opIpNumber?: string | null;
   doctorId: number | null;
   doctorName: string | null;
   paymentType: PaymentType | null;
@@ -292,6 +300,8 @@ export interface BillingRecord {
   /** Absent on bills saved before the round-off columns existed. */
   roundOffAmount?: number;
   totalNetAmountAfterRoundOff?: number;
+  /** How much of the bill has come back through sales returns. */
+  salesReturnStatus?: BillReturnStatus;
   billingDetails: BillingDetailRecord[];
   billingPayments: BillingPaymentRecord[];
 }

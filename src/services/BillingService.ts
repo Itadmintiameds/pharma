@@ -223,6 +223,19 @@ export const getAllBillings = async (): Promise<BillingRecord[]> => {
   }
 };
 
+/** Bills of the selected pharmacy whose customer has this phone number, newest
+ *  first. Anonymous walk-in bills have no customer and never match. */
+export const getAllBillingsByPhoneNumber = async (
+  phoneNo: string
+): Promise<BillingRecord[]> => {
+  try {
+    const response = await api.get('/billing/byPhoneNumber', { params: { phoneNo } });
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch bills for this phone number.');
+  }
+};
+
 /** One bill with its lines and payments. */
 export const getBillingById = async (
   billingId: number | string

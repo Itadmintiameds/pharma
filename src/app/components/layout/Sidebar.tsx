@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   // Package, // only used by the commented-out Stock Management item below
   Receipt,
+  ReceiptText,
   Box,
   Truck,
   Users,
@@ -142,6 +143,13 @@ const Sidebar = () => {
           moduleKey: "SALES" as ModuleKey,
           icon: Receipt,
           path: "/dashboard/salesBilling",
+          isLocked: !hasApprovedPharmacy,
+        },
+        {
+          name: "Sales Return",
+          moduleKey: "SALES" as ModuleKey,
+          icon: ReceiptText,
+          path: "/dashboard/salesReturn",
           isLocked: !hasApprovedPharmacy,
         },
         {
