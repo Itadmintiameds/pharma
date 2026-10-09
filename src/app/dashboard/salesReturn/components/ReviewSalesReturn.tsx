@@ -12,6 +12,7 @@ import { getBillingById } from "@/services/BillingService";
 import { createSalesReturn } from "@/services/SalesReturnService";
 import { BillingRecord } from "@/types/BillingData";
 import { SalesReturnData } from "@/types/SalesReturnData";
+import { pendingAfterReturns } from "@/utils/salesReturnAmounts";
 import {
   clearSalesReturnDraft,
   loadSalesReturnDraft,
@@ -372,25 +373,11 @@ const ReviewSalesReturn = () => {
   const isIpPatient = billing?.customerType === "IP_PATIENT";
   // TODO: read the patient's live IP account outstanding once an API exists.
   // Until then it is what is still owed on the bill — the pending amount after
-  // its latest payment — less what earlier returns already took off it. Each
-  // earlier return cleared min(its amount, the outstanding at the time), and
-  // those add up to max(pending − returned so far, 0). e.g. ₹7,500 bill, ₹500
-  // paid → ₹7,000 pending; ₹6,000 returned before → ₹1,000 outstanding now.
-  // Returned so far: each line's net amount for the units already returned,
-  // priced the same way a return line is.
-  const previouslyReturnedAmount = round2(
-    (billing?.billingDetails ?? []).reduce((sum, line) => {
-      const soldQty = Number(line.billQuantity) || 0;
-      const returnedQty = Number(line.returnedQuantity) || 0;
-      return soldQty
-        ? sum + ((Number(line.netAmount) || 0) * returnedQty) / soldQty
-        : sum;
-    }, 0)
-  );
+  // its latest payment — less what earlier returns already took off it (the
+  // same figure the Settle Payment screen collects).
   const pendingAmount = Number(billing?.billingPayments?.at(-1)?.pendingAmount) || 0;
-  const ipOutstandingBefore = isIpPatient
-    ? Math.max(round2(pendingAmount - previouslyReturnedAmount), 0)
-    : 0;
+  const ipOutstandingBefore =
+    isIpPatient && billing ? pendingAfterReturns(pendingAmount, billing) : 0;
   const outstandingAdjustment = Math.min(returnAmount, ipOutstandingBefore);
   const refundAmount = returnAmount - outstandingAdjustment;
   const ipOutstandingAfter = ipOutstandingBefore - outstandingAdjustment;

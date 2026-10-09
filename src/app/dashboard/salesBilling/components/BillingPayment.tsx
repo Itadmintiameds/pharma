@@ -42,6 +42,11 @@ interface BillingPaymentProps {
   mode?: "create" | "settle";
   pendingAmount?: number;
   billNo?: string;
+  /**
+   * Settle only: set when sales returns against the bill brought
+   * `pendingAmount` down from what the payments alone leave owing.
+   */
+  returnAdjustment?: { returnedAmount: number; pendingBeforeReturns: number };
 }
 
 /**
@@ -73,6 +78,7 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
   mode = "create",
   pendingAmount,
   billNo,
+  returnAdjustment,
 }) => {
   const isSettling = mode === "settle";
   /** Settling clears the outstanding balance; billing clears the whole net. */
@@ -191,6 +197,24 @@ const BillingPayment: React.FC<BillingPaymentProps> = ({
         <div className="text-[24px] font-semibold tracking-normal text-[#1E1E1D]">
           {isSettling ? `Settle Payment${billNo ? ` — ${billNo}` : ""}` : "Billing POS"}
         </div>
+
+        {/* Sales returns already taken off what is owed on this bill */}
+        {isSettling && returnAdjustment && (
+          <div
+            role="status"
+            className="flex w-full flex-col gap-xxsm rounded-2xl border border-info-300 bg-info-50 p-md"
+          >
+            <p className="text-label-l4 font-semibold text-pneutral-900">
+              This bill has been partially returned
+            </p>
+            <p className="text-p3 font-regular text-pneutral-700">
+              Sales returns worth ₹ {formatAmount(returnAdjustment.returnedAmount)} have
+              been adjusted against this bill. Pending amount reduced from ₹{" "}
+              {formatAmount(returnAdjustment.pendingBeforeReturns)} to ₹{" "}
+              {formatAmount(amountDue)}.
+            </p>
+          </div>
+        )}
 
         {/* Main Columns - items-stretch guarantees equal height for both cards */}
         <div className="flex flex-col lg:flex-row gap-6 items-stretch w-full">

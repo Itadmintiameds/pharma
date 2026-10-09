@@ -51,6 +51,7 @@ import {
   type CurrentPharmacy,
 } from "@/services/PharmacyService";
 import { parseGstPercentage } from "@/utils/gst";
+import { pendingAfterReturns, returnedAmountOf } from "@/utils/salesReturnAmounts";
 
 type Step = "list" | "billing" | "payment" | "invoice" | "settle";
 
@@ -79,8 +80,15 @@ const toBillRecord = (bill: BillingRecord): BillRecord => {
     totalItems: bill.billingDetails?.length ?? 0,
     paymentMode: payment?.paymentMode ?? "CASH",
     // The bill carries the settled flag; the payments only carry balances.
-    // Anything not fully PAID is still owed, so it reads as pending.
-    status: bill.paymentType === "PAID" ? "Paid" : "Pending",
+    // Anything not fully PAID is still owed, so it reads as pending — unless
+    // sales returns have taken off everything that was left to collect
+    // (every product returned, or returns worth at least the pending amount).
+    status:
+      bill.paymentType === "PAID" ||
+      bill.salesReturnStatus === "Returned" ||
+      (returnedAmountOf(bill) > 0 && pendingAfterReturns(pendingOf(bill), bill) <= 0)
+        ? "Paid"
+        : "Pending",
     netAmount: payableOf(bill),
   };
 };
@@ -292,6 +300,8 @@ const SalesBillingContent = () => {
   const [settling, setSettling] = useState<{
     bill: BillingRecord;
     pendingAmount: number;
+    /** Set when sales returns brought the pending amount down. */
+    returnAdjustment?: { returnedAmount: number; pendingBeforeReturns: number };
   } | null>(null);
   const [summaryMode, setSummaryMode] = useState<"create" | "view" | "download">("create");
   /**
@@ -340,17 +350,29 @@ const SalesBillingContent = () => {
   const openSettlePayment = async (billingId: number) => {
     try {
       const bill = await getBillingById(billingId);
-      const pending = pendingOf(bill);
+      // Sales returns against the bill come off what is still owed
+      const pendingBeforeReturns = pendingOf(bill);
+      const returnedAmount = returnedAmountOf(bill);
+      const pending = pendingAfterReturns(pendingBeforeReturns, bill);
 
       // Nothing to collect — opening the screen would only offer an amount of
       // zero, which no payment can clear.
       if (pending <= 0) {
-        showToast.info("This bill has no pending amount.");
+        showToast.info(
+          returnedAmount > 0
+            ? "This bill has no pending amount — sales returns have covered it."
+            : "This bill has no pending amount."
+        );
         loadBills();
         return;
       }
 
-      setSettling({ bill, pendingAmount: pending });
+      setSettling({
+        bill,
+        pendingAmount: pending,
+        returnAdjustment:
+          returnedAmount > 0 ? { returnedAmount, pendingBeforeReturns } : undefined,
+      });
       setStep("settle");
     } catch (err) {
       showToast.error(
@@ -653,6 +675,7 @@ const SalesBillingContent = () => {
         mode="settle"
         billNo={bill.billNo}
         pendingAmount={settling.pendingAmount}
+        returnAdjustment={settling.returnAdjustment}
         customer={{
           customerType: bill.customerType || "WALK_IN",
           customerId: bill.customerId,
