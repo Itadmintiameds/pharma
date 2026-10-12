@@ -21,6 +21,7 @@ import {
   ArrowLeftRight,
   Undo2,
   PackageOpen,
+  Scale,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -187,6 +188,14 @@ const Sidebar = () => {
           path: "/dashboard/StockReturnReciept",
           // The warehouse side reaches its other flows without an approved
           // pharmacy, the same as Suppliers above.
+          isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
+        },
+        // No backend module yet, so it is listed for both the pharmacy and the
+        // warehouse side and unlocks the same way as Suppliers.
+        {
+          name: "Stock Adjustment",
+          icon: Scale,
+          path: "/dashboard/stoockAdjustment",
           isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
         },
       ],
