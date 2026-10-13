@@ -9,15 +9,19 @@ import Input from "@/app/components/common/Input";
 import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { PaginationControl } from "@/app/components/common/table/Pagination";
-import { formatAmount } from "@/utils/billingTotals";
-
-const REASONS = [
-  "Damaged Stock",
-  "Physical Count Difference",
-  "Expired Stock",
-  "Data Entry Correction",
-  "Missing Stock",
-];
+import CreateStockAdjustment from "./components/CreateStockAdjustment";
+import ReviewAndConfirm from "./components/ReviewAndConfirm";
+import ConfirmSuccessModal from "./components/ConfirmSuccessModal";
+import StockAdjustmentView from "./components/StockAdjustmentView";
+import {
+  REASONS,
+  StockAdjustmentDraft,
+  StockAdjustmentRecord,
+  adjustmentQty,
+  formatSigned,
+  formatSignedRupees,
+  signedTextClass,
+} from "./components/stockAdjustmentDraft";
 
 const REASON_OPTIONS = [
   { label: "Reason: All", value: "" },
@@ -49,16 +53,6 @@ interface StockAdjustmentRow {
 
 const PAGE_SIZE = 10;
 
-/** Signed number with a true minus sign, as the design shows it ("−5", "+12"). */
-const formatSigned = (value: number, format: (abs: number) => string) =>
-  `${value < 0 ? "−" : "+"}${format(Math.abs(value))}`;
-
-const formatRupees = (value: number) =>
-  formatSigned(value, (abs) => `₹${formatAmount(abs)}`);
-
-const signedTextClass = (value: number) =>
-  value < 0 ? "text-warning-600" : "text-success-800";
-
 const buildKpiCards = (rows: StockAdjustmentRow[]) => [
   {
     key: "count",
@@ -70,7 +64,7 @@ const buildKpiCards = (rows: StockAdjustmentRow[]) => [
   {
     key: "impact",
     label: "Total Stock Value Impact",
-    value: formatRupees(rows.reduce((sum, row) => sum + row.valueImpact, 0)),
+    value: formatSignedRupees(rows.reduce((sum, row) => sum + row.valueImpact, 0)),
     cardBg: "bg-primary-100",
     icon: (
       <span className="flex size-5 items-center justify-center rounded-full border-[1.5px] border-primary-800">
@@ -160,7 +154,7 @@ const buildStockAdjustmentColumns = (
       <span
         className={`text-p3 font-semibold ${signedTextClass(row.original.valueImpact)}`}
       >
-        {formatRupees(row.original.valueImpact)}
+        {formatSignedRupees(row.original.valueImpact)}
       </span>
     ),
   },
@@ -226,8 +220,110 @@ const StockAdjustment = () => {
   const [appliedFilters, setAppliedFilters] =
     useState<StockAdjustmentFilters>(EMPTY_FILTERS);
 
-  // No stock adjustment API exists yet, so the list starts (and stays) empty.
-  const [stockAdjustments] = useState<StockAdjustmentRow[]>([]);
+  // No stock adjustment API exists yet, so the list starts empty and only holds
+  // the adjustments confirmed in this session.
+  const [stockAdjustments, setStockAdjustments] = useState<StockAdjustmentRow[]>([]);
+
+  // Full details of each confirmed adjustment, keyed by adjustment no., for View
+  const [records, setRecords] = useState<Record<string, StockAdjustmentRecord>>({});
+
+  // The create flow runs in place of the list: create → review → success modal;
+  // View replaces the list the same way.
+  const [view, setView] = useState<"list" | "create" | "review" | "view">("list");
+  const [draft, setDraft] = useState<StockAdjustmentDraft | null>(null);
+  const [confirmed, setConfirmed] = useState<StockAdjustmentRecord | null>(null);
+  const [viewing, setViewing] = useState<StockAdjustmentRecord | null>(null);
+
+  const openCreate = () => {
+    setDraft(null);
+    setView("create");
+  };
+
+  const backToList = () => {
+    setConfirmed(null);
+    setDraft(null);
+    setViewing(null);
+    setView("list");
+  };
+
+  const openView = (record: StockAdjustmentRecord | undefined) => {
+    if (!record) return;
+    setConfirmed(null);
+    setDraft(null);
+    setViewing(record);
+    setView("view");
+  };
+
+  const confirmAdjustment = () => {
+    if (!draft) return;
+    const now = new Date();
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const time = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    // Placeholder numbering until the backend issues adjustment numbers
+    const adjustmentNo = `SA-${now.getFullYear()}-${String(stockAdjustments.length + 1).padStart(5, "0")}`;
+    const qty = adjustmentQty(draft);
+
+    setStockAdjustments((prev) => [
+      {
+        id: prev.length + 1,
+        adjustmentNo,
+        adjustmentDate: `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`,
+        adjustmentTime: time,
+        productName: draft.batch.productName,
+        batchNo: draft.batch.batchNo,
+        adjustmentQty: qty,
+        reason: draft.reason,
+        valueImpact: qty * draft.batch.purchasePrice,
+      },
+      ...prev,
+    ]);
+    const record: StockAdjustmentRecord = {
+      ...draft,
+      adjustmentNo,
+      adjustedAt: `${pad(now.getDate())}-${now.toLocaleDateString("en-US", { month: "short" })}-${now.getFullYear()}, ${time}`,
+      status: "Completed",
+    };
+    setRecords((prev) => ({ ...prev, [adjustmentNo]: record }));
+    setConfirmed(record);
+  };
+
+  if (view === "view" && viewing) {
+    return <StockAdjustmentView record={viewing} onBack={backToList} />;
+  }
+
+  if (view === "create") {
+    return (
+      <CreateStockAdjustment
+        initialDraft={draft}
+        onCancel={backToList}
+        onReview={(next) => {
+          setDraft(next);
+          setView("review");
+        }}
+      />
+    );
+  }
+
+  if (view === "review" && draft) {
+    return (
+      <>
+        <ReviewAndConfirm
+          draft={draft}
+          onBack={() => setView("create")}
+          onConfirm={confirmAdjustment}
+        />
+        <ConfirmSuccessModal
+          isOpen={confirmed !== null}
+          onClose={backToList}
+          onBackToList={backToList}
+          onViewStockAdjustment={() => openView(confirmed ?? undefined)}
+          adjustmentNo={confirmed?.adjustmentNo ?? ""}
+          adjustedAt={confirmed?.adjustedAt ?? ""}
+          status="Completed"
+        />
+      </>
+    );
+  }
 
   const updateFilters = (patch: Partial<StockAdjustmentFilters>) =>
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -262,6 +358,7 @@ const StockAdjustment = () => {
         <Button
           type="button"
           variant="primary"
+          onClick={openCreate}
           className="h-12! max-h-13 min-h-12 w-full! min-w-27 shrink-0 gap-xsm rounded-lg! bg-primary-800! px-md text-label-l4! font-medium! text-pneutral-50! sm:w-69.25!"
         >
           <Plus size={20} className="shrink-0" />
@@ -361,7 +458,7 @@ const StockAdjustment = () => {
               <DataTable
                 columns={buildStockAdjustmentColumns(
                   (currentPage - 1) * PAGE_SIZE,
-                  () => {}
+                  (row) => openView(records[row.adjustmentNo])
                 )}
                 data={filteredAdjustments.slice(
                   (currentPage - 1) * PAGE_SIZE,
