@@ -195,7 +195,7 @@ const Sidebar = () => {
         {
           name: "Stock Adjustment",
           icon: Scale,
-          path: "/dashboard/stoockAdjustment",
+          path: "/dashboard/stockAdjustment",
           isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
         },
       ],

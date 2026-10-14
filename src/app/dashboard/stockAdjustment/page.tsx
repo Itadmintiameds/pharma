@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { ColumnDef } from "@tanstack/react-table";
 import { IndianRupee, Plus, Scale, Search } from "lucide-react";
@@ -16,12 +16,13 @@ import StockAdjustmentView from "./components/StockAdjustmentView";
 import {
   REASONS,
   StockAdjustmentDraft,
-  StockAdjustmentRecord,
-  adjustmentQty,
+  formatAdjustedAt,
   formatSigned,
   formatSignedRupees,
   signedTextClass,
 } from "./components/stockAdjustmentDraft";
+import { getAllStockAdjustments } from "@/services/StockAdjustmentService";
+import { StockAdjustmentData } from "@/types/StockAdjustmentData";
 
 const REASON_OPTIONS = [
   { label: "Reason: All", value: "" },
@@ -52,6 +53,40 @@ interface StockAdjustmentRow {
 }
 
 const PAGE_SIZE = 10;
+
+/** ISO date-time from the API → "dd-mm-yyyy". */
+const formatAdjustmentDate = (value?: string) => {
+  const [year, month, day] = (value ?? "").split("T")[0].split("-");
+  return year && month && day ? `${day}-${month}-${year}` : "—";
+};
+
+/** ISO date-time from the API → "hh:mm AM/PM". */
+const formatAdjustmentTime = (value?: string) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime())
+    ? date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+    : "";
+};
+
+const toStockAdjustmentRow = (
+  adjustment: StockAdjustmentData
+): StockAdjustmentRow => {
+  // The backend stores adjustmentQty unsigned; the direction is in adjustmentType.
+  // adjustmentValue already comes back negative for DECREASE.
+  const sign = adjustment.adjustmentType === "DECREASE" ? -1 : 1;
+
+  return {
+    id: adjustment.stockAdjustmentId ?? 0,
+    adjustmentNo: adjustment.stockAdjustmentNo ?? "—",
+    adjustmentDate: formatAdjustmentDate(adjustment.stockAdjustmentDate),
+    adjustmentTime: formatAdjustmentTime(adjustment.stockAdjustmentDate),
+    productName: adjustment.productName ?? "—",
+    batchNo: adjustment.batchNumber ?? "—",
+    adjustmentQty: sign * Math.abs(adjustment.adjustmentQty ?? 0),
+    reason: adjustment.stockAdjustmentReason ?? "—",
+    valueImpact: adjustment.adjustmentValue ?? 0,
+  };
+};
 
 const buildKpiCards = (rows: StockAdjustmentRow[]) => [
   {
@@ -220,19 +255,52 @@ const StockAdjustment = () => {
   const [appliedFilters, setAppliedFilters] =
     useState<StockAdjustmentFilters>(EMPTY_FILTERS);
 
-  // No stock adjustment API exists yet, so the list starts empty and only holds
-  // the adjustments confirmed in this session.
   const [stockAdjustments, setStockAdjustments] = useState<StockAdjustmentRow[]>([]);
-
-  // Full details of each confirmed adjustment, keyed by adjustment no., for View
-  const [records, setRecords] = useState<Record<string, StockAdjustmentRecord>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   // The create flow runs in place of the list: create → review → success modal;
   // View replaces the list the same way.
   const [view, setView] = useState<"list" | "create" | "review" | "view">("list");
   const [draft, setDraft] = useState<StockAdjustmentDraft | null>(null);
-  const [confirmed, setConfirmed] = useState<StockAdjustmentRecord | null>(null);
-  const [viewing, setViewing] = useState<StockAdjustmentRecord | null>(null);
+  // What the success modal shows for the adjustment just saved
+  const [confirmed, setConfirmed] = useState<{
+    id: number;
+    adjustmentNo: string;
+    adjustedAt: string;
+  } | null>(null);
+  // View loads the adjustment by id from the backend
+  const [viewingId, setViewingId] = useState<number | null>(null);
+
+  // Keyed on the view so returning to the list refetches: an adjustment made in
+  // the create flow has to show up in the table and totals behind it.
+  useEffect(() => {
+    if (view !== "list") return;
+
+    // isLoading starts true for the first load; on a refetch the previous
+    // rows stay up until the new ones arrive.
+    let active = true;
+
+    getAllStockAdjustments()
+      .then((data) => {
+        if (!active) return;
+        setStockAdjustments(data.map(toStockAdjustmentRow));
+        setLoadError("");
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error("Failed to fetch stock adjustments:", err);
+        setLoadError(err?.message || "Failed to fetch stock adjustments.");
+        setStockAdjustments([]);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [view]);
 
   const openCreate = () => {
     setDraft(null);
@@ -242,53 +310,30 @@ const StockAdjustment = () => {
   const backToList = () => {
     setConfirmed(null);
     setDraft(null);
-    setViewing(null);
+    setViewingId(null);
     setView("list");
   };
 
-  const openView = (record: StockAdjustmentRecord | undefined) => {
-    if (!record) return;
+  const openView = (stockAdjustmentId: number | undefined) => {
+    if (!stockAdjustmentId) return;
     setConfirmed(null);
     setDraft(null);
-    setViewing(record);
+    setViewingId(stockAdjustmentId);
     setView("view");
   };
 
-  const confirmAdjustment = () => {
-    if (!draft) return;
-    const now = new Date();
-    const pad = (value: number) => String(value).padStart(2, "0");
-    const time = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-    // Placeholder numbering until the backend issues adjustment numbers
-    const adjustmentNo = `SA-${now.getFullYear()}-${String(stockAdjustments.length + 1).padStart(5, "0")}`;
-    const qty = adjustmentQty(draft);
-
-    setStockAdjustments((prev) => [
-      {
-        id: prev.length + 1,
-        adjustmentNo,
-        adjustmentDate: `${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}`,
-        adjustmentTime: time,
-        productName: draft.batch.productName,
-        batchNo: draft.batch.batchNo,
-        adjustmentQty: qty,
-        reason: draft.reason,
-        valueImpact: qty * draft.batch.purchasePrice,
-      },
-      ...prev,
-    ]);
-    const record: StockAdjustmentRecord = {
-      ...draft,
-      adjustmentNo,
-      adjustedAt: `${pad(now.getDate())}-${now.toLocaleDateString("en-US", { month: "short" })}-${now.getFullYear()}, ${time}`,
-      status: "Completed",
-    };
-    setRecords((prev) => ({ ...prev, [adjustmentNo]: record }));
-    setConfirmed(record);
+  // ReviewAndConfirm has already saved it; the list refetches on the way back,
+  // so only the success modal needs it here.
+  const confirmAdjustment = (saved: StockAdjustmentData) => {
+    setConfirmed({
+      id: saved.stockAdjustmentId ?? 0,
+      adjustmentNo: saved.stockAdjustmentNo ?? "—",
+      adjustedAt: formatAdjustedAt(saved.stockAdjustmentDate),
+    });
   };
 
-  if (view === "view" && viewing) {
-    return <StockAdjustmentView record={viewing} onBack={backToList} />;
+  if (view === "view" && viewingId) {
+    return <StockAdjustmentView stockAdjustmentId={viewingId} onBack={backToList} />;
   }
 
   if (view === "create") {
@@ -316,7 +361,7 @@ const StockAdjustment = () => {
           isOpen={confirmed !== null}
           onClose={backToList}
           onBackToList={backToList}
-          onViewStockAdjustment={() => openView(confirmed ?? undefined)}
+          onViewStockAdjustment={() => openView(confirmed?.id)}
           adjustmentNo={confirmed?.adjustmentNo ?? ""}
           adjustedAt={confirmed?.adjustedAt ?? ""}
           status="Completed"
@@ -435,7 +480,11 @@ const StockAdjustment = () => {
 
       {/* SA Table Card */}
       <div className="flex w-full flex-col gap-md rounded-2xl border border-pneutral-200 bg-white p-md">
-        {filteredAdjustments.length === 0 ? (
+        {isLoading || loadError ? (
+          <div className="flex h-40 items-center justify-center text-label-l4 text-pneutral-500">
+            {isLoading ? "Loading stock adjustments..." : loadError}
+          </div>
+        ) : filteredAdjustments.length === 0 ? (
           filtersApplied ? (
             /* SA No-Match State — Figma node 4191:43163 */
             <StockAdjustmentEmptyState
@@ -458,7 +507,7 @@ const StockAdjustment = () => {
               <DataTable
                 columns={buildStockAdjustmentColumns(
                   (currentPage - 1) * PAGE_SIZE,
-                  (row) => openView(records[row.adjustmentNo])
+                  (row) => openView(row.id)
                 )}
                 data={filteredAdjustments.slice(
                   (currentPage - 1) * PAGE_SIZE,

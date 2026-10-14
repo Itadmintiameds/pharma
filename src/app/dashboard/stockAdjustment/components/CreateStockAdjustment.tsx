@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, ArrowRight, CircleAlert, Info, Search } from "lucide-react";
 import Button from "@/app/components/common/Button";
@@ -17,6 +17,7 @@ import {
   OTHER_REASON,
   REASON_OPTIONS,
   StockAdjustmentDraft,
+  BatchApiRow,
   adjustmentQty,
   adjustmentType,
   formatQtyWithUnit,
@@ -25,54 +26,8 @@ import {
   formatSignedRupees,
   signedTextClass,
   singularUnit,
+  toAdjustableBatch,
 } from "./stockAdjustmentDraft";
-
-// Shape of one row returned by GET /product/batches (ProductService.getAllBatches).
-type BatchApiRow = {
-  batchId?: string;
-  batchNumber?: string;
-  expiryDate?: string;
-  productId?: string;
-  productName?: string;
-  brandName?: string;
-  purchaseUnit?: string;
-  purchaseSmallestUnitName?: string;
-  purchaseUnitContains?: number;
-  packagingId?: string;
-  totalStock?: number;
-  stockQty?: number;
-  purchasePrice?: number;
-  purchasePricePerUnit?: number;
-};
-
-/** "2028-08-31" → "Aug 2028". */
-const formatExpiry = (expiryDate?: string) => {
-  const date = new Date(expiryDate ?? "");
-  if (Number.isNaN(date.getTime())) return expiryDate || "—";
-  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-};
-
-/** Stock is stored in smallest units; the adjustment screens work in purchase units. */
-const toAdjustableBatch = (row: BatchApiRow): AdjustableBatch | null => {
-  if (!row.productId || !row.batchId) return null;
-  const unitContains = Number(row.purchaseUnitContains) > 0 ? Number(row.purchaseUnitContains) : 1;
-  const stockBase = Number(row.stockQty ?? row.totalStock) || 0;
-
-  return {
-    id: `${row.productId}-${row.batchId}-${row.packagingId ?? ""}`,
-    productId: row.productId,
-    productName: row.productName || "Unknown Product",
-    brandName: row.brandName || "—",
-    batchId: row.batchId,
-    batchNo: row.batchNumber || "N/A",
-    packagingId: row.packagingId || "",
-    expiry: formatExpiry(row.expiryDate),
-    purchaseUnit: row.purchaseUnit || row.purchaseSmallestUnitName || "",
-    currentStock: Number((stockBase / unitContains).toFixed(2)),
-    purchasePrice:
-      Number(row.purchasePrice) || (Number(row.purchasePricePerUnit) || 0) * unitContains,
-  };
-};
 
 const buildBatchColumns = (
   onSelect: (batch: AdjustableBatch) => void
@@ -198,9 +153,10 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   const location =
     selectedPharmacy?.pharmacyName?.trim() || pharmacies[0]?.pharmacyName?.trim() || "—";
 
-  const [catalog, setCatalog] = useState<AdjustableBatch[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
   const [loadError, setLoadError] = useState("");
+  // Bumped on every search so a slower, older response can't overwrite a newer one
+  const searchIdRef = useRef(0);
 
   const [batchQuery, setBatchQuery] = useState(initialDraft?.batch.batchNo ?? "");
   // null until the first search; then the batches that matched it
@@ -214,48 +170,42 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   // Remarks only shows its error once the user has left it empty
   const [remarksTouched, setRemarksTouched] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-
-    ProductService.getAllBatches()
-      .then((res) => {
-        if (!active) return;
-        const seen = new Set<string>();
-        setCatalog(
-          ((res?.data || []) as BatchApiRow[])
-            .map(toAdjustableBatch)
-            .filter((batch): batch is AdjustableBatch => {
-              if (!batch || seen.has(batch.id)) return false;
-              seen.add(batch.id);
-              return true;
-            })
-        );
-        setLoadError("");
-      })
-      .catch((err) => {
-        if (!active) return;
-        console.error("Failed to fetch pharmacy batches:", err);
-        setLoadError("Could not load inventory batches.");
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const searchBatches = () => {
-    const query = batchQuery.trim().toLowerCase();
+  // The backend matches the batch no. (partial, case-insensitive) at the current location
+  const searchBatches = async () => {
+    const query = batchQuery.trim();
     if (!query) return;
-    setMatches(catalog.filter((batch) => batch.batchNo.toLowerCase().includes(query)));
+
+    const searchId = ++searchIdRef.current;
     // A new search starts the adjustment over
     setSelected(null);
     setActualStock("");
     setReason("");
     setRemarks("");
     setRemarksTouched(false);
+    setIsSearching(true);
+    setLoadError("");
+
+    try {
+      const res = await ProductService.searchBatchesByBatchNumber(query);
+      if (searchId !== searchIdRef.current) return;
+      const seen = new Set<string>();
+      setMatches(
+        ((res?.data || []) as BatchApiRow[])
+          .map(toAdjustableBatch)
+          .filter((batch): batch is AdjustableBatch => {
+            if (!batch || seen.has(batch.id)) return false;
+            seen.add(batch.id);
+            return true;
+          })
+      );
+    } catch (err) {
+      if (searchId !== searchIdRef.current) return;
+      console.error("Failed to fetch pharmacy batches:", err);
+      setLoadError("Could not load inventory batches.");
+      setMatches(null);
+    } finally {
+      if (searchId === searchIdRef.current) setIsSearching(false);
+    }
   };
 
   const selectBatch = (batch: AdjustableBatch) => {
@@ -333,7 +283,7 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
             type="button"
             variant="primary"
             onClick={searchBatches}
-            loading={isLoading}
+            loading={isSearching}
             disabled={!batchQuery.trim()}
             className={`${FOOTER_BUTTON} w-full! bg-pneutral-900! text-pneutral-50! md:w-35.25!`}
           >

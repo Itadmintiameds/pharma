@@ -41,6 +41,17 @@ export class ProductService {
     }
   }
 
+  // Batches at the current location whose batch number contains the given text
+  static async searchBatchesByBatchNumber(batchNumber: string) {
+    try {
+      const response = await api.get('/product/batches', { params: { batchNumber } });
+      return response.data;
+    } catch (error) {
+      console.error('Error searching batches:', error);
+      throw error;
+    }
+  }
+
   // Batches at a specific pharmacy rather than the caller's currently active one —
   // e.g. the source pharmacy chosen for a pharmacy-to-pharmacy transfer, which may
   // differ from the pharmacy the caller is scoped to via X-Pharmacy-Id.

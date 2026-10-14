@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { ArrowLeft, Check } from "lucide-react";
 import Button from "@/app/components/common/Button";
+import { createStockAdjustment } from "@/services/StockAdjustmentService";
+import { StockAdjustmentData } from "@/types/StockAdjustmentData";
 import StepIndicator from "./StepIndicator";
 import {
   CARD_SHADOW,
@@ -55,18 +58,50 @@ const Card = ({ title, className = "", children }: { title: string; className?: 
 interface ReviewAndConfirmProps {
   draft: StockAdjustmentDraft;
   onBack: () => void;
-  onConfirm: () => void;
-  isSubmitting?: boolean;
+  /** Called with the adjustment as saved by the backend. */
+  onConfirm: (saved: StockAdjustmentData) => void;
 }
 
 /** SA Review screen — Figma node 4191:43373. */
-const ReviewAndConfirm = ({ draft, onBack, onConfirm, isSubmitting = false }: ReviewAndConfirmProps) => {
+const ReviewAndConfirm = ({ draft, onBack, onConfirm }: ReviewAndConfirmProps) => {
   const { batch, actualStock, reason, remarks, location } = draft;
   const unit = batch.purchaseUnit;
   const qty = adjustmentQty(draft);
   const currentValue = batch.currentStock * batch.purchasePrice;
   const adjustmentValue = qty * batch.purchasePrice;
   const isDecrease = qty < 0;
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  const confirmAdjustment = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError("");
+
+    try {
+      const saved = await createStockAdjustment({
+        productId: batch.productId,
+        batchId: batch.batchId,
+        // The screen works in purchase units; the backend counts smallest units.
+        // It derives adjustmentQty itself and signs adjustmentValue from the type.
+        actualStockQty: Math.round(actualStock * batch.unitContains),
+        adjustmentQty: Math.round(Math.abs(qty) * batch.unitContains),
+        adjustmentType: isDecrease ? "DECREASE" : "INCREASE",
+        adjustmentValue: Math.round(Math.abs(adjustmentValue)),
+        stockAdjustmentReason: reason,
+        stockAdjustmentRemarks: remarks || undefined,
+      });
+      onConfirm(saved);
+    } catch (err) {
+      console.error("Failed to create the stock adjustment:", err);
+      setSubmitError(
+        err instanceof Error ? err.message : "Failed to create the stock adjustment."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-md">
@@ -149,6 +184,8 @@ const ReviewAndConfirm = ({ draft, onBack, onConfirm, isSubmitting = false }: Re
         </div>
       </Card>
 
+      {submitError && <p className="text-p2 text-warning-500">{submitError}</p>}
+
       {/* SA Review Footer Row */}
       <div className="flex w-full flex-col-reverse gap-sm sm:flex-row sm:items-center sm:justify-between">
         <Button
@@ -165,7 +202,7 @@ const ReviewAndConfirm = ({ draft, onBack, onConfirm, isSubmitting = false }: Re
         <Button
           type="button"
           variant="primary"
-          onClick={onConfirm}
+          onClick={confirmAdjustment}
           loading={isSubmitting}
           className={`${FOOTER_BUTTON} w-full! bg-primary-800! text-pneutral-50! sm:w-59.75!`}
         >

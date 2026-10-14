@@ -38,6 +38,8 @@ export interface AdjustableBatch {
   /** "Aug 2028" */
   expiry: string;
   purchaseUnit: string;
+  /** Smallest units in one purchase unit — the backend stores stock in smallest units. */
+  unitContains: number;
   /** Current system stock, in purchase units. */
   currentStock: number;
   /** Purchase price per purchase unit. */
@@ -53,13 +55,63 @@ export interface StockAdjustmentDraft {
   remarks: string;
 }
 
-/** A confirmed adjustment — what the success modal and View screen show. */
-export interface StockAdjustmentRecord extends StockAdjustmentDraft {
-  adjustmentNo: string;
-  /** "01-Oct-2026, 03:15 PM" */
-  adjustedAt: string;
-  status: string;
-}
+// Shape of one batch row from GET /product/batches and /product/batch/{id}.
+export type BatchApiRow = {
+  batchId?: string;
+  batchNumber?: string;
+  expiryDate?: string;
+  productId?: string;
+  productName?: string;
+  brandName?: string;
+  purchaseUnit?: string;
+  purchaseSmallestUnitName?: string;
+  purchaseUnitContains?: number;
+  packagingId?: string;
+  totalStock?: number;
+  stockQty?: number;
+  purchasePrice?: number;
+  purchasePricePerUnit?: number;
+};
+
+/** "2028-08-31" → "Aug 2028". */
+const formatExpiry = (expiryDate?: string) => {
+  const date = new Date(expiryDate ?? "");
+  if (Number.isNaN(date.getTime())) return expiryDate || "—";
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+};
+
+/** Stock is stored in smallest units; the adjustment screens work in purchase units. */
+export const toAdjustableBatch = (row: BatchApiRow): AdjustableBatch | null => {
+  if (!row.productId || !row.batchId) return null;
+  const unitContains = Number(row.purchaseUnitContains) > 0 ? Number(row.purchaseUnitContains) : 1;
+  const stockBase = Number(row.stockQty ?? row.totalStock) || 0;
+
+  return {
+    id: `${row.productId}-${row.batchId}-${row.packagingId ?? ""}`,
+    productId: row.productId,
+    productName: row.productName || "Unknown Product",
+    brandName: row.brandName || "—",
+    batchId: row.batchId,
+    batchNo: row.batchNumber || "N/A",
+    packagingId: row.packagingId || "",
+    expiry: formatExpiry(row.expiryDate),
+    purchaseUnit: row.purchaseUnit || row.purchaseSmallestUnitName || "",
+    unitContains,
+    currentStock: Number((stockBase / unitContains).toFixed(2)),
+    purchasePrice:
+      Number(row.purchasePrice) || (Number(row.purchasePricePerUnit) || 0) * unitContains,
+  };
+};
+
+/** ISO date-time from the API → "01-Oct-2026, 03:15 PM". */
+export const formatAdjustedAt = (value?: string) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "—";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = date.toLocaleDateString("en-US", { month: "short" });
+  const time = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  return `${day}-${month}-${date.getFullYear()}, ${time}`;
+};
 
 /** Actual minus system stock: negative removes stock, positive adds it. */
 export const adjustmentQty = (draft: Pick<StockAdjustmentDraft, "batch" | "actualStock">) =>
