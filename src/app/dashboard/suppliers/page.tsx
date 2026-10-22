@@ -19,15 +19,6 @@ const STATUS_OPTIONS = [
   { label: "Inactive", value: "Inactive" },
 ];
 
-const STATE_OPTIONS = [
-  { label: "Maharashtra", value: "Maharashtra" },
-  { label: "Gujarat", value: "Gujarat" },
-  { label: "Karnataka", value: "Karnataka" },
-  { label: "Delhi", value: "Delhi" },
-  { label: "Tamil Nadu", value: "Tamil Nadu" },
-  { label: "West Bengal", value: "West Bengal" },
-];
-
 interface SupplierRow {
   id: number;
   name: string;
@@ -41,13 +32,19 @@ interface SupplierRow {
 
 const PAGE_SIZE = 10;
 
+type Screen =
+  | { view: "list" }
+  | { view: "add" }
+  | { view: "edit"; id: number }
+  | { view: "view"; id: number };
+
 const buildSupplierColumns = (
   rowOffset: number,
   onView: (id: number) => void,
   onEdit: (id: number) => void
 ): ColumnDef<SupplierRow>[] => [
   {
-    header: "#",
+    header: "SL NO",
     cell: ({ row }) => (
       <span className="text-p3 font-regular text-pneutral-900">
         {rowOffset + row.index + 1}
@@ -148,11 +145,26 @@ const SuppliersContent = () => {
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Which screen is showing is kept in state, not the URL, so supplier ids
+  // and actions never appear in the address bar. The one exception is the
+  // entry from another flow (Goods Receipt's "Add Supplier"), which arrives
+  // as ?view=add&returnTo=… — read once here, then stripped from the URL.
+  const [screen, setScreen] = useState<Screen>(() =>
+    searchParams.get("view") === "add" ? { view: "add" } : { view: "list" }
+  );
+  const [returnTo] = useState(() => searchParams.get("returnTo"));
+
   useEffect(() => {
-    // Refetch whenever we land back on the list (e.g. after ?view=add or
-    // ?view=view closes) so a newly added supplier shows up without a full
-    // page reload, and a single-supplier view doesn't need the whole list.
-    if (searchParams.get("view")) return;
+    if (searchParams.toString()) router.replace("/dashboard/suppliers");
+  }, [searchParams, router]);
+
+  const showList = () => setScreen({ view: "list" });
+
+  useEffect(() => {
+    // Refetch whenever we land back on the list (e.g. after add/view closes)
+    // so a newly added supplier shows up without a full page reload, and a
+    // single-supplier view doesn't need the whole list.
+    if (screen.view !== "list") return;
 
     let active = true;
     const load = async () => {
@@ -185,7 +197,18 @@ const SuppliersContent = () => {
     return () => {
       active = false;
     };
-  }, [searchParams]);
+  }, [screen.view]);
+
+  // Only offer states that at least one supplier is actually in.
+  const stateOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(suppliers.map((s) => s.state).filter((s) => s && s !== "—"))
+      )
+        .sort((a, b) => a.localeCompare(b))
+        .map((s) => ({ label: s, value: s })),
+    [suppliers]
+  );
 
   const filteredSuppliers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -209,23 +232,21 @@ const SuppliersContent = () => {
     setCurrentPage(1);
   }, [search, status, state]);
 
-  if (searchParams.get("view") === "add") {
-    return <Supplier />;
+  if (screen.view === "add") {
+    return <Supplier returnTo={returnTo} onClose={showList} />;
   }
 
-  const activeSupplierId = searchParams.get("id");
-
-  if (searchParams.get("view") === "edit" && activeSupplierId) {
-    return <Supplier supplierId={activeSupplierId} />;
+  if (screen.view === "edit") {
+    return <Supplier supplierId={screen.id} onClose={showList} />;
   }
 
-  if (searchParams.get("view") === "view" && activeSupplierId) {
+  if (screen.view === "view") {
+    const { id } = screen;
     return (
       <SupplierView
-        supplierId={activeSupplierId}
-        onEdit={() =>
-          router.push(`/dashboard/suppliers?view=edit&id=${activeSupplierId}`)
-        }
+        supplierId={id}
+        onEdit={() => setScreen({ view: "edit", id })}
+        onBack={showList}
       />
     );
   }
@@ -243,7 +264,7 @@ const SuppliersContent = () => {
         <Button
           type="button"
           variant="primary"
-          onClick={() => router.push("/dashboard/suppliers?view=add")}
+          onClick={() => setScreen({ view: "add" })}
           className="h-12! w-auto! min-w-27 shrink-0 gap-2 rounded-lg! bg-primary-800! px-4 text-label-l4! font-medium! text-pneutral-50!"
         >
           <Image
@@ -277,7 +298,7 @@ const SuppliersContent = () => {
         />
 
         <Dropdown
-          options={STATE_OPTIONS}
+          options={stateOptions}
           value={state}
           onChange={setState}
           placeholder="All States"
@@ -290,8 +311,8 @@ const SuppliersContent = () => {
         <DataTable
           columns={buildSupplierColumns(
             (currentPage - 1) * PAGE_SIZE,
-            (id) => router.push(`/dashboard/suppliers?view=view&id=${id}`),
-            (id) => router.push(`/dashboard/suppliers?view=edit&id=${id}`)
+            (id) => setScreen({ view: "view", id }),
+            (id) => setScreen({ view: "edit", id })
           )}
           data={pageData}
           emptyState={

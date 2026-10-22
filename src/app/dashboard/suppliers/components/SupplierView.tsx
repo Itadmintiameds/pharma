@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CircleCheck,
@@ -53,6 +52,7 @@ interface SupplierViewProps {
   supplierId: string | number;
   description?: string;
   onEdit?: () => void;
+  onBack: () => void;
 }
 
 // Figma node 3469:5832 ("SV Header Row") + 3469:5841 ("Basic / Identification Details Card")
@@ -61,9 +61,8 @@ const SupplierView = ({
   supplierId,
   description = "Complete supplier master record including identification, contact, and financial details.",
   onEdit,
+  onBack,
 }: SupplierViewProps) => {
-  const router = useRouter();
-
   const [supplier, setSupplier] = useState<SupplierData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +131,7 @@ const SupplierView = ({
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push("/dashboard/suppliers")}
+            onClick={onBack}
             className="h-12! w-full! min-w-27 shrink-0 gap-2 rounded-lg! border-2! border-pneutral-900! px-4 text-label-l4! font-medium! text-pneutral-900! sm:w-auto!"
           >
             <ArrowLeft size={20} className="shrink-0" />

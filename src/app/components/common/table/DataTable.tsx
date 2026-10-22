@@ -22,6 +22,8 @@ interface DataTableProps<TData> {
   /** Controlled pagination. Omit for a table that shows everything it is given. */
   pagination?: TablePagination;
   meta?: any;
+  /** Extra classes for a body row, e.g. to highlight the selected one. */
+  rowClassName?: (row: TData) => string;
 }
 
 export default function DataTable<TData>({
@@ -30,6 +32,7 @@ export default function DataTable<TData>({
   emptyState,
   pagination,
   meta,
+  rowClassName,
 }: DataTableProps<TData>) {
   const table = useReactTable({
     columns,
@@ -82,7 +85,10 @@ export default function DataTable<TData>({
           )}
 
           {table.getRowModel().rows.map((row) => (
-            <tr key={row.id} className="border border-pneutral-200 h-17">
+            <tr
+              key={row.id}
+              className={`border border-pneutral-200 h-17 ${rowClassName?.(row.original) ?? ""}`}
+            >
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}

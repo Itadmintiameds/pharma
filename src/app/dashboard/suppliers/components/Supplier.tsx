@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CircleCheck,
@@ -32,6 +32,11 @@ interface PostOffice {
 
 interface SupplierProps {
   supplierId?: string | number;
+  // Present when opened from another flow (e.g. Goods Receipt's "Add
+  // Supplier") — Cancel/Back/Save all return there instead of the list.
+  returnTo?: string | null;
+  /** Back to the suppliers list. */
+  onClose: () => void;
 }
 
 /** "YYYY-MM-DDT00:00:00" (the entity's LocalDateTime) -> "YYYY-MM-DD" (native date input value). */
@@ -55,12 +60,9 @@ const getMinDlExpiryDate = (): string => {
   return toLocalDateString(tomorrow);
 };
 
-const Supplier = ({ supplierId }: SupplierProps) => {
+const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  // Present when opened from another flow (e.g. Goods Receipt's "Add
-  // Supplier") — Cancel/Back/Save all return there instead of the list.
-  const returnTo = searchParams.get("returnTo");
+  const handleClose = () => (returnTo ? router.push(returnTo) : onClose());
   const isEditMode = supplierId !== undefined;
 
   const [supplierName, setSupplierName] = useState("");
@@ -353,7 +355,7 @@ const Supplier = ({ supplierId }: SupplierProps) => {
               : returnTo
           );
         } else {
-          router.push("/dashboard/suppliers");
+          onClose();
         }
       } else {
         resetForm();
@@ -431,7 +433,7 @@ const Supplier = ({ supplierId }: SupplierProps) => {
         <Button
           type="button"
           variant="outline"
-          onClick={() => router.push(returnTo || "/dashboard/suppliers")}
+          onClick={handleClose}
           className="h-12! w-auto! min-w-27 shrink-0 gap-2 rounded-lg! border-secondary-700! px-4 text-label-l4! font-medium! text-secondary-700!"
         >
           <ArrowLeft size={20} className="shrink-0" />
@@ -465,7 +467,11 @@ const Supplier = ({ supplierId }: SupplierProps) => {
             required
             placeholder="07AAACM1234F1Z5"
             value={gstin}
-            onChange={handleFieldChange("gstinNo", setGstin)}
+            onChange={(e) => {
+              const value = e.target.value.toUpperCase().slice(0, 15);
+              setGstin(value);
+              validateField("gstinNo", value);
+            }}
             error={errors.gstinNo}
             readOnly={isEditMode}
             className="rounded-sm!"
@@ -544,6 +550,8 @@ const Supplier = ({ supplierId }: SupplierProps) => {
           <div className="hidden flex-1 sm:block" aria-hidden="true" />
         </div>
 
+        {/* New suppliers are always created Active; status is editable only afterwards. */}
+        {isEditMode && (
         <div className="flex flex-col items-start gap-xsm">
           <div className="flex items-center gap-1">
             <span className="text-p3 font-medium text-pneutral-900">
@@ -579,6 +587,7 @@ const Supplier = ({ supplierId }: SupplierProps) => {
             </span>
           </button>
         </div>
+        )}
       </div>
 
       {/* Contact Details — Figma node 3436:42506 */}
@@ -797,7 +806,7 @@ const Supplier = ({ supplierId }: SupplierProps) => {
           <Button
             type="button"
             variant="outline"
-            onClick={() => router.push(returnTo || "/dashboard/suppliers")}
+            onClick={handleClose}
             className="h-12! w-auto! min-w-27 shrink-0 rounded-lg! border-secondary-700! px-4 text-label-l4! font-medium! text-secondary-700!"
           >
             Cancel

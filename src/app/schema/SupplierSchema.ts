@@ -37,8 +37,8 @@ export const supplierSchema = z.object({
     .min(1, "Supplier Name is required")
     .max(50, "Supplier Name cannot exceed 50 characters")
     .regex(
-      /^[A-Za-z ]+$/,
-      "Supplier Name can only contain alphabets"
+      /^[A-Za-z0-9 ]+$/,
+      "Supplier Name can only contain letters and numbers"
     ),
 
   gstinNo: gstNumberFormat,

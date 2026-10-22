@@ -22,6 +22,7 @@ import {
   Undo2,
   PackageOpen,
   Scale,
+  Wallet,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -215,6 +216,14 @@ const Sidebar = () => {
           name: "Suppliers",
           icon: Truck,
           path: "/dashboard/suppliers",
+          isLocked: isSuppliersUnlockedForWarehouse
+            ? false
+            : !hasApprovedPharmacy,
+        },
+        {
+          name: "Supplier Payment",
+          icon: Wallet,
+          path: "/dashboard/supplierPayment",
           isLocked: isSuppliersUnlockedForWarehouse
             ? false
             : !hasApprovedPharmacy,
