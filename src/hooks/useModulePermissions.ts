@@ -16,6 +16,7 @@
 import { useMemo } from "react";
 import {
   bypassesPermissionChecks,
+  grantModuleOf,
   MODULE_ROUTES,
   ModuleKey,
 } from "@/access/accessControl";
@@ -45,17 +46,17 @@ export const useModulePermissions = (moduleKey: ModuleKey): ModulePermissions =>
       };
     }
 
-    const featureKey =
-      MODULE_ROUTES.find((route) => route.moduleKey === moduleKey)?.featureKey ??
-      moduleKey;
+    const route = MODULE_ROUTES.find((r) => r.moduleKey === moduleKey);
+    const grantModule = route ? grantModuleOf(route) : moduleKey;
+    const featureKey = route?.featureKey ?? moduleKey;
 
     return {
-      canView: can(moduleKey, featureKey, "VIEW"),
-      canCreate: can(moduleKey, featureKey, "CREATE"),
-      canEdit: can(moduleKey, featureKey, "EDIT"),
-      canPrint: can(moduleKey, featureKey, "PRINT"),
-      canExport: can(moduleKey, featureKey, "EXPORT"),
-      canActivateDeactivate: can(moduleKey, featureKey, "ACTIVATE_DEACTIVATE"),
+      canView: can(grantModule, featureKey, "VIEW"),
+      canCreate: can(grantModule, featureKey, "CREATE"),
+      canEdit: can(grantModule, featureKey, "EDIT"),
+      canPrint: can(grantModule, featureKey, "PRINT"),
+      canExport: can(grantModule, featureKey, "EXPORT"),
+      canActivateDeactivate: can(grantModule, featureKey, "ACTIVATE_DEACTIVATE"),
     };
   }, [can, moduleKey, permissionsDescribed, roleName]);
 };

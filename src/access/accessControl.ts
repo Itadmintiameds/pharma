@@ -4,7 +4,9 @@
  * A permission arrives as "MODULE/FEATURE/ACTION" (e.g. "PURCHASE/PURCHASE/VIEW").
  * Module and feature happen to be the same string for every module today, but
  * they are kept apart so a module that later grows real features only changes
- * MODULE_ROUTES here, not the call sites.
+ * MODULE_ROUTES here, not the call sites. Likewise a screen's ModuleKey is
+ * usually the backend module itself, but may name a different one through
+ * `grantModuleKey` when two screens share one backend module.
  *
  * Everything in this file is pure and runtime-agnostic: middleware (Edge),
  * route handlers (Node) and components all import the same rules.
@@ -22,17 +24,29 @@ export type ModuleKey =
   | "PURCHASE"
   | "PURCHASE_RETURN"
   | "SALES"
+  | "SALES_RETURN"
   | "WAREHOUSE_DISTRIBUTION"
   | "WAREHOUSE_RECEIPT"
   | "INTER_STORE_TRANSFER"
   | "WAREHOUSE_STOCK_RETURN"
   | "STOCK_RETURN_RECEIPT"
+  | "STOCK_ADJUSTMENT"
   | "PRODUCTS"
+  | "SUPPLIER_MASTER"
+  | "SUPPLIER_PAYMENT"
   | "USER_MANAGEMENT"
   | "SET_UP_BUSINESS";
 
 export interface ModuleRoute {
   moduleKey: ModuleKey;
+  /**
+   * The backend module the grants are issued under, when it is not moduleKey.
+   * Stock Return and Stock Return Receipt are two screens over one backend
+   * module (WAREHOUSE_RETURN) — the pharmacy raises the return, the warehouse
+   * receives it — and keep keys of their own here only because each belongs to
+   * a different side of the organization.
+   */
+  grantModuleKey?: string;
   /** Same as moduleKey while a module has no sub-features of its own. */
   featureKey: string;
   path: string;
@@ -59,6 +73,12 @@ export const MODULE_ROUTES: ModuleRoute[] = [
     label: "Sales / Billing",
   },
   {
+    moduleKey: "SALES_RETURN",
+    featureKey: "SALES_RETURN",
+    path: "/dashboard/salesReturn",
+    label: "Sales Return",
+  },
+  {
     moduleKey: "WAREHOUSE_DISTRIBUTION",
     featureKey: "WAREHOUSE_DISTRIBUTION",
     path: "/dashboard/warehouseDistribution",
@@ -78,21 +98,41 @@ export const MODULE_ROUTES: ModuleRoute[] = [
   },
   {
     moduleKey: "WAREHOUSE_STOCK_RETURN",
-    featureKey: "WAREHOUSE_STOCK_RETURN",
+    grantModuleKey: "WAREHOUSE_RETURN",
+    featureKey: "WAREHOUSE_RETURN",
     path: "/dashboard/wearhouseStockReturn",
     label: "Stock Return",
   },
   {
     moduleKey: "STOCK_RETURN_RECEIPT",
-    featureKey: "STOCK_RETURN_RECEIPT",
+    grantModuleKey: "WAREHOUSE_RETURN",
+    featureKey: "WAREHOUSE_RETURN",
     path: "/dashboard/StockReturnReciept",
     label: "Stock Return Receipt",
+  },
+  {
+    moduleKey: "STOCK_ADJUSTMENT",
+    featureKey: "STOCK_ADJUSTMENT",
+    path: "/dashboard/stockAdjustment",
+    label: "Stock Adjustment",
   },
   {
     moduleKey: "PRODUCTS",
     featureKey: "PRODUCTS",
     path: "/dashboard/products",
     label: "Products",
+  },
+  {
+    moduleKey: "SUPPLIER_MASTER",
+    featureKey: "SUPPLIER_MASTER",
+    path: "/dashboard/suppliers",
+    label: "Suppliers",
+  },
+  {
+    moduleKey: "SUPPLIER_PAYMENT",
+    featureKey: "SUPPLIER_PAYMENT",
+    path: "/dashboard/supplierPayment",
+    label: "Supplier Payment",
   },
   {
     moduleKey: "USER_MANAGEMENT",
@@ -110,11 +150,28 @@ export const MODULE_ROUTES: ModuleRoute[] = [
 
 /**
  * Routes that carry no module of their own and are never permission-gated:
- * the landing dashboard and Settings. (Stock Management, Suppliers and Reports
- * have no backend module either, but stay behind the existing
- * business-registration lock rather than being opened here.)
+ * the landing dashboard and Settings. (Stock Management and Reports have no
+ * backend module either, but stay behind the existing business-registration
+ * lock rather than being opened here.)
  */
 export const UNGATED_PATHS = ["/dashboard", "/dashboard/settings"];
+
+/** The backend module a screen's grants are issued under. */
+export const grantModuleOf = (route: ModuleRoute): string =>
+  route.grantModuleKey ?? route.moduleKey;
+
+/**
+ * The backend modules behind a set of screens, deduplicated — what the role
+ * permission picker filters GET /modules/all by.
+ */
+export const grantModuleKeysFor = (moduleKeys: Iterable<ModuleKey>): string[] => {
+  const wanted = new Set(moduleKeys);
+  return Array.from(
+    new Set(
+      MODULE_ROUTES.filter((route) => wanted.has(route.moduleKey)).map(grantModuleOf)
+    )
+  );
+};
 
 /** Permissions indexed as "MODULE/FEATURE" -> the actions granted on it. */
 export type PermissionIndex = Map<string, Set<string>>;
@@ -160,7 +217,7 @@ export const actionsFor = (
 export const canViewModule = (
   index: PermissionIndex,
   route: ModuleRoute
-): boolean => can(index, route.moduleKey, route.featureKey, "VIEW");
+): boolean => can(index, grantModuleOf(route), route.featureKey, "VIEW");
 
 /** Longest-prefix match, so nested routes resolve to their module. */
 export const routeForPath = (pathname: string): ModuleRoute | null => {
@@ -223,6 +280,11 @@ export interface OrganizationShape {
  *  - decentralized: each store purchases for itself and none of the three
  *    warehouse modules apply to anyone.
  *
+ * Suppliers and Supplier Payment follow purchasing: with a warehouse they live
+ * on the warehouse side only (Warehouse Manager, or a Super Admin acting as the
+ * warehouse); without one, each store keeps its own. Stock Adjustment works on
+ * whichever location is current, so it is on both sides.
+ *
  * Effective access is this set intersected with the token's permissions, so a
  * grant the organization's shape rules out is still withheld.
  */
@@ -251,6 +313,9 @@ export const availableModuleKeys = (
         "PURCHASE",
         "PURCHASE_RETURN",
         "STOCK_RETURN_RECEIPT",
+        "STOCK_ADJUSTMENT",
+        "SUPPLIER_MASTER",
+        "SUPPLIER_PAYMENT",
         "USER_MANAGEMENT",
         "SET_UP_BUSINESS",
       ]);
@@ -264,7 +329,9 @@ export const availableModuleKeys = (
     // Warehouse Distribution is reached by switching into a warehouse (above).
     const keys: ModuleKey[] = [
       "SALES",
+      "SALES_RETURN",
       "PRODUCTS",
+      "STOCK_ADJUSTMENT",
       "USER_MANAGEMENT",
       "SET_UP_BUSINESS",
     ];
@@ -281,28 +348,34 @@ export const availableModuleKeys = (
         "WAREHOUSE_STOCK_RETURN"
       );
     } else if (centralized === false) {
-      keys.push("PURCHASE", "PURCHASE_RETURN");
+      keys.push("PURCHASE", "PURCHASE_RETURN", "SUPPLIER_MASTER", "SUPPLIER_PAYMENT");
     }
     return new Set(keys);
   }
 
   if (isWarehouseManager) {
     const keys: ModuleKey[] = ["PRODUCTS"];
-    // Purchase belongs to the warehouse only while inventory is centralized.
-    // Stock returns from the pharmacies are received here, at the warehouse.
+    // Purchase (and the suppliers it buys from) belongs to the warehouse only
+    // while inventory is centralized. Stock returns from the pharmacies are
+    // received here, at the warehouse.
     if (centralized === true)
       keys.push(
         "WAREHOUSE_DISTRIBUTION",
         "PURCHASE",
         "PURCHASE_RETURN",
-        "STOCK_RETURN_RECEIPT"
+        "STOCK_RETURN_RECEIPT",
+        "STOCK_ADJUSTMENT",
+        "SUPPLIER_MASTER",
+        "SUPPLIER_PAYMENT"
       );
     return new Set(keys);
   }
 
   const keys: ModuleKey[] = [
     "SALES",
+    "SALES_RETURN",
     "PRODUCTS",
+    "STOCK_ADJUSTMENT",
     "USER_MANAGEMENT",
     "SET_UP_BUSINESS",
   ];
@@ -314,7 +387,7 @@ export const availableModuleKeys = (
       "WAREHOUSE_STOCK_RETURN"
     );
   } else if (centralized === false) {
-    keys.push("PURCHASE", "PURCHASE_RETURN");
+    keys.push("PURCHASE", "PURCHASE_RETURN", "SUPPLIER_MASTER", "SUPPLIER_PAYMENT");
   }
 
   return new Set(keys);
@@ -333,6 +406,19 @@ const ORGANIZATION_DEPENDENT_MODULES = new Set<ModuleKey>([
   "INTER_STORE_TRANSFER",
   "WAREHOUSE_STOCK_RETURN",
   "STOCK_RETURN_RECEIPT",
+  "SUPPLIER_MASTER",
+  "SUPPLIER_PAYMENT",
+]);
+
+/**
+ * Modules a store has only when it purchases for itself — available without
+ * centralized inventory, warehouse-only with it.
+ */
+const STORE_PURCHASING_MODULES = new Set<ModuleKey>([
+  "PURCHASE",
+  "PURCHASE_RETURN",
+  "SUPPLIER_MASTER",
+  "SUPPLIER_PAYMENT",
 ]);
 
 export const dependsOnOrganization = (moduleKey: ModuleKey): boolean =>
@@ -390,21 +476,21 @@ export const denialReason = (
   }
 
   const centralized = organization.centralizedInventory ?? false;
+  const isStorePurchasing = STORE_PURCHASING_MODULES.has(route.moduleKey);
 
   if (
     centralized === false &&
-    route.moduleKey !== "PURCHASE" &&
-    route.moduleKey !== "PURCHASE_RETURN" &&
+    !isStorePurchasing &&
     dependsOnOrganization(route.moduleKey)
   ) {
     return `${route.label} is available only with centralized inventory.`;
   }
 
-  if (
-    (route.moduleKey === "PURCHASE" || route.moduleKey === "PURCHASE_RETURN") &&
-    centralized === true
-  ) {
-    return "Purchasing is handled at the warehouse for centralized inventory.";
+  if (isStorePurchasing && centralized === true) {
+    return route.moduleKey === "SUPPLIER_MASTER" ||
+      route.moduleKey === "SUPPLIER_PAYMENT"
+      ? "Suppliers are managed at the warehouse for centralized inventory."
+      : "Purchasing is handled at the warehouse for centralized inventory.";
   }
 
   if (route.moduleKey === "WAREHOUSE_DISTRIBUTION") {

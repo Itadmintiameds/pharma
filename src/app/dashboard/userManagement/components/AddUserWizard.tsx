@@ -14,6 +14,7 @@ import { showToast } from '@/app/components/common/Toast';
 import RolesPermissions from './RolesPermissions';
 import {
   availableModuleKeys,
+  grantModuleKeysFor,
   isSingleLocationOrganization,
   isSuperAdminRole,
   isWarehouseManagerRole as roleNameIsWarehouseManager,
@@ -173,7 +174,7 @@ export default function AddUserWizard({ onBack, editUserId, onSaved }: AddUserWi
   const allowedModuleNames = useMemo(
     () =>
       formData.designation
-        ? Array.from(availableModuleKeys(selectedRoleName, organization))
+        ? grantModuleKeysFor(availableModuleKeys(selectedRoleName, organization))
         : null,
     [formData.designation, selectedRoleName, organization]
   );

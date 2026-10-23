@@ -63,12 +63,14 @@ const Sidebar = () => {
   // Dynamic lock check - for other inventory modules
   const isBusinessRegistered = false;
 
-  // Suppliers has no backend module of its own yet, so it unlocks the same
-  // way as the other pharmacy-side masters (Products, etc.): once the
-  // account has an approved pharmacy. On the warehouse side, a Super Admin
-  // who has toggled into a warehouse, or the Warehouse Manager role, already
-  // reach the other warehouse flows (Products, Warehouse Distribution,
-  // Purchase) unlocked the same way, so they unlock Suppliers unconditionally.
+  // Whether Suppliers / Supplier Payment are listed at all is decided by the
+  // access rules (warehouse side only under centralized inventory). Where they
+  // are, they unlock the same way as the other pharmacy-side masters (Products,
+  // etc.): once the account has an approved pharmacy. On the warehouse side, a
+  // Super Admin who has toggled into a warehouse, or the Warehouse Manager
+  // role, already reach the other warehouse flows (Products, Warehouse
+  // Distribution, Purchase) unlocked the same way, so they unlock them
+  // unconditionally.
   const isSuperAdmin = bypassesPermissionChecks(roleName);
   const isWarehouseManager = isWarehouseManagerRole(roleName);
   const isSuppliersUnlockedForWarehouse =
@@ -88,7 +90,18 @@ const Sidebar = () => {
     router.replace("/login");
   };
 
-  const navGroups = [
+  const navGroups: {
+    category: string;
+    isHeaderHidden?: boolean;
+    heightClass: string;
+    items: {
+      name: string;
+      moduleKey?: ModuleKey;
+      icon: typeof LayoutDashboard;
+      path: string;
+      isLocked: boolean;
+    }[];
+  }[] = [
     {
       category: "MAIN MENU",
       isHeaderHidden: true,
@@ -149,7 +162,7 @@ const Sidebar = () => {
         },
         {
           name: "Sales Return",
-          moduleKey: "SALES" as ModuleKey,
+          moduleKey: "SALES_RETURN" as ModuleKey,
           icon: ReceiptText,
           path: "/dashboard/salesReturn",
           isLocked: !hasApprovedPharmacy,
@@ -191,10 +204,11 @@ const Sidebar = () => {
           // pharmacy, the same as Suppliers above.
           isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
         },
-        // No backend module yet, so it is listed for both the pharmacy and the
-        // warehouse side and unlocks the same way as Suppliers.
+        // Listed for both the pharmacy and the warehouse side, and unlocks the
+        // same way as Suppliers.
         {
           name: "Stock Adjustment",
+          moduleKey: "STOCK_ADJUSTMENT" as ModuleKey,
           icon: Scale,
           path: "/dashboard/stockAdjustment",
           isLocked: isSuppliersUnlockedForWarehouse ? false : !hasApprovedPharmacy,
@@ -214,6 +228,7 @@ const Sidebar = () => {
         },
         {
           name: "Suppliers",
+          moduleKey: "SUPPLIER_MASTER" as ModuleKey,
           icon: Truck,
           path: "/dashboard/suppliers",
           isLocked: isSuppliersUnlockedForWarehouse
@@ -222,6 +237,7 @@ const Sidebar = () => {
         },
         {
           name: "Supplier Payment",
+          moduleKey: "SUPPLIER_PAYMENT" as ModuleKey,
           icon: Wallet,
           path: "/dashboard/supplierPayment",
           isLocked: isSuppliersUnlockedForWarehouse
