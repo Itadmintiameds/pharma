@@ -213,6 +213,9 @@ const RETURN_STATUS_OPTIONS = [
   { label: 'Fully Returned', value: 'Fully Returned' },
 ]
 
+/** Invoices per page in the picker. */
+const INVOICE_PAGE_SIZE = 5
+
 const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
   const [search, setSearch] = useState('')
   const [supplierId, setSupplierId] = useState<string | number>('')
@@ -226,6 +229,7 @@ const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
   const [loadError, setLoadError] = useState('')
   const [selectedInvoiceId, setSelectedInvoiceId] = useState('')
   const [step, setStep] = useState<1 | 2>(1)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     getAllSupplier()
@@ -300,6 +304,17 @@ const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
       return true
     })
   }, [invoices, search, supplierId, paymentType, returnStatus, dateFrom, dateTo])
+
+  // Back to page 1 whenever the filters change: a narrowed list may no longer
+  // have the page that was open.
+  useEffect(() => {
+    setPage(1)
+  }, [search, supplierId, paymentType, returnStatus, dateFrom, dateTo])
+
+  const pageInvoices = filteredInvoices.slice(
+    (page - 1) * INVOICE_PAGE_SIZE,
+    page * INVOICE_PAGE_SIZE
+  )
 
   const selectedInvoice = invoices.find((invoice) => invoice.id === selectedInvoiceId)
 
@@ -386,7 +401,13 @@ const AddPurchaseReturn = ({ onClose }: AddPurchaseReturnProps) => {
       <div className="flex w-full flex-col gap-md rounded-lg border border-pneutral-200 bg-white p-md shadow-[0px_0px_12px_4px_#c0c1be33,-4px_-4px_12px_0px_#d5d5d433,4px_4px_12px_-2px_#d5d5d433]">
         <DataTable
           columns={buildInvoiceColumns(selectedInvoiceId, setSelectedInvoiceId)}
-          data={filteredInvoices}
+          data={pageInvoices}
+          pagination={{
+            page,
+            pageSize: INVOICE_PAGE_SIZE,
+            totalItems: filteredInvoices.length,
+            onPageChange: setPage,
+          }}
           emptyState={
             <div className="flex h-40 items-center justify-center text-label-l4 text-pneutral-500">
               {isLoading

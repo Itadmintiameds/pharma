@@ -94,13 +94,22 @@ export interface PurchaseReturnDetailData {
   modifiedAt?: string | null;
 }
 
-/** The body PUT to /purchase-return/{id}/edit. The server reads only these
- *  fields; a line left out keeps its current quantities. */
+/** The body PUT to /purchase-return/{id}/edit. A line left out keeps its
+ *  current quantities. Amounts are re-priced in the browser exactly as on
+ *  create — the server does not re-cost a revised quantity on its own, so
+ *  without them the return keeps the previous revision's amounts. */
 export interface PurchaseReturnEditPayload {
   editReason: string;
+  /** Return-level totals across every line, changed or not. */
+  totalGrossAmount: number;
+  totalGstAmount: number;
+  totalNetAmount: number;
   purchaseReturnDetails: {
     purchaseReturnDetailId: number;
     purchaseReturnQuantity: number;
     freeReturnQuantity: number;
+    grossAmount: number;
+    gstAmount: number;
+    netAmount: number;
   }[];
 }

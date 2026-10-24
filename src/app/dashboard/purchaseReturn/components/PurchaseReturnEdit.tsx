@@ -387,13 +387,24 @@ const PurchaseReturnEdit = ({ purchaseReturnId, onBack }: PurchaseReturnEditProp
     setIsSaving(true);
     setSaveError("");
     try {
+      // The revised amounts, priced by the same rule as create — the same
+      // figures the Changed Line Items and Financial Impact cards show.
       await editPurchaseReturn(purchaseReturnId, {
         editReason: resolvedEditReason,
-        purchaseReturnDetails: changedItems.map((item) => ({
-          purchaseReturnDetailId: item.id,
-          purchaseReturnQuantity: item.returnPurchaseQty,
-          freeReturnQuantity: item.returnFreeQty,
-        })),
+        totalGrossAmount: revisedFinancials.taxableValue,
+        totalGstAmount: revisedFinancials.gst,
+        totalNetAmount: revisedFinancials.totalReturnAmount,
+        purchaseReturnDetails: changedItems.map((item) => {
+          const amounts = revisedAmounts(item);
+          return {
+            purchaseReturnDetailId: item.id,
+            purchaseReturnQuantity: item.returnPurchaseQty,
+            freeReturnQuantity: item.returnFreeQty,
+            grossAmount: amounts.grossAmount,
+            gstAmount: amounts.gstAmount,
+            netAmount: amounts.netAmount,
+          };
+        }),
       });
       onBack?.();
     } catch (err) {
