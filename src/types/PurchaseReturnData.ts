@@ -23,6 +23,8 @@ export interface PurchaseReturnData {
   cancelReason?: string | null;
   /** Why the latest revision was made — set by PUT /{id}/edit. */
   editReason?: string | null;
+  /** A DRAFT the user deleted. Kept on the server, never shown in the app. */
+  isDraftDeleted?: boolean;
   totalGrossAmount: number;
   totalGstAmount: number;
   totalNetAmount: number;
@@ -53,6 +55,8 @@ export interface PurchaseReturnCreatePayload {
   totalGstAmount: number;
   totalNetAmount: number;
   purchaseReturnDetails: PurchaseReturnCreateDetail[];
+  /** Set only by Delete Draft, on the update of a DRAFT — soft-deletes it. */
+  isDraftDeleted?: boolean;
 }
 
 export interface PurchaseReturnCreateDetail {

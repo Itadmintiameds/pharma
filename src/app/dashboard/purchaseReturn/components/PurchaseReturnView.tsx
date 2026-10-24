@@ -1,7 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Download, Info, Printer } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Download, Info, Printer, Trash2 } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import Button from '@/app/components/common/Button'
+import ConfirmDialog from '@/app/components/common/ConfirmDialog'
 import DataTable from '@/app/components/common/table/DataTable'
 import {
   createPurchaseReturn,
@@ -222,6 +223,9 @@ const PurchaseReturnView = ({
   // Set from the create response once a CONFIRMED return is posted — holds the
   // return number the backend assigned, and drives the success dialog.
   const [postedReturnNo, setPostedReturnNo] = useState<string>()
+  // Deleting a draft can't be undone from the app, so it is confirmed first.
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const lineItems = useMemo(() => lines.map(toLineItem), [lines])
 
@@ -333,7 +337,32 @@ const PurchaseReturnView = ({
     }
   }
 
-  const isSubmitting = submitting !== undefined
+  /**
+   * Soft-deletes a reopened draft: the usual update of it, carrying the flag
+   * that hides it from every list (see getAllPurchaseReturn).
+   */
+  const handleDeleteDraft = async () => {
+    if (!editingReturnId || !invoice) return
+
+    setIsDeleting(true)
+    setSubmitError('')
+    try {
+      await updatePurchaseReturn(editingReturnId, {
+        ...buildCreatePayload(invoice, lines, 'DRAFT'),
+        isDraftDeleted: true,
+      })
+      setDeleteOpen(false)
+      onClose?.()
+    } catch (err: any) {
+      console.error('Failed to delete the draft purchase return:', err)
+      setSubmitError(err?.message || 'Failed to delete the draft.')
+      setDeleteOpen(false)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const isSubmitting = submitting !== undefined || isDeleting
   // On a saved return the payable has already moved, so the reference card
   // shows where the supplier account stands now. In the wizard the return has
   // not been posted, so "now" is still the pre-return figure.
@@ -581,6 +610,18 @@ const PurchaseReturnView = ({
         onViewPurchaseReturn={() => onClose?.()}
         onGoToPurchaseReturns={() => onClose?.()}
       />
+
+      <ConfirmDialog
+        isOpen={deleteOpen}
+        title="Delete draft?"
+        message="This draft purchase return will be deleted and removed from the list. This can't be undone."
+        confirmLabel="Delete Draft"
+        cancelLabel="Keep Draft"
+        destructive
+        loading={isDeleting}
+        onConfirm={handleDeleteDraft}
+        onCancel={() => setDeleteOpen(false)}
+      />
         </>
       )}
 
@@ -622,6 +663,24 @@ const PurchaseReturnView = ({
           </div>
         ) : (
         <div className="flex w-full flex-col items-stretch gap-sm sm:w-auto sm:flex-row sm:items-center">
+          {/* Only a saved draft can be deleted — a return still being raised
+              has nothing on the server yet. */}
+          {editingReturnId && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isSubmitting}
+              onClick={() => {
+                setSubmitError('')
+                setDeleteOpen(true)
+              }}
+              className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-warning-600! bg-transparent! px-4 text-label-l4! font-medium! text-warning-600! sm:w-auto!"
+            >
+              <Trash2 size={20} className="shrink-0" />
+              {isDeleting ? 'Deleting...' : 'Delete Draft'}
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="outline"

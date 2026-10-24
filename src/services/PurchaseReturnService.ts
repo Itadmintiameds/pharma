@@ -6,11 +6,15 @@ import {
   PurchaseReturnEditPayload,
 } from '@/types/PurchaseReturnData';
 
-// Fetch all purchase returns for the selected pharmacy
+// Fetch all purchase returns for the selected pharmacy. A deleted draft is
+// dropped here rather than on each screen, so it neither appears in the list
+// nor counts towards what has already been returned on a purchase.
 export const getAllPurchaseReturn = async (): Promise<PurchaseReturnData[]> => {
   try {
     const response = await api.get('/purchase-return/allPurchaseReturn');
-    return response.data;
+    return (response.data ?? []).filter(
+      (item: PurchaseReturnData) => !item.isDraftDeleted
+    );
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch purchase returns.');
   }
