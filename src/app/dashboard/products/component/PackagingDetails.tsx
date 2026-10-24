@@ -449,7 +449,7 @@ const PackagingDetails = forwardRef<PackagingDetailsRef, PackagingDetailsProps>(
                   error={errors.eachStripContains}
                   hint={
                     isSelfContained
-                      ? `One ${purchaseUnit} is one ${displaySmallestUnit}, so this is always 1.`
+                      ? "Purchase & sellable unit are the same, so contains is always 1."
                       : undefined
                   }
                   // A matching pairing fixes this at 1; it is shown rather than

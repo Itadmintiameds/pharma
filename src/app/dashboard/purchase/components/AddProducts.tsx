@@ -359,6 +359,35 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     // what lets the memoised column below hold on to it.
   }, []);
 
+  /** Set while confirming the removal of an invoice line. */
+  const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
+
+  /**
+   * Drops a line from the invoice. Nothing goes to the server: whatever the
+   * line created stays in Product Management, the line just won't be sent to
+   * /purchase/create.
+   */
+  const handleDeleteLine = (index: number) => {
+    const line = usePurchaseStore.getState().purchaseDetails[index];
+    if (!line) return;
+
+    store.removePurchaseDetail(index);
+    onboardedLines.current.delete(lineKey(line.productId, line.batchId));
+
+    // An edit in progress points at its line by position, so it has to follow
+    // the lines that moved up — or end, if its own line was the one removed.
+    if (editingLine) {
+      if (editingLine.index === index) {
+        setEditingLine(null);
+        setViewState("search");
+      } else if (editingLine.index > index) {
+        setEditingLine({ ...editingLine, index: editingLine.index - 1 });
+      }
+    }
+
+    toast.success("Item removed from invoice");
+  };
+
   // Mirrors the tax invoice grid, so the line reads the same here as it does on
   // the summary the user saves.
   const tableColumns = useMemo<ColumnDef<any, any>[]>(() => [
@@ -388,20 +417,37 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       id: 'actions',
       header: 'Action',
       cell: (info) => (
-        <button
-          type="button"
-          onClick={() => handleEditLine(info.row.index)}
-          aria-label="Edit item details"
-          title="Edit item details"
-          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-secondary-50"
-        >
-          <Image
-            src="/UserManagement/EditIcon.svg"
-            alt="Edit"
-            width={16}
-            height={16}
-          />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => handleEditLine(info.row.index)}
+            aria-label="Edit item details"
+            title="Edit item details"
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-secondary-50"
+          >
+            <Image
+              src="/UserManagement/EditIcon.svg"
+              alt="Edit"
+              width={16}
+              height={16}
+            />
+          </button>
+          {/* Removes the line from the invoice only — confirmed first. */}
+          <button
+            type="button"
+            onClick={() => setPendingDeleteIndex(info.row.index)}
+            aria-label="Remove item"
+            title="Remove item"
+            className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-warning-50"
+          >
+            <Image
+              src="/Billing/delete.svg"
+              alt="Remove"
+              width={16}
+              height={16}
+            />
+          </button>
+        </div>
       ),
     },
   ], [handleEditLine]);
@@ -788,16 +834,20 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
       // against was already there. Only how much is being bought moves, and
       // that lives on the purchase, which is saved with the invoice.
       if (editingLine.scope === "quantities") {
+        const after: ProductFormSnapshot = {
+          productData: undefined,
+          packagingData: editingLine.snapshot.packagingData,
+          batchData: batchDetailsRef.current?.getFormData(),
+        };
         store.updatePurchaseDetail(
           editingLine.index,
-          stockLineFields(
-            {
-              productData: undefined,
-              packagingData: editingLine.snapshot.packagingData,
-              batchData: batchDetailsRef.current?.getFormData(),
-            },
-            editingLine.index
-          )
+          stockLineFields(after, editingLine.index)
+        );
+        // Re-opening the line has to show the quantities just booked, not the
+        // ones it was first added with.
+        onboardedLines.current.set(
+          lineKey(editingLine.productId, editingLine.batchId),
+          { ...editingLine, snapshot: after }
         );
         toast.success("Quantities updated");
         setEditingLine(null);
@@ -831,17 +881,16 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         after
       );
 
-      if (!hasChanges) {
-        toast.success("No changes to save");
-        setEditingLine(null);
-        setViewState("search");
-        return;
+      // Purchase quantity and free goods never reach the PUT, so a quantity-only
+      // edit has no product changes — but the line must still be re-costed, or
+      // /purchase/create goes out with the quantities it was first added with.
+      if (hasChanges) {
+        await ProductService.updateProduct(editingLine.productId, payload);
       }
 
-      await ProductService.updateProduct(editingLine.productId, payload);
-
-      // The line follows what was saved: batch, prices and the figures they
-      // cost out to — and, where the product itself was edited, its name too.
+      // The line follows what was saved: batch, prices, quantities and the
+      // figures they cost out to — and, where the product itself was edited,
+      // its name too.
       store.updatePurchaseDetail(
         editingLine.index,
         editingLine.scope === "product"
@@ -856,7 +905,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         { ...editingLine, snapshot: after }
       );
 
-      toast.success("Product updated");
+      toast.success(hasChanges ? "Product updated" : "Quantities updated");
       setEditingLine(null);
       setViewState("search");
     } catch (error) {
@@ -1362,6 +1411,24 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
         destructive
         onConfirm={handleConfirmSelection}
         onCancel={() => setPendingSelection(null)}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingDeleteIndex !== null}
+        title="Remove item?"
+        message={`Remove ${
+          (pendingDeleteIndex !== null &&
+            store.purchaseDetails[pendingDeleteIndex]?.productName) ||
+          "this item"
+        } from the invoice? It won't be included when the purchase is saved.`}
+        confirmLabel="Remove"
+        cancelLabel="Keep"
+        destructive
+        onConfirm={() => {
+          if (pendingDeleteIndex !== null) handleDeleteLine(pendingDeleteIndex);
+          setPendingDeleteIndex(null);
+        }}
+        onCancel={() => setPendingDeleteIndex(null)}
       />
 
       <PurchaseSuccessModal

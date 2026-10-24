@@ -12,6 +12,7 @@ import DataTable from "@/app/components/common/table/DataTable";
 import { PurchaseData } from "@/types/PurchaseData";
 import { getAllPurchases } from "@/services/PurchaseServiceNew";
 import { getSupplierById } from "@/services/SupplierService";
+import type { SupplierData } from "@/types/SupplierData";
 import { getProductDetails } from "@/services/InventoryService";
 import type { ProductDetails } from "@/types/ProductData";
 import InvoiceSummary from "./components/InvoiceSummary";
@@ -238,6 +239,8 @@ interface OpenInvoice {
   lines: InvoiceLine[];
   /** "Bill To" pharmacy, pre-fetched so a PDF download has it before capture. */
   pharmacy: CurrentPharmacy | null;
+  /** The purchase's supplier, for its bank details — pre-fetched for the same reason. */
+  supplier: SupplierData | null;
   /** True when opened for download — triggers the browser print dialog. */
   print: boolean;
 }
@@ -275,12 +278,20 @@ const PurchaseContent = () => {
       // Fetch the "Bill To" entity (pharmacy, or warehouse for a Warehouse
       // Manager) alongside the lines so a PDF download has it in hand before
       // the off-screen copy is captured.
-      const [lines, pharmacy] = await Promise.all([
+      const [lines, pharmacy, supplier] = await Promise.all([
         buildInvoiceLines(purchase),
         getCurrentBillTo().catch((err) => {
           console.error("Unable to fetch current bill-to for the invoice", err);
           return null;
         }),
+        // Only the bank details depend on it, so a failure leaves them blank
+        // rather than blocking the invoice.
+        purchase.supplierId
+          ? getSupplierById(purchase.supplierId).catch((err) => {
+              console.error("Unable to fetch the supplier for the invoice", err);
+              return null;
+            })
+          : Promise.resolve(null),
       ]);
 
       // /purchase/allPurchase does not always nest the line items. Surface that
@@ -293,7 +304,7 @@ const PurchaseContent = () => {
         toast.error("Line items for this invoice could not be loaded.");
       }
 
-      setInvoice({ purchase, lines, pharmacy, print });
+      setInvoice({ purchase, lines, pharmacy, supplier, print });
       // For a download the indicator (and busy guard) stay up until the PDF has
       // been written — released in handleCaptureReady.
       if (!print) {
@@ -432,6 +443,7 @@ const PurchaseContent = () => {
         purchase={invoice.purchase}
         data={invoice.lines}
         pharmacy={invoice.pharmacy}
+        supplier={invoice.supplier}
         onCancel={() => router.push("/dashboard/purchase")}
         onSuccessGoToPurchase={() => router.push("/dashboard/purchase")}
       />
@@ -447,6 +459,7 @@ const PurchaseContent = () => {
             purchase={invoice.purchase}
             data={invoice.lines}
             pharmacy={invoice.pharmacy}
+            supplier={invoice.supplier}
           />
         </OffscreenPortal>
       )}
