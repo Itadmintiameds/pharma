@@ -1,4 +1,5 @@
 import { formatAmount } from "@/utils/billingTotals";
+import { formatPackQty } from "@/utils/formatPackQty";
 
 export const REASONS = [
   "Damaged Stock",
@@ -38,10 +39,14 @@ export interface AdjustableBatch {
   /** "Aug 2028" */
   expiry: string;
   purchaseUnit: string;
+  /** "Tablet" — what one purchase unit breaks into. */
+  smallestUnit: string;
   /** Smallest units in one purchase unit — the backend stores stock in smallest units. */
   unitContains: number;
   /** Current system stock, in purchase units. */
   currentStock: number;
+  /** The same stock as stored, in smallest units — for "5 Strips 6 Tablets". */
+  currentStockSmallest: number;
   /** Purchase price per purchase unit. */
   purchasePrice: number;
 }
@@ -96,8 +101,10 @@ export const toAdjustableBatch = (row: BatchApiRow): AdjustableBatch | null => {
     packagingId: row.packagingId || "",
     expiry: formatExpiry(row.expiryDate),
     purchaseUnit: row.purchaseUnit || row.purchaseSmallestUnitName || "",
+    smallestUnit: row.purchaseSmallestUnitName || "",
     unitContains,
     currentStock: Number((stockBase / unitContains).toFixed(2)),
+    currentStockSmallest: stockBase,
     purchasePrice:
       Number(row.purchasePrice) || (Number(row.purchasePricePerUnit) || 0) * unitContains,
   };
@@ -113,9 +120,18 @@ export const formatAdjustedAt = (value?: string) => {
   return `${day}-${month}-${date.getFullYear()}, ${time}`;
 };
 
-/** Actual minus system stock: negative removes stock, positive adds it. */
+/** The counted stock in smallest units, as the backend stores it. */
+export const actualStockSmallest = (draft: Pick<StockAdjustmentDraft, "batch" | "actualStock">) =>
+  Math.round(draft.actualStock * draft.batch.unitContains);
+
+/** Actual minus system stock in smallest units: negative removes stock, positive adds it. */
+export const adjustmentSmallest = (draft: Pick<StockAdjustmentDraft, "batch" | "actualStock">) =>
+  actualStockSmallest(draft) - draft.batch.currentStockSmallest;
+
+/** The same difference in purchase units. Worked out from smallest units and
+ *  left unrounded, so a few loose tablets don't round away to nothing. */
 export const adjustmentQty = (draft: Pick<StockAdjustmentDraft, "batch" | "actualStock">) =>
-  Number((draft.actualStock - draft.batch.currentStock).toFixed(2));
+  adjustmentSmallest(draft) / draft.batch.unitContains;
 
 export const adjustmentType = (qty: number) =>
   qty < 0 ? "Decrease" : qty > 0 ? "Increase" : "No Change";
@@ -130,6 +146,18 @@ export const formatSignedRupees = (value: number) => formatSigned(value, formatR
 
 export const signedTextClass = (value: number) =>
   value < 0 ? "text-warning-600" : "text-success-800";
+
+/** System stock as whole packs plus loose units — "5 Strips 6 Tablets". */
+export const formatBatchStock = (batch: AdjustableBatch) =>
+  formatPacks(batch.currentStockSmallest, batch);
+
+/** Any smallest-unit quantity of this batch as packs plus loose units. */
+export const formatPacks = (smallestQty: number, batch: AdjustableBatch, full = false) =>
+  formatPackQty(smallestQty, batch.unitContains, batch.purchaseUnit, batch.smallestUnit, { full });
+
+/** "+5 Strips 6 Tablets", "−0 Strips 7 Tablets"; plain "0" for no change. */
+export const formatSignedPacks = (smallestQty: number, batch: AdjustableBatch) =>
+  smallestQty === 0 ? "0" : formatSigned(smallestQty, (abs) => formatPacks(abs, batch, true));
 
 /** "120 Strips" — a quantity followed by its purchase unit. */
 export const formatQtyWithUnit = (qty: number, unit: string) =>

@@ -5,6 +5,7 @@ import Input from '@/app/components/common/Input'
 import { getPurchaseById } from '@/services/PurchaseServiceNew'
 import type { PurchaseData, PurchaseDetailsData } from '@/types/PurchaseData'
 import { formatMonthYear } from '@/utils/formatDate'
+import { formatPackQty } from '@/utils/formatPackQty'
 import { eligibleForLine, returnedForLine, returnLineKey } from '@/utils/purchaseReturnTotals'
 import WizardHeader from './WizardHeader'
 import PurchaseReturnView from './PurchaseReturnView'
@@ -169,7 +170,7 @@ const StatBlock = ({
   highlight = false,
 }: {
   label: string
-  value: number
+  value: number | string
   highlight?: boolean
 }) => (
   <div className="flex flex-1 flex-col gap-1">
@@ -297,7 +298,17 @@ const ProductCard = ({
         <StatBlock label="FREE QTY" value={item.freeQty} />
         <StatBlock label="PREV. RETURNED (PURCH.)" value={item.prevReturnedPurch} />
         <StatBlock label="PREV. RETURNED (FREE)" value={item.prevReturnedFree} />
-        <StatBlock label="AVAIL. STOCK" value={item.availStock} />
+        {/* Whole packs plus loose units, short so it fits the stat column. */}
+        <StatBlock
+          label="AVAIL. STOCK"
+          value={formatPackQty(
+            Number(item.detail.availableStock) || 0,
+            Number(item.detail.unitContains) || 1,
+            item.detail.purchaseUnit,
+            item.detail.smallestUnit,
+            { short: true }
+          )}
+        />
         <StatBlock
           label="ELIGIBLE RETURN"
           value={item.eligibleReturn}

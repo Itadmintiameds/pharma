@@ -960,9 +960,11 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
           freeQuantity: Number(item.freeQty || 0),
           freeUnit: item.freeQtyUnit || "",
           purchaseQuantity: Number(item.purchaseQuantity || 0),
-          // The line's own gross stays undiscounted — there is no per-line
-          // discount field, so the discount only surfaces in the header total
-          // and in the GST and amount below.
+          // The invoice discount exactly as typed, repeated on every line —
+          // not the line's proportional share used for costing below.
+          discount: Number(totals.discountAmount.toFixed(2)),
+          // The line's own gross stays undiscounted, so the discount only
+          // surfaces in the header total and in the GST and amount below.
           grossAmount: totals.lines[idx].grossAmount,
           gst: totals.lines[idx].gstAmount,
           // The slab itself, in the same "5%"/"Exempted" text the GST master

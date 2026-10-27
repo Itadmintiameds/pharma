@@ -10,11 +10,14 @@ import {
   CARD_SHADOW,
   FOOTER_BUTTON,
   StockAdjustmentDraft,
+  actualStockSmallest,
   adjustmentQty,
+  adjustmentSmallest,
   adjustmentType,
-  formatQtyWithUnit,
+  formatBatchStock,
+  formatPacks,
   formatRupees,
-  formatSigned,
+  formatSignedPacks,
   formatSignedRupees,
   signedTextClass,
   singularUnit,
@@ -129,13 +132,15 @@ const ReviewAndConfirm = ({ draft, onBack, onConfirm }: ReviewAndConfirmProps) =
       <div className="flex w-full flex-col gap-md lg:flex-row lg:items-stretch">
         <Card title="Quantity Adjustment" className="lg:flex-1">
           <SummaryRow label="System Stock Before Adjustment">
-            <SummaryValue>{formatQtyWithUnit(batch.currentStock, unit)}</SummaryValue>
+            <SummaryValue>{formatBatchStock(batch)}</SummaryValue>
           </SummaryRow>
           <SummaryRow label="Actual Stock">
-            <SummaryValue>{formatQtyWithUnit(actualStock, unit)}</SummaryValue>
+            <SummaryValue>{formatPacks(actualStockSmallest(draft), batch)}</SummaryValue>
           </SummaryRow>
           <SummaryRow label="Adjustment Quantity">
-            <SummaryValue className={signedTextClass(qty)}>{formatSigned(qty, String)}</SummaryValue>
+            <SummaryValue className={signedTextClass(qty)}>
+              {formatSignedPacks(adjustmentSmallest(draft), batch)}
+            </SummaryValue>
           </SummaryRow>
           <SummaryRow label="Adjustment Type">
             {/* Figma "Tag" */}

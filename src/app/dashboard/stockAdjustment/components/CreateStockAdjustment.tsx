@@ -20,9 +20,10 @@ import {
   BatchApiRow,
   adjustmentQty,
   adjustmentType,
-  formatQtyWithUnit,
+  actualStockSmallest,
+  formatBatchStock,
+  formatSignedPacks,
   formatRupees,
-  formatSigned,
   formatSignedRupees,
   signedTextClass,
   singularUnit,
@@ -64,7 +65,9 @@ const buildBatchColumns = (
     accessorKey: "currentStock",
     header: "CURRENT STOCK",
     cell: ({ row }) => (
-      <span className="text-p3 font-semibold text-pneutral-900">{row.original.currentStock}</span>
+      <span className="text-p3 font-semibold text-pneutral-900">
+        {formatBatchStock(row.original)}
+      </span>
     ),
   },
   {
@@ -141,6 +144,12 @@ const FieldError = ({ message }: { message: string }) => (
 
 const ERROR_FIELD = "border-warning-500! focus-within:ring-warning-500!";
 
+/** Grey unit name inside the end of a quantity field — "Strips", "Tablets". */
+const UnitTag = ({ unit }: { unit: string }) =>
+  unit ? (
+    <span className="whitespace-nowrap text-p3 font-regular text-pneutral-500">{unit}</span>
+  ) : null;
+
 interface CreateStockAdjustmentProps {
   /** Set when coming back from Review — the earlier entries are put back. */
   initialDraft: StockAdjustmentDraft | null;
@@ -162,8 +171,14 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   // null until the first search; then the batches that matched it
   const [matches, setMatches] = useState<AdjustableBatch[] | null>(null);
   const [selected, setSelected] = useState<AdjustableBatch | null>(initialDraft?.batch ?? null);
-  const [actualStock, setActualStock] = useState(
-    initialDraft ? String(initialDraft.actualStock) : ""
+  // The count is entered as whole packs plus loose smallest units ("5 Strips
+  // 6 Tablets") and only turned back into purchase units for the draft.
+  const initialSmallest = initialDraft ? actualStockSmallest(initialDraft) : 0;
+  const [actualPacks, setActualPacks] = useState(
+    initialDraft ? String(Math.floor(initialSmallest / initialDraft.batch.unitContains)) : ""
+  );
+  const [actualLoose, setActualLoose] = useState(
+    initialDraft ? String(initialSmallest % initialDraft.batch.unitContains) : ""
   );
   const [reason, setReason] = useState(initialDraft?.reason ?? "");
   const [remarks, setRemarks] = useState(initialDraft?.remarks ?? "");
@@ -178,7 +193,8 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
     const searchId = ++searchIdRef.current;
     // A new search starts the adjustment over
     setSelected(null);
-    setActualStock("");
+    setActualPacks("");
+    setActualLoose("");
     setReason("");
     setRemarks("");
     setRemarksTouched(false);
@@ -210,18 +226,25 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
 
   const selectBatch = (batch: AdjustableBatch) => {
     setSelected(batch);
-    setActualStock("");
+    setActualPacks("");
+    setActualLoose("");
   };
 
-  const isNegative = Number(actualStock) < 0;
-  const hasActual =
-    actualStock.trim() !== "" && !Number.isNaN(Number(actualStock)) && !isNegative;
+  // Only digits get into either field, so the count can never go negative.
+  const perPack = selected?.unitContains ?? 1;
+  const hasLooseField = perPack > 1;
+  const looseTooLarge = hasLooseField && Number(actualLoose) >= perPack;
+  const hasActual = (actualPacks !== "" || actualLoose !== "") && !looseTooLarge;
+  const actualSmallest = Number(actualPacks || 0) * perPack + Number(actualLoose || 0);
+  const actualStock = actualSmallest / perPack;
   const remarksRequired = reason === OTHER_REASON;
   const remarksError =
     remarksRequired && remarksTouched && !remarks.trim()
       ? "Remarks is mandatory when Reason = Other."
       : "";
-  const qty = selected && hasActual ? adjustmentQty({ batch: selected, actualStock: Number(actualStock) }) : 0;
+  const diffSmallest =
+    selected && hasActual ? actualSmallest - selected.currentStockSmallest : 0;
+  const qty = selected && hasActual ? adjustmentQty({ batch: selected, actualStock }) : 0;
   const noAdjustmentNeeded = Boolean(selected) && hasActual && qty === 0;
   const canReview = Boolean(selected) && hasActual && qty !== 0 && reason !== "" && (!remarksRequired || remarks.trim() !== "");
 
@@ -239,7 +262,7 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
     onReview({
       location,
       batch: selected,
-      actualStock: Number(actualStock),
+      actualStock,
       reason,
       remarks: remarks.trim(),
     });
@@ -352,32 +375,56 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
               <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2">
                 <Input
                   label="Current System Stock"
-                  value={formatQtyWithUnit(selected.currentStock, unit)}
+                  value={formatBatchStock(selected)}
                   readOnly
                   labelClassName={FIELD_LABEL}
                   className={FIELD}
                 />
-                {/* Text input so a typed minus sign reaches the field and can be
-                    flagged — Figma error state 4191:44729 */}
+                {/* Packs and loose units side by side, each tagged with its unit.
+                    Digits only, so nothing below 0 can be entered. */}
                 <div className="flex flex-col">
-                  <Input
-                    label="Actual Stock Quantity"
-                    required
-                    inputMode="decimal"
-                    value={actualStock}
-                    placeholder="Enter counted quantity"
-                    onChange={(e) => {
-                      if (/^-?\d*\.?\d*$/.test(e.target.value)) setActualStock(e.target.value);
-                    }}
-                    aria-invalid={isNegative}
-                    labelClassName={FIELD_LABEL}
-                    className={`${FIELD} ${isNegative ? ERROR_FIELD : ""}`}
-                  />
-                  {isNegative && <FieldError message="Cannot be negative." />}
+                  {/* Same label Input draws, but spanning both boxes so it stays
+                      on one line level with "Current System Stock". */}
+                  <label className={`mb-1 block text-label-l4 font-medium text-pneutral-900 ${FIELD_LABEL}`}>
+                    Actual Stock Quantity
+                    <span className="ml-2 text-label-l2 font-semibold text-warning-500">*</span>
+                  </label>
+                  <div className="flex gap-xsm">
+                    <Input
+                      inputMode="numeric"
+                      value={actualPacks}
+                      placeholder="0"
+                      onChange={(e) => {
+                        if (/^\d*$/.test(e.target.value)) setActualPacks(e.target.value);
+                      }}
+                      rightIcon={<UnitTag unit={selected.purchaseUnit} />}
+                      className={FIELD}
+                      containerClassName="min-w-0 flex-1"
+                    />
+                    {hasLooseField && (
+                      <Input
+                        inputMode="numeric"
+                        value={actualLoose}
+                        placeholder="0"
+                        onChange={(e) => {
+                          if (/^\d*$/.test(e.target.value)) setActualLoose(e.target.value);
+                        }}
+                        rightIcon={<UnitTag unit={selected.smallestUnit} />}
+                        aria-invalid={looseTooLarge}
+                        className={`${FIELD} ${looseTooLarge ? ERROR_FIELD : ""}`}
+                        containerClassName="min-w-0 flex-1"
+                      />
+                    )}
+                  </div>
+                  {looseTooLarge && (
+                    <FieldError
+                      message={`Loose ${selected.smallestUnit || "units"} must be less than ${perPack}.`}
+                    />
+                  )}
                 </div>
                 <Input
                   label="Adjustment Quantity"
-                  value={hasActual ? (qty === 0 ? "0" : formatSigned(qty, String)) : ""}
+                  value={hasActual ? formatSignedPacks(diffSmallest, selected) : ""}
                   readOnly
                   labelClassName={FIELD_LABEL}
                   className={`${FIELD} ${signedInputClass}`}

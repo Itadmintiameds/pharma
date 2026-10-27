@@ -23,8 +23,10 @@ import {
 } from "@/utils/purchaseReturnTotals";
 import {
   lineAmounts,
+  savedLineAmounts,
   sumLineAmounts,
   toMoney,
+  totalTaxable,
   type ReturnLineAmounts,
 } from "@/utils/purchaseReturnAmounts";
 import { buildInvoiceRow, type InvoiceRow } from "./AddPurchaseReturn";
@@ -54,6 +56,10 @@ interface ReturnedItem {
 
 /** The return's money figures, one set per revision. */
 interface ReturnFinancials {
+  /** Before the purchase discount. */
+  grossValue: number;
+  discount: number;
+  /** gross - discount. */
   taxableValue: number;
   gst: number;
   totalReturnAmount: number;
@@ -111,12 +117,7 @@ const buildReturnedItem = (
     expiry: formatMonthYear(detail.expiryDate),
     existingPurchaseQty,
     existingFreeQty,
-    existingAmounts: {
-      rate: lineAmounts(detail, 1).rate,
-      grossAmount: toMoney(Number(line.grossAmount) || 0),
-      gstAmount: toMoney(Number(line.gstAmount) || 0),
-      netAmount: toMoney(Number(line.netAmount) || 0),
-    },
+    existingAmounts: savedLineAmounts(lineAmounts(detail, 1).rate, line),
     returnPurchaseQty: existingPurchaseQty,
     returnFreeQty: existingFreeQty,
     maxPurchaseQty: unreturned.paid,
@@ -174,7 +175,9 @@ const buildFinancials = (
   const adjustedAgainstPayable = toMoney(Math.min(totals.totalNetAmount, currentPayable));
 
   return {
-    taxableValue: totals.totalGrossAmount,
+    grossValue: totals.totalGrossAmount,
+    discount: totals.totalDiscount,
+    taxableValue: totalTaxable(totals),
     gst: totals.totalGstAmount,
     totalReturnAmount: totals.totalNetAmount,
     adjustedAgainstPayable,
@@ -391,7 +394,8 @@ const PurchaseReturnEdit = ({ purchaseReturnId, onBack }: PurchaseReturnEditProp
       // figures the Changed Line Items and Financial Impact cards show.
       await editPurchaseReturn(purchaseReturnId, {
         editReason: resolvedEditReason,
-        totalGrossAmount: revisedFinancials.taxableValue,
+        totalGrossAmount: revisedFinancials.grossValue,
+        totalDiscount: revisedFinancials.discount,
         totalGstAmount: revisedFinancials.gst,
         totalNetAmount: revisedFinancials.totalReturnAmount,
         purchaseReturnDetails: changedItems.map((item) => {
@@ -401,6 +405,7 @@ const PurchaseReturnEdit = ({ purchaseReturnId, onBack }: PurchaseReturnEditProp
             purchaseReturnQuantity: item.returnPurchaseQty,
             freeReturnQuantity: item.returnFreeQty,
             grossAmount: amounts.grossAmount,
+            discount: amounts.discountAmount,
             gstAmount: amounts.gstAmount,
             netAmount: amounts.netAmount,
           };

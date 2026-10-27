@@ -114,6 +114,7 @@ export const buildCreatePayload = (
       freeReturnQuantity: String(line.returnFreeQty),
       returnReason: line.returnReason,
       grossAmount: line.amounts.grossAmount,
+      discount: line.amounts.discountAmount,
       gstAmount: line.amounts.gstAmount,
       netAmount: line.amounts.netAmount,
     })),

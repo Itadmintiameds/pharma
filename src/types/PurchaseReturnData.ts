@@ -52,6 +52,8 @@ export interface PurchaseReturnCreatePayload {
   cancelReason: string | null;
   editReason: string | null;
   totalGrossAmount: number;
+  /** The returned lines' share of the purchase discount. */
+  totalDiscount: number;
   totalGstAmount: number;
   totalNetAmount: number;
   purchaseReturnDetails: PurchaseReturnCreateDetail[];
@@ -66,7 +68,9 @@ export interface PurchaseReturnCreateDetail {
   /** The API takes this one as a string, unlike the paid quantity above. */
   freeReturnQuantity: string;
   returnReason: string;
+  /** Undiscounted, as on the purchase line; net = gross - discount + gst. */
   grossAmount: number;
+  discount: number;
   gstAmount: number;
   netAmount: number;
 }
@@ -106,6 +110,7 @@ export interface PurchaseReturnEditPayload {
   editReason: string;
   /** Return-level totals across every line, changed or not. */
   totalGrossAmount: number;
+  totalDiscount: number;
   totalGstAmount: number;
   totalNetAmount: number;
   purchaseReturnDetails: {
@@ -113,6 +118,7 @@ export interface PurchaseReturnEditPayload {
     purchaseReturnQuantity: number;
     freeReturnQuantity: number;
     grossAmount: number;
+    discount: number;
     gstAmount: number;
     netAmount: number;
   }[];

@@ -9,7 +9,7 @@ import {
   updatePurchaseReturn,
 } from '@/services/PurchaseReturnService'
 import type { PurchaseReturnStatus } from '@/types/PurchaseReturnData'
-import { sumLineAmounts, toMoney } from '@/utils/purchaseReturnAmounts'
+import { sumLineAmounts, toMoney, totalTaxable } from '@/utils/purchaseReturnAmounts'
 import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
 import WizardHeader from './WizardHeader'
 import ConfirmPurchaseReturn from './ConfirmPurchaseReturn'
@@ -90,10 +90,9 @@ const toLineItem = (line: ReturnDraftLine): ReturnLineItem => ({
   retQty: line.returnPurchaseQty,
   freeQty: line.returnFreeQty,
   rate: line.amounts.rate,
-  // Purchase-level discount is not apportioned to the line on the purchase
-  // response, so a return is credited at the undiscounted line rate.
-  discount: 0,
-  taxable: line.amounts.grossAmount,
+  // The returned quantity's share of the purchase line's discount.
+  discount: line.amounts.discountAmount,
+  taxable: line.amounts.taxableAmount,
   gst: line.amounts.gstAmount,
   lineAmount: line.amounts.netAmount,
   reason: line.returnReason,
@@ -142,7 +141,11 @@ const returnLineColumns: ColumnDef<ReturnLineItem, any>[] = [
   {
     accessorKey: 'discount',
     header: 'DISCOUNT (₹)',
-    cell: ({ row }) => (row.original.isTotal ? '' : inr(row.original.discount)),
+    cell: ({ row }) => (
+      <span className={row.original.isTotal ? 'font-semibold text-pneutral-900' : ''}>
+        {inr(row.original.discount)}
+      </span>
+    ),
   },
   {
     accessorKey: 'taxable',
@@ -232,17 +235,14 @@ const PurchaseReturnView = ({
   const totals = useMemo(() => {
     const retQty = lineItems.reduce((sum, item) => sum + item.retQty, 0)
     const freeQty = lineItems.reduce((sum, item) => sum + item.freeQty, 0)
-    const discount = toMoney(lineItems.reduce((sum, item) => sum + item.discount, 0))
-
     // The same sum the POST body carries, so the screen and the payload agree.
-    const { totalGrossAmount, totalGstAmount, totalNetAmount } = sumLineAmounts(
-      lines.map((line) => line.amounts)
-    )
-    const taxable = totalGrossAmount
-    const gst = totalGstAmount
-    const lineAmount = totalNetAmount
+    const lineTotals = sumLineAmounts(lines.map((line) => line.amounts))
+    const discount = lineTotals.totalDiscount
+    const taxable = totalTaxable(lineTotals)
+    const gst = lineTotals.totalGstAmount
+    const lineAmount = lineTotals.totalNetAmount
 
-    const grossReturnValue = toMoney(taxable + discount)
+    const grossReturnValue = lineTotals.totalGrossAmount
     const cgst = toMoney(gst / 2)
     const sgst = toMoney(gst - cgst)
     const totalPurchaseReturnAmount = lineAmount
@@ -384,7 +384,7 @@ const PurchaseReturnView = ({
       retQty: totals.retQty,
       freeQty: totals.freeQty,
       rate: 0,
-      discount: 0,
+      discount: totals.discount,
       taxable: totals.taxable,
       gst: totals.gst,
       lineAmount: totals.lineAmount,
@@ -456,9 +456,7 @@ const PurchaseReturnView = ({
             Purchase Return Value Summary
           </p>
           <SummaryLine label="Gross Return Value (₹)" value={inr(totals.grossReturnValue)} />
-          {/* The purchase carries a total discount but does not apportion it to
-              the lines, so there is no per-return share to show yet. */}
-          {/* <SummaryLine label="Applicable Discount (₹)" value={inr(totals.discount)} /> */}
+          <SummaryLine label="Applicable Discount (₹)" value={inr(totals.discount)} />
           <SummaryLine label="Taxable Return Value (₹)" value={inr(totals.taxable)} />
           <SummaryLine label="CGST (₹)" value={inr(totals.cgst)} />
           <SummaryLine label="SGST (₹)" value={inr(totals.sgst)} />
