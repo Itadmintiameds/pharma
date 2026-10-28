@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { X } from "lucide-react";
 import Image from "next/image";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface DropdownOption {
   label: string;
@@ -34,6 +34,13 @@ interface DropdownProps {
   clearable?: boolean;
   menuPlacement?: 'top' | 'bottom';
   /**
+   * "fixed" positions the open menu against the viewport instead of the field,
+   * so a container with overflow hidden/auto (a table cell, a scrolling card)
+   * cannot clip it. It opens below the field, or above when there is more room
+   * there, and scrolls when the options are taller than the space it gets.
+   */
+  menuStrategy?: 'absolute' | 'fixed';
+  /**
    * Rendered at the right of the label row — for a control that swapped in for
    * another one and needs a way back, the way an Input uses `rightIcon`.
    */
@@ -60,6 +67,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   allowOther = false,
   clearable = false,
   menuPlacement = 'bottom',
+  menuStrategy = 'absolute',
   labelAction,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -73,6 +81,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const controlRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
 
   const dynamicOptions = allowOther
     ? [...options, { label: "Other", value: "OTHER" }]
@@ -109,6 +118,43 @@ const Dropdown: React.FC<DropdownProps> = ({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  /**
+   * A fixed menu is placed by hand against the field's on-screen box, and kept
+   * there while anything scrolls or the window resizes. Written straight onto
+   * the element: it is layout, not state, and must land before paint.
+   */
+  useLayoutEffect(() => {
+    if (!isOpen || menuStrategy !== 'fixed') return;
+    const GAP = 4;
+    const EDGE = 8;
+    const MAX_HEIGHT = 240;
+
+    const place = () => {
+      const control = controlRef.current;
+      const menu = listboxRef.current;
+      if (!control || !menu) return;
+      const rect = control.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom - GAP - EDGE;
+      const above = rect.top - GAP - EDGE;
+      const openUp = below < Math.min(MAX_HEIGHT, menu.scrollHeight) && above > below;
+
+      menu.style.position = 'fixed';
+      menu.style.left = `${rect.left}px`;
+      menu.style.width = `${rect.width}px`;
+      menu.style.maxHeight = `${Math.max(0, Math.min(MAX_HEIGHT, openUp ? above : below))}px`;
+      menu.style.top = openUp ? 'auto' : `${rect.bottom + GAP}px`;
+      menu.style.bottom = openUp ? `${window.innerHeight - rect.top + GAP}px` : 'auto';
+    };
+
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [isOpen, menuStrategy]);
 
   /** Keeps the arrow keys' option visible in a list taller than the menu. */
   useEffect(() => {
@@ -452,10 +498,16 @@ const Dropdown: React.FC<DropdownProps> = ({
 
       {isOpen && (
         <div
+          ref={listboxRef}
           role="listbox"
           className={clsx(
-            "absolute z-50 w-full bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col",
-            menuPlacement === 'top' ? "bottom-full mb-1" : "top-full mt-1"
+            "z-50 bg-white border border-pneutral-200 rounded-md shadow-lg max-h-60 overflow-hidden flex flex-col",
+            menuStrategy === 'fixed'
+              ? "fixed"
+              : clsx(
+                  "absolute w-full",
+                  menuPlacement === 'top' ? "bottom-full mb-1" : "top-full mt-1"
+                )
           )}
         >
           <div ref={menuRef} className="overflow-y-auto flex-1">

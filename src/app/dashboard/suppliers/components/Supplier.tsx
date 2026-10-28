@@ -17,8 +17,10 @@ import Button from "@/app/components/common/Button";
 import Input from "@/app/components/common/Input";
 import Dropdown from "@/app/components/common/Dropdown";
 import {
+  checkDuplicateSupplier,
   createSupplier,
   getSupplierById,
+  SupplierDuplicateCheckResponse,
   updateSupplier,
 } from "@/services/SupplierService";
 import { supplierSchema } from "@/app/schema/SupplierSchema";
@@ -60,6 +62,31 @@ const getMinDlExpiryDate = (): string => {
   return toLocalDateString(tomorrow);
 };
 
+// Numbers that must be unique across the suppliers of one pharmacy / warehouse.
+// `messagePrefix` matches the backend's "<prefix> already exists for supplier X".
+const UNIQUE_IDENTIFIER_FIELDS = [
+  { field: "gstinNo", flag: "gstinNoExists", messagePrefix: "GST number" },
+  { field: "dlno", flag: "dlnoExists", messagePrefix: "DL number" },
+  { field: "panNo", flag: "panNoExists", messagePrefix: "PAN number" },
+  { field: "fssaiNo", flag: "fssaiNoExists", messagePrefix: "FSSAI number" },
+] as const;
+
+type UniqueIdentifierField = (typeof UNIQUE_IDENTIFIER_FIELDS)[number]["field"];
+
+/** Field -> error message for every identifier the check reported as a duplicate. */
+const getDuplicateErrors = (
+  result: SupplierDuplicateCheckResponse
+): Partial<Record<UniqueIdentifierField, string>> =>
+  Object.fromEntries(
+    UNIQUE_IDENTIFIER_FIELDS.filter(({ flag }) => result[flag]).map(
+      ({ field, messagePrefix }) => [
+        field,
+        result.messages.find((message) => message.startsWith(messagePrefix)) ??
+          `${messagePrefix} already exists for another supplier.`,
+      ]
+    )
+  );
+
 const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
   const router = useRouter();
   const handleClose = () => (returnTo ? router.push(returnTo) : onClose());
@@ -100,6 +127,24 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const dlExpiryRef = useRef<HTMLInputElement>(null);
+
+  // Latest identifier values, so a slow duplicate check doesn't flag a value
+  // the user has already changed.
+  const identifierValuesRef = useRef<Record<UniqueIdentifierField, string>>({
+    gstinNo: "",
+    dlno: "",
+    panNo: "",
+    fssaiNo: "",
+  });
+
+  useEffect(() => {
+    identifierValuesRef.current = {
+      gstinNo: gstin,
+      dlno,
+      panNo: pan,
+      fssaiNo: fssaiLicense,
+    };
+  }, [gstin, dlno, pan, fssaiLicense]);
 
   useEffect(() => {
     if (!isEditMode) return;
@@ -186,6 +231,31 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
       setter(value);
       validateField(field, value);
     };
+
+  const existingSupplierId = isEditMode ? Number(supplierId) : undefined;
+
+  /** On blur: flag the field if another supplier of this pharmacy/warehouse already uses the number. */
+  const checkDuplicateOnBlur = async (field: UniqueIdentifierField, value: string) => {
+    const trimmed = value.trim();
+    // Empty or badly formatted values already show their own validation error.
+    if (!trimmed || !supplierSchema.shape[field].safeParse(value).success) return;
+
+    try {
+      const result = await checkDuplicateSupplier({
+        supplierId: existingSupplierId,
+        [field]: trimmed,
+      });
+
+      if (identifierValuesRef.current[field].trim() !== trimmed) return;
+
+      const duplicateError = getDuplicateErrors(result)[field];
+      if (duplicateError) {
+        setErrors((prev) => ({ ...prev, [field]: duplicateError }));
+      }
+    } catch {
+      // Non-blocking here — the check runs again on save.
+    }
+  };
 
   const validateFields = (fieldValues: Record<string, string>) => {
     const fields = Object.keys(fieldValues) as (keyof typeof supplierSchema.shape)[];
@@ -334,6 +404,23 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
         status: (isActive ? "ACTIVE" : "INACTIVE") as SupplierStatus,
       };
 
+      const duplicateCheck = await checkDuplicateSupplier({
+        supplierId: existingSupplierId,
+        gstinNo: payload.gstinNo,
+        dlno: payload.dlno,
+        panNo: payload.panNo,
+        fssaiNo: payload.fssaiNo,
+      });
+
+      if (duplicateCheck.duplicate) {
+        setErrors((prev) => ({ ...prev, ...getDuplicateErrors(duplicateCheck) }));
+        toast.error(
+          duplicateCheck.messages.join(". ") ||
+            "Another supplier already uses these details."
+        );
+        return;
+      }
+
       let createdSupplierId: number | undefined;
       if (isEditMode) {
         await updateSupplier(supplierId, payload);
@@ -472,6 +559,7 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
               setGstin(value);
               validateField("gstinNo", value);
             }}
+            onBlur={(e) => checkDuplicateOnBlur("gstinNo", e.target.value)}
             error={errors.gstinNo}
             readOnly={isEditMode}
             className="rounded-sm!"
@@ -486,6 +574,7 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
             placeholder="MH-1234567890123"
             value={dlno}
             onChange={handleFieldChange("dlno", setDlno)}
+            onBlur={(e) => checkDuplicateOnBlur("dlno", e.target.value)}
             error={errors.dlno}
             className="rounded-sm!"
             containerClassName="flex-1"
@@ -517,6 +606,7 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
               placeholder="AAACM1234F"
               value={pan}
               onChange={handleFieldChange("panNo", setPan)}
+              onBlur={(e) => checkDuplicateOnBlur("panNo", e.target.value)}
               error={errors.panNo}
               className="rounded-sm!"
               containerClassName="w-full"
@@ -543,6 +633,7 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
             placeholder="e.g. 12345678901234"
             value={fssaiLicense}
             onChange={handleFieldChange("fssaiNo", setFssaiLicense)}
+            onBlur={(e) => checkDuplicateOnBlur("fssaiNo", e.target.value)}
             error={errors.fssaiNo}
             className="rounded-sm!"
             containerClassName="flex-1"

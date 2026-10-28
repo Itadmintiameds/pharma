@@ -148,7 +148,7 @@ export const pharmacyDetailsSchema = z.object({
     pharmacyGstCertificate: z.any().optional(),
     
     manualFile: z.any().refine((val) => val !== null && val !== undefined, {
-        message: "Document upload is required",
+        message: "Document is required.",
     }),
 });
 

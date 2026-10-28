@@ -55,7 +55,7 @@ const columns: ColumnDef<ReceiptLine>[] = [
   },
   {
     id: "notReceived",
-    header: "NOT RECEIVED QTYyyyy",
+    header: "NOT RECEIVED QTY",
     cell: ({ row }) => {
       const missing = notReceivedQty(row.original);
       return (
@@ -75,7 +75,7 @@ import { ProductService } from "@/services/ProductService";
 
 /** The read-only record of a completed stock return — Figma node 3832:46976. */
 const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDetailsProps) => {
-  const [batchDetails, setBatchDetails] = useState<Record<string, { expiryDate: string; purchaseUnitLabel: string }>>({});
+  const [batchDetails, setBatchDetails] = useState<Record<string, { batchNo: string; expiryDate: string; purchaseUnitLabel: string }>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -90,6 +90,8 @@ const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDe
               setBatchDetails((prev) => ({
                 ...prev,
                 [line.id]: {
+                  // The return line only carries the batch id; the batch carries its number
+                  batchNo: batch.batchNumber || line.batchNo,
                   expiryDate: batch.expiryDate || line.expiryDate,
                   purchaseUnitLabel: batch.purchaseUnit || batch.purchaseUnitLabel || batch.unit || batch.packagingId || line.purchaseUnitLabel,
                 }
@@ -104,6 +106,7 @@ const StockReturnRecieptDetails = ({ stockReturn, onBack }: StockReturnRecieptDe
 
   const displayLines: ReceiptLine[] = stockReturn.lines.map((line) => ({
     ...line,
+    batchNo: batchDetails[line.id]?.batchNo || line.batchNo,
     expiryDate: batchDetails[line.id]?.expiryDate || line.expiryDate,
     purchaseUnitLabel: batchDetails[line.id]?.purchaseUnitLabel || line.purchaseUnitLabel,
   }));

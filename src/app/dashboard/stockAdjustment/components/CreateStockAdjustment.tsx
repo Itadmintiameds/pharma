@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, ArrowRight, CircleAlert, Info, Search } from "lucide-react";
 import Button from "@/app/components/common/Button";
@@ -9,7 +9,14 @@ import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ProductService } from "@/services/ProductService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useAccess } from "@/app/components/providers/AccessProvider";
 import StepIndicator from "./StepIndicator";
+import {
+  ReceivedLimit,
+  StockSource,
+  fetchReceivedLimit,
+  receivedLimitError,
+} from "./stockAdjustmentLimit";
 import {
   AdjustableBatch,
   CARD_SHADOW,
@@ -185,6 +192,41 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   // Remarks only shows its error once the user has left it empty
   const [remarksTouched, setRemarksTouched] = useState(false);
 
+  // A pharmacy under centralized inventory gets its stock through Warehouse
+  // Receipt; everywhere else (no warehouse, or the warehouse itself) it is purchased.
+  const { organization, isWarehouseManager, actingAsWarehouse } = useAccess();
+  const stockSource: StockSource =
+    organization.centralizedInventory === true && !isWarehouseManager && !actingAsWarehouse
+      ? "receipt"
+      : "purchase";
+
+  // The actual count can't exceed what came in of the selected batch
+  // Tagged with the batch it was fetched for, so a stale one is never applied
+  const [limitResult, setLimitResult] = useState<{
+    batchId: string;
+    limit: ReceivedLimit | null;
+  } | null>(null);
+  const isLoadingLimit = Boolean(selected) && limitResult?.batchId !== selected?.id;
+  const receivedLimit =
+    selected && limitResult?.batchId === selected.id ? limitResult.limit : null;
+
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    fetchReceivedLimit(selected, stockSource)
+      .then((limit) => {
+        if (active) setLimitResult({ batchId: selected.id, limit });
+      })
+      .catch((err) => {
+        // Without the figure the count is left unchecked rather than blocked
+        console.error("Failed to fetch the batch's received quantity:", err);
+        if (active) setLimitResult({ batchId: selected.id, limit: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, stockSource]);
+
   // The backend matches the batch no. (partial, case-insensitive) at the current location
   const searchBatches = async () => {
     const query = batchQuery.trim();
@@ -234,9 +276,21 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   const perPack = selected?.unitContains ?? 1;
   const hasLooseField = perPack > 1;
   const looseTooLarge = hasLooseField && Number(actualLoose) >= perPack;
-  const hasActual = (actualPacks !== "" || actualLoose !== "") && !looseTooLarge;
+  const hasEntry = actualPacks !== "" || actualLoose !== "";
   const actualSmallest = Number(actualPacks || 0) * perPack + Number(actualLoose || 0);
   const actualStock = actualSmallest / perPack;
+  // Compared in smallest units: the limit is rounded to 2 decimals of a pack,
+  // which would otherwise flag a count of loose units equal to it.
+  const exceedsReceived =
+    receivedLimit !== null &&
+    hasEntry &&
+    actualSmallest > Math.round(receivedLimit.quantity * perPack);
+  const actualStockError = looseTooLarge
+    ? `Loose ${selected?.smallestUnit || "units"} must be less than ${perPack}.`
+    : exceedsReceived
+      ? receivedLimitError(receivedLimit, selected?.purchaseUnit ?? "")
+      : "";
+  const hasActual = hasEntry && !looseTooLarge && !exceedsReceived;
   const remarksRequired = reason === OTHER_REASON;
   const remarksError =
     remarksRequired && remarksTouched && !remarks.trim()
@@ -246,7 +300,13 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
     selected && hasActual ? actualSmallest - selected.currentStockSmallest : 0;
   const qty = selected && hasActual ? adjustmentQty({ batch: selected, actualStock }) : 0;
   const noAdjustmentNeeded = Boolean(selected) && hasActual && qty === 0;
-  const canReview = Boolean(selected) && hasActual && qty !== 0 && reason !== "" && (!remarksRequired || remarks.trim() !== "");
+  const canReview =
+    Boolean(selected) &&
+    hasActual &&
+    !isLoadingLimit &&
+    qty !== 0 &&
+    reason !== "" &&
+    (!remarksRequired || remarks.trim() !== "");
 
   // Tints the read-only adjustment fields red for a decrease, green for an increase
   const signedInputClass =
@@ -398,7 +458,8 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
                         if (/^\d*$/.test(e.target.value)) setActualPacks(e.target.value);
                       }}
                       rightIcon={<UnitTag unit={selected.purchaseUnit} />}
-                      className={FIELD}
+                      aria-invalid={exceedsReceived}
+                      className={`${FIELD} ${exceedsReceived ? ERROR_FIELD : ""}`}
                       containerClassName="min-w-0 flex-1"
                     />
                     {hasLooseField && (
@@ -410,17 +471,13 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
                           if (/^\d*$/.test(e.target.value)) setActualLoose(e.target.value);
                         }}
                         rightIcon={<UnitTag unit={selected.smallestUnit} />}
-                        aria-invalid={looseTooLarge}
-                        className={`${FIELD} ${looseTooLarge ? ERROR_FIELD : ""}`}
+                        aria-invalid={looseTooLarge || exceedsReceived}
+                        className={`${FIELD} ${looseTooLarge || exceedsReceived ? ERROR_FIELD : ""}`}
                         containerClassName="min-w-0 flex-1"
                       />
                     )}
                   </div>
-                  {looseTooLarge && (
-                    <FieldError
-                      message={`Loose ${selected.smallestUnit || "units"} must be less than ${perPack}.`}
-                    />
-                  )}
+                  {actualStockError && <FieldError message={actualStockError} />}
                 </div>
                 <Input
                   label="Adjustment Quantity"

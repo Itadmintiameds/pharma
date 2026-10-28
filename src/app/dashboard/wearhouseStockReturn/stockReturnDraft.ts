@@ -89,6 +89,8 @@ export const damagedItemToLine = (
     }
   }
 
+  const packSize = unitContains > 0 ? unitContains : 1;
+
   return {
     id: `damaged-${item.warehouseDistributionDetailsId}-${item.batchNo}`,
     productId: pId,
@@ -99,9 +101,10 @@ export const damagedItemToLine = (
     expiryDate: expDate,
     purchaseUnit: pUnit || "Strip",
     smallestUnit: sUnit,
-    unitContains: unitContains > 0 ? unitContains : 1,
+    unitContains: packSize,
     availableBase: damagedBase,
-    returnQty: "",
+    // Damaged stock goes back whole, so the return starts out as the damaged qty
+    returnQty: damagedBase > 0 ? String(Number((damagedBase / packSize).toFixed(2))) : "",
     reason: "Damaged",
     transfer: {
       distributionId: 0,
