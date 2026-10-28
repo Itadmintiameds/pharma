@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, Box, Check, FileText, Printer } from "lucide-react";
@@ -9,8 +9,11 @@ import DataTable from "@/app/components/common/table/DataTable";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
 import { getBillingById } from "@/services/BillingService";
 import { getSalesReturnById } from "@/services/SalesReturnService";
+import { getUserById } from "@/services/UserManagementService";
 import { BillingRecord } from "@/types/BillingData";
 import { SalesReturnData } from "@/types/SalesReturnData";
+import { printElement } from "@/utils/printElement";
+import { SALES_RETURN_PRINT_CSS } from "./salesReturnPrintStyles";
 
 // Figma "boxShadowCard" — same three-layer shadow as the other sales return cards
 const CARD_SHADOW =
@@ -122,7 +125,7 @@ const TextCell = ({
 
 const RETURNED_PRODUCT_COLUMNS: ColumnDef<ReturnedProduct>[] = [
   {
-    header: "#",
+    header: "Sl No.",
     cell: ({ row }) => <TextCell>{row.index + 1}</TextCell>,
   },
   {
@@ -231,6 +234,7 @@ const SalesReturnDetails = () => {
   const [billing, setBilling] = useState<BillingRecord | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(salesReturnId));
   const [loadError, setLoadError] = useState("");
+  const printRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!salesReturnId) return;
@@ -264,6 +268,26 @@ const SalesReturnDetails = () => {
       active = false;
     };
   }, [salesReturnId]);
+
+  // createdBy is only ever the creating user's raw id — resolve it to their name.
+  const creatorId = salesReturn?.createdBy;
+  const [creatorName, setCreatorName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!creatorId) return;
+    let active = true;
+    getUserById(creatorId)
+      .then((user) => {
+        if (active) setCreatorName(user?.fullName ?? null);
+      })
+      .catch((err) => {
+        console.error("Failed to fetch the creating user:", err);
+        if (active) setCreatorName(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [creatorId]);
 
   const returnNo = salesReturn?.salesReturnNo ?? searchParams.get("returnNo") ?? "";
   const returnDate = formatDate(salesReturn?.salesReturnDate);
@@ -325,8 +349,8 @@ const SalesReturnDetails = () => {
   ];
 
   return (
-    <div className="flex flex-col gap-md">
-      <div className="flex min-w-0 flex-col gap-xxsm">
+    <div ref={printRef} data-print-root className="flex flex-col gap-md">
+      <div data-print="title" className="flex min-w-0 flex-col gap-xxsm">
         {/* VSR Title Row — Figma node 4023:55339 */}
         <div className="flex flex-wrap items-center gap-sm">
           <p className="text-h5 font-semibold text-pneutral-900">
@@ -353,10 +377,11 @@ const SalesReturnDetails = () => {
 
       {/* Original Bill Customer Card — Figma node 4023:55346 */}
       <div
+        data-print="card"
         className={`flex w-full flex-col gap-sm rounded-2xl bg-white p-md ${CARD_SHADOW}`}
       >
         <div className="flex w-full flex-wrap items-center gap-sm">
-          <p className="text-label-l5 font-semibold text-pneutral-900">
+          <p data-print="card-title" className="text-label-l5 font-semibold text-pneutral-900">
             Original Bill &amp; Customer Details
           </p>
           <span className="inline-flex items-center justify-center gap-xsm whitespace-nowrap rounded-lg bg-primary-100 px-xsm py-xxsm text-p4 font-medium text-primary-800">
@@ -372,14 +397,14 @@ const SalesReturnDetails = () => {
               );
             }}
             disabled={!salesReturn?.billingId}
-            className="ml-auto flex h-9 min-w-27 shrink-0 items-center justify-center gap-xsm rounded-lg px-sm text-label-l3 font-medium text-primary-800 sm:w-45"
+            className="ml-auto flex h-9 min-w-27 shrink-0 print:hidden items-center justify-center gap-xsm rounded-lg px-sm text-label-l3 font-medium text-primary-800 sm:w-45"
           >
             <FileText size={16} className="shrink-0" />
             View Original Bill
           </button>
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 md:grid-cols-3 lg:flex lg:items-start">
+        <div data-print="row" className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 md:grid-cols-3 lg:flex lg:items-start">
           <BillDetail label="Bill No." value={bill.billNo} />
           <BillDetail label="Bill Date" value={bill.billDate} />
           <BillDetail
@@ -394,7 +419,7 @@ const SalesReturnDetails = () => {
           )}
         </div>
 
-        <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 md:grid-cols-3 lg:flex lg:items-start">
+        <div data-print="row" className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 md:grid-cols-3 lg:flex lg:items-start">
           <BillDetail label="Mobile Number" value={bill.mobileNumber} />
           <BillDetail label="Payment Mode" value={bill.paymentMode} />
           <BillDetail label="Bill Amount" value={bill.billAmount} />
@@ -422,7 +447,11 @@ const SalesReturnDetails = () => {
       </div>
 
       {/* Return Value Summary Card — Figma node 4023:55425 */}
-      <div className="grid w-full grid-cols-1 gap-md rounded-2xl border border-info-300 bg-info-50 p-md sm:grid-cols-2 lg:flex lg:items-start">
+      <div
+        data-print="row"
+        data-print-summary
+        className="grid w-full grid-cols-1 gap-md rounded-2xl border border-info-300 bg-info-50 p-md sm:grid-cols-2 lg:flex lg:items-start"
+      >
         {summaryItems.map(({ label, value, accent }) => (
           <div
             key={label}
@@ -443,10 +472,11 @@ const SalesReturnDetails = () => {
       {/* IP Account Settlement Card — Figma node 4023:55438 (IP patients only) */}
       {isIpPatient && (
         <div
+          data-print="card"
           className={`flex w-full flex-col gap-sm rounded-2xl bg-white p-md ${CARD_SHADOW}`}
         >
           <div className="flex flex-wrap items-center gap-sm">
-            <p className="text-label-l5 font-semibold text-pneutral-900">
+            <p data-print="card-title" className="text-label-l5 font-semibold text-pneutral-900">
               IP Account Settlement
             </p>
             <span className="inline-flex items-center justify-center gap-xsm whitespace-nowrap rounded-lg bg-primary-100 px-xsm py-xxsm text-p2 leading-6 font-medium text-primary-800">
@@ -487,6 +517,7 @@ const SalesReturnDetails = () => {
       {/* Refund Details Banner — Figma node 4023:55458 */}
       <div
         role="status"
+        data-print="banner"
         className="flex w-full items-center gap-sm rounded-2xl bg-success-50 p-md"
       >
         {/* check-circle/solid */}
@@ -508,9 +539,10 @@ const SalesReturnDetails = () => {
       {/* Inventory Impact Card — Figma node 4023:55463. One line per returned
           product: what went back into saleable stock. */}
       <div
+        data-print="card"
         className={`flex w-full flex-col gap-sm rounded-2xl bg-white p-md ${CARD_SHADOW}`}
       >
-        <p className="text-label-l5 font-semibold text-pneutral-900">
+        <p data-print="card-title" className="text-label-l5 font-semibold text-pneutral-900">
           Inventory Impact
         </p>
         {products.map((product) => (
@@ -533,10 +565,10 @@ const SalesReturnDetails = () => {
       </div>
 
       {/* Audit Info Card — Figma node 4023:55468 */}
-      <div className="flex w-full flex-wrap items-start gap-x-md gap-y-xxsm px-md py-sm text-p3 font-regular">
+      <div data-print="audit" className="flex w-full flex-wrap items-start gap-x-md gap-y-xxsm px-md py-sm text-p3 font-regular">
         <p className="flex gap-xxsm">
           <span className="text-pneutral-600">Created By:</span>
-          <span className="text-pneutral-900">{salesReturn?.createdBy || "—"}</span>
+          <span className="text-pneutral-900">{creatorName || salesReturn?.createdBy || "—"}</span>
         </p>
         <p className="flex gap-xxsm">
           <span className="text-pneutral-600">Created On:</span>
@@ -561,8 +593,13 @@ const SalesReturnDetails = () => {
         <Button
           type="button"
           variant="primary"
-          // Browser print of this page; swap for a formatted return slip if one is designed
-          onClick={() => window.print()}
+          // Prints only the details page — not the dashboard's sidebar and navbar
+          onClick={() => {
+            if (printRef.current)
+              printElement(printRef.current, `Sales Return ${returnNo}`, SALES_RETURN_PRINT_CSS, {
+                fitToOnePage: true,
+              });
+          }}
           className={`${FOOTER_BUTTON} w-full! bg-primary-800! text-pneutral-50! sm:w-55!`}
         >
           <Printer size={20} className="shrink-0" />

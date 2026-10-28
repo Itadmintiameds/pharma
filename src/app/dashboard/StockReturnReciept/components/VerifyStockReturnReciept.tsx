@@ -49,7 +49,7 @@ const VerifyStockReturnReciept = ({
     )
   );
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [batchDetails, setBatchDetails] = useState<Record<string, { expiryDate: string; purchaseUnitLabel: string }>>({});
+  const [batchDetails, setBatchDetails] = useState<Record<string, { batchNo: string; expiryDate: string; purchaseUnitLabel: string }>>({});
 
   useEffect(() => {
     import("@/services/ProductService").then(({ ProductService }) => {
@@ -64,6 +64,8 @@ const VerifyStockReturnReciept = ({
                 setBatchDetails((prev) => ({
                   ...prev,
                   [line.id]: {
+                    // The return line only carries the batch id; the batch carries its number
+                    batchNo: batch.batchNumber || line.batchNo,
                     expiryDate: batch.expiryDate || line.expiryDate,
                     purchaseUnitLabel: batch.purchaseUnit || batch.purchaseUnitLabel || batch.unit || batch.packagingId || line.purchaseUnitLabel,
                   }
@@ -78,6 +80,7 @@ const VerifyStockReturnReciept = ({
 
   const verifiedLines: ReceiptLine[] = stockReturn.lines.map((line) => ({
     ...line,
+    batchNo: batchDetails[line.id]?.batchNo || line.batchNo,
     expiryDate: batchDetails[line.id]?.expiryDate || line.expiryDate,
     purchaseUnitLabel: batchDetails[line.id]?.purchaseUnitLabel || line.purchaseUnitLabel,
     receivedQty: Number(receivedById[line.id]) || 0,

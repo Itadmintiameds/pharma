@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, ArrowRight, CircleAlert, Info, Search } from "lucide-react";
 import Button from "@/app/components/common/Button";
@@ -9,7 +9,14 @@ import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ProductService } from "@/services/ProductService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useAccess } from "@/app/components/providers/AccessProvider";
 import StepIndicator from "./StepIndicator";
+import {
+  ReceivedLimit,
+  StockSource,
+  fetchReceivedLimit,
+  receivedLimitError,
+} from "./stockAdjustmentLimit";
 import {
   AdjustableBatch,
   CARD_SHADOW,
@@ -170,6 +177,41 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   // Remarks only shows its error once the user has left it empty
   const [remarksTouched, setRemarksTouched] = useState(false);
 
+  // A pharmacy under centralized inventory gets its stock through Warehouse
+  // Receipt; everywhere else (no warehouse, or the warehouse itself) it is purchased.
+  const { organization, isWarehouseManager, actingAsWarehouse } = useAccess();
+  const stockSource: StockSource =
+    organization.centralizedInventory === true && !isWarehouseManager && !actingAsWarehouse
+      ? "receipt"
+      : "purchase";
+
+  // The actual count can't exceed what came in of the selected batch
+  // Tagged with the batch it was fetched for, so a stale one is never applied
+  const [limitResult, setLimitResult] = useState<{
+    batchId: string;
+    limit: ReceivedLimit | null;
+  } | null>(null);
+  const isLoadingLimit = Boolean(selected) && limitResult?.batchId !== selected?.id;
+  const receivedLimit =
+    selected && limitResult?.batchId === selected.id ? limitResult.limit : null;
+
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    fetchReceivedLimit(selected, stockSource)
+      .then((limit) => {
+        if (active) setLimitResult({ batchId: selected.id, limit });
+      })
+      .catch((err) => {
+        // Without the figure the count is left unchecked rather than blocked
+        console.error("Failed to fetch the batch's received quantity:", err);
+        if (active) setLimitResult({ batchId: selected.id, limit: null });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected, stockSource]);
+
   // The backend matches the batch no. (partial, case-insensitive) at the current location
   const searchBatches = async () => {
     const query = batchQuery.trim();
@@ -214,8 +256,18 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
   };
 
   const isNegative = Number(actualStock) < 0;
+  const exceedsReceived =
+    receivedLimit !== null && actualStock.trim() !== "" && Number(actualStock) > receivedLimit.quantity;
+  const actualStockError = isNegative
+    ? "Cannot be negative."
+    : exceedsReceived
+      ? receivedLimitError(receivedLimit, selected?.purchaseUnit ?? "")
+      : "";
   const hasActual =
-    actualStock.trim() !== "" && !Number.isNaN(Number(actualStock)) && !isNegative;
+    actualStock.trim() !== "" &&
+    !Number.isNaN(Number(actualStock)) &&
+    !isNegative &&
+    !exceedsReceived;
   const remarksRequired = reason === OTHER_REASON;
   const remarksError =
     remarksRequired && remarksTouched && !remarks.trim()
@@ -223,7 +275,13 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
       : "";
   const qty = selected && hasActual ? adjustmentQty({ batch: selected, actualStock: Number(actualStock) }) : 0;
   const noAdjustmentNeeded = Boolean(selected) && hasActual && qty === 0;
-  const canReview = Boolean(selected) && hasActual && qty !== 0 && reason !== "" && (!remarksRequired || remarks.trim() !== "");
+  const canReview =
+    Boolean(selected) &&
+    hasActual &&
+    !isLoadingLimit &&
+    qty !== 0 &&
+    reason !== "" &&
+    (!remarksRequired || remarks.trim() !== "");
 
   // Tints the read-only adjustment fields red for a decrease, green for an increase
   const signedInputClass =
@@ -369,11 +427,11 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
                     onChange={(e) => {
                       if (/^-?\d*\.?\d*$/.test(e.target.value)) setActualStock(e.target.value);
                     }}
-                    aria-invalid={isNegative}
+                    aria-invalid={Boolean(actualStockError)}
                     labelClassName={FIELD_LABEL}
-                    className={`${FIELD} ${isNegative ? ERROR_FIELD : ""}`}
+                    className={`${FIELD} ${actualStockError ? ERROR_FIELD : ""}`}
                   />
-                  {isNegative && <FieldError message="Cannot be negative." />}
+                  {actualStockError && <FieldError message={actualStockError} />}
                 </div>
                 <Input
                   label="Adjustment Quantity"

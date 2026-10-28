@@ -32,6 +32,35 @@ export const getSupplierById = async (supplierId: number | string): Promise<Supp
   }
 };
 
+export type SupplierDuplicateCheckRequest = Pick<
+  SupplierData,
+  'supplierId' | 'gstinNo' | 'dlno' | 'panNo' | 'fssaiNo'
+>;
+
+export interface SupplierDuplicateCheckResponse {
+  duplicate: boolean;
+  gstinNoExists: boolean;
+  dlnoExists: boolean;
+  panNoExists: boolean;
+  fssaiNoExists: boolean;
+  // One per duplicated number, e.g. "GST number already exists for supplier ABC Pharma"
+  messages: string[];
+}
+
+// Check GST / DL / PAN / FSSAI numbers against the other suppliers of the current
+// pharmacy or warehouse. Pass supplierId when editing so the supplier isn't
+// reported as a duplicate of itself.
+export const checkDuplicateSupplier = async (
+  data: SupplierDuplicateCheckRequest
+): Promise<SupplierDuplicateCheckResponse> => {
+  try {
+    const response = await api.post('/supplier/checkDuplicate', data);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to check for duplicate suppliers.');
+  }
+};
+
 // Update an existing supplier
 export const updateSupplier = async (
   supplierId: number | string,

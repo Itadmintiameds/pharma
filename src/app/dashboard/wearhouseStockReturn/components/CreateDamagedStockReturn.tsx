@@ -160,7 +160,8 @@ const CreateDamagedStockReturn = ({
 
   const rowWithQty = (line: StockReturnLine): StockReturnLine => ({
     ...line,
-    returnQty: qtyById[line.id] ?? "",
+    // Prefilled with the damaged qty until the user types over it
+    returnQty: qtyById[line.id] ?? line.returnQty,
   });
 
   const toggleChecked = (id: string, checked: boolean) =>
@@ -322,7 +323,7 @@ const CreateDamagedStockReturn = ({
               type="number"
               min={0}
               sizeVariant="sm"
-              value={isEligible ? (qtyById[line.id] ?? "") : "0"}
+              value={isEligible ? (qtyById[line.id] ?? line.returnQty) : "0"}
               disabled={!isEligible}
               onChange={(e) => {
                 setQtyById((prev) => ({ ...prev, [line.id]: e.target.value }));

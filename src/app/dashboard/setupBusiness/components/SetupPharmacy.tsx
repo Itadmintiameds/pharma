@@ -1026,10 +1026,14 @@ const SetupPharmacy = ({
             />
 
             <UploadInput
-              onFileSelect={setManualFile}
+              onFileSelect={(file) => {
+                setManualFile(file);
+                // Attaching a file clears "Document is required."
+                if (file) setErrors((prev) => ({ ...prev, manualFile: "" }));
+              }}
               existingFile={existingManualFile || undefined}
               required
-              hasError={!!errors.manualFile}
+              errorMessage={errors.manualFile}
             />
 
             <Input

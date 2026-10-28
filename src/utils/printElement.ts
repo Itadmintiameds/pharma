@@ -12,20 +12,30 @@
  *  dialog opens regardless so a single dead asset cannot swallow the print. */
 const ASSET_TIMEOUT_MS = 3000;
 
+/** A4 portrait's printable area at an 8mm margin, in CSS px (96 per inch). */
+const A4_PRINTABLE_WIDTH_PX = 733;
+const A4_PRINTABLE_HEIGHT_PX = 1062;
+
 /**
  * @param extraCss Stylesheet appended after the page's own, so it wins on
  *   equal specificity. Use it for print-only layout — the on-screen component
  *   and any html2canvas capture never see it.
+ * @param options.fitToOnePage Scales the content down, if it has to, so it all
+ *   lands on a single A4 portrait sheet. Pair it with an `@page` margin of 8mm.
  */
 export const printElement = (
     element: HTMLElement,
     title = "Invoice",
-    extraCss = ""
+    extraCss = "",
+    options: { fitToOnePage?: boolean } = {}
 ) => {
     const iframe = document.createElement("iframe");
     iframe.setAttribute("aria-hidden", "true");
-    iframe.style.cssText =
-        "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    // Fitting measures the laid-out content, so the iframe gets the sheet's
+    // printable width (still invisible, it has no height) instead of none.
+    iframe.style.cssText = `position:fixed;right:0;bottom:0;width:${
+        options.fitToOnePage ? A4_PRINTABLE_WIDTH_PX : 0
+    }px;height:0;border:0;`;
     document.body.appendChild(iframe);
 
     const doc = iframe.contentDocument;
@@ -72,6 +82,14 @@ export const printElement = (
     const print = () => {
         if (printed) return;
         printed = true;
+        if (options.fitToOnePage) {
+            const height = doc.body.scrollHeight;
+            if (height > A4_PRINTABLE_HEIGHT_PX) {
+                // A little under the exact ratio, so rounding never tips the
+                // last line onto a second sheet.
+                doc.body.style.zoom = String((A4_PRINTABLE_HEIGHT_PX / height) * 0.97);
+            }
+        }
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
         // The dialog reads from the iframe, so it cannot be torn down until

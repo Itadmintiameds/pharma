@@ -244,6 +244,8 @@ const CreateStockReturn = ({
           onChange={(reason) => updateLine(row.original.id, { reason })}
           placeholder="Select reason"
           error={showValidation && !row.original.reason ? "Select a reason" : undefined}
+          // The table clips overflow, so the menu is lifted out of it to show every reason
+          menuStrategy="fixed"
           className="min-w-44 py-sm"
         />
       ),

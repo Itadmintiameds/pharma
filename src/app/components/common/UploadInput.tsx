@@ -8,6 +8,8 @@ type Props = {
   placeholder?: string;
   accept?: string;
   hasError?: boolean;
+  /** Inline message under the field, e.g. "Document is required." — also turns the border red. */
+  errorMessage?: string;
   required?: boolean;
 };
 
@@ -18,6 +20,7 @@ export default function UploadInput({
   placeholder = "Upload the File",
   accept = "application/pdf",
   hasError = false,
+  errorMessage,
   required = false,
 }: Props) {
   const [file, setFile] = useState<File | null>(null);
@@ -63,6 +66,9 @@ export default function UploadInput({
   };
 
   const hasFile = !!file || (!!existingFile && !removedExisting);
+  // The file-size check's own message wins over the form's
+  const shownError = error || errorMessage || "";
+  const showErrorBorder = hasError || !!shownError;
 
   const openPicker = () => fileInputRef.current?.click();
 
@@ -89,6 +95,7 @@ export default function UploadInput({
         role={hasFile ? undefined : "button"}
         tabIndex={hasFile ? undefined : 0}
         aria-label={hasFile ? undefined : `${label}: ${placeholder}`}
+        aria-invalid={showErrorBorder || undefined}
         onClick={hasFile ? undefined : openPicker}
         onKeyDown={(e) => {
           if (hasFile) return;
@@ -98,11 +105,13 @@ export default function UploadInput({
           }
         }}
         className={`flex items-center w-full h-13 rounded-lg border bg-white overflow-hidden transition-all ${
-          hasError ? "border-2 border-red-500" : "border-pneutral-300"
+          showErrorBorder ? "border-warning-500" : "border-pneutral-300"
         } ${
           hasFile
             ? ""
-            : "cursor-pointer focus:outline-none focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
+            : showErrorBorder
+              ? "cursor-pointer focus:outline-none focus:ring-1 focus:ring-warning-500"
+              : "cursor-pointer focus:outline-none focus:border-secondary-300 focus:ring-1 focus:ring-secondary-300"
         }`}
       >
         <div className="flex items-center justify-center h-full px-4 bg-secondary-700 rounded-md">
@@ -144,7 +153,7 @@ export default function UploadInput({
         />
       </div>
 
-      {error && <p className="text-sm text-red-500 mt-1">{error}</p>}
+      {shownError && <p className="mt-1 text-p2 text-warning-500">{shownError}</p>}
     </div>
   );
 }
