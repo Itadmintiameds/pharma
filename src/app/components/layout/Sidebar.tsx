@@ -334,6 +334,22 @@ const Sidebar = () => {
               name: "Product-wise Purchase and Sales Analysis Report",
               path: "/dashboard/reports/productwisePurchase&SalesAnalysisReport",
             },
+            {
+              name: "Bill Summary",
+              path: "/dashboard/reports/BillSummary",
+            },
+            {
+              name: "Detailed Sale Report",
+              path: "/dashboard/reports/DetailedSaleReport",
+            },
+            {
+              name: "Doctor-wise Sale Report",
+              path: "/dashboard/reports/DoctorWiseSaleReport",
+            },
+            {
+              name: "Bill Due Summary",
+              path: "/dashboard/reports/BillDueSummary",
+            },
           ],
         },
       ],
