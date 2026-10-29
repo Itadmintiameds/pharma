@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,6 +23,7 @@ import {
   PackageOpen,
   Scale,
   Wallet,
+  ChevronDown,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -60,8 +61,28 @@ const Sidebar = () => {
 
   const { hasApprovedPharmacy } = useBusinessRegistration();
 
-  // Dynamic lock check - for other inventory modules
-  const isBusinessRegistered = false;
+  // Items with sub-items (Reports) expand downwards in place. Starts open when
+  // the current page is one of the sub-items, so the active link stays visible.
+  const [openItems, setOpenItems] = useState<Record<string, boolean>>(() => ({
+    Reports:
+      pathname.startsWith("/dashboard/inventorySalesReport") ||
+      pathname.startsWith("/dashboard/currentStockSummaryReport") ||
+      pathname.startsWith("/dashboard/stockMovementReport") ||
+      pathname.startsWith("/dashboard/stockExpiryReport") ||
+      pathname.startsWith("/dashboard/stockDamageReport") ||
+      pathname.startsWith("/dashboard/stockReturnReport") ||
+      pathname.startsWith("/dashboard/stockAdjustmentReport") ||
+      pathname.startsWith("/dashboard/purchaseRegisterReport") ||
+      pathname.startsWith("/dashboard/supplierPurchaseReturnReport") ||
+      pathname.startsWith("/dashboard/supplierOutstandingReport") ||
+      pathname.startsWith("/dashboard/supplierPaymentReport") ||
+      pathname.startsWith("/dashboard/pharmacySalesReturnReport") ||
+      pathname.startsWith("/dashboard/grossProfitReport") ||
+      pathname.startsWith("/dashboard/userwiseCollectionReport") ||
+      pathname.startsWith("/dashboard/productwisePurchase&SalesAnalysisReport"),
+  }));
+  const toggleItem = (name: string) =>
+    setOpenItems((prev) => ({ ...prev, [name]: !prev[name] }));
 
   // Whether Suppliers / Supplier Payment are listed at all is decided by the
   // access rules (warehouse side only under centralized inventory). Where they
@@ -100,6 +121,10 @@ const Sidebar = () => {
       icon: typeof LayoutDashboard;
       path: string;
       isLocked: boolean;
+      children?: {
+        name: string;
+        path: string;
+      }[];
     }[];
   }[] = [
     {
@@ -257,11 +282,74 @@ const Sidebar = () => {
       category: "REPORTS",
       heightClass: "h-[64px]",
       items: [
+        // No moduleKey, so it is listed for every role — the same as Dashboard.
         {
           name: "Reports",
           icon: BarChart3,
           path: "/dashboard/reports",
-          isLocked: !isBusinessRegistered,
+          isLocked: !hasApprovedPharmacy,
+          children: [
+            {
+              name: "Inventory Sales Report",
+              path: "/dashboard/inventorySalesReport",
+            },
+            {
+              name: "Current Stock Summary Report",
+              path: "/dashboard/currentStockSummaryReport",
+            },
+            {
+              name: "Stock Movement Report",
+              path: "/dashboard/stockMovementReport",
+            },
+            {
+              name: "Stock Expiry Report",
+              path: "/dashboard/stockExpiryReport",
+            },
+            {
+              name: "Stock Damage Report",
+              path: "/dashboard/stockDamageReport",
+            },
+            {
+              name: "Stock Return Report",
+              path: "/dashboard/stockReturnReport",
+            },
+            {
+              name: "Stock Adjustment Report",
+              path: "/dashboard/stockAdjustmentReport",
+            },
+            {
+              name: "Purchase Register Report",
+              path: "/dashboard/purchaseRegisterReport",
+            },
+            {
+              name: "Supplier Purchase Return Report",
+              path: "/dashboard/supplierPurchaseReturnReport",
+            },
+            {
+              name: "Supplier Outstanding Report",
+              path: "/dashboard/supplierOutstandingReport",
+            },
+            {
+              name: "Supplier Payment Report",
+              path: "/dashboard/supplierPaymentReport",
+            },
+            {
+              name: "Pharmacy Sales Return Report",
+              path: "/dashboard/pharmacySalesReturnReport",
+            },
+            {
+              name: "Gross Profit Report",
+              path: "/dashboard/grossProfitReport",
+            },
+            {
+              name: "User-wise Collection Report",
+              path: "/dashboard/userwiseCollectionReport",
+            },
+            {
+              name: "Product-wise Purchase and Sales Analysis Report",
+              path: "/dashboard/productwisePurchase&SalesAnalysisReport",
+            },
+          ],
         },
       ],
     },
@@ -355,6 +443,70 @@ const Sidebar = () => {
                   : item.isLocked
                     ? "Complete business setup to unlock this module"
                     : undefined;
+
+                if (item.children) {
+                  const isOpen = !isLocked && !!openItems[item.name];
+                  const isChildActive = item.children.some(
+                    (child) => pathname === child.path
+                  );
+                  return (
+                    <div key={item.name} className="flex flex-col gap-[2px]">
+                      <button
+                        type="button"
+                        title={lockedMessage}
+                        aria-expanded={isOpen}
+                        onClick={() => {
+                          if (!isLocked) toggleItem(item.name);
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
+                          isLocked
+                            ? "text-pneutral-50 cursor-not-allowed"
+                            : `text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer ${
+                                isChildActive ? "font-semibold" : ""
+                              }`
+                        }`}
+                      >
+                        <Icon size={18} className="shrink-0" />
+                        <span className="truncate">{item.name}</span>
+                        {isLocked ? (
+                          <Image
+                            src="/sidebar/lock-icon.svg"
+                            alt="Locked"
+                            width={14}
+                            height={14}
+                            className="ml-auto shrink-0"
+                            style={{ width: "auto", height: "auto" }}
+                          />
+                        ) : (
+                          <ChevronDown
+                            size={16}
+                            className={`ml-auto shrink-0 transition-transform duration-200 ${
+                              isOpen ? "rotate-180" : ""
+                            }`}
+                          />
+                        )}
+                      </button>
+                      {isOpen &&
+                        item.children.map((child) => {
+                          const isSubActive = pathname === child.path;
+                          return (
+                            <Link
+                              key={child.name}
+                              href={child.path}
+                              title={child.name}
+                              className={`flex items-center gap-3 pl-9 pr-4 h-[36px] rounded-[10px] text-[13px] font-medium transition-all duration-200 select-none ${
+                                isSubActive
+                                  ? "bg-secondary-50 text-pneutral-800 shadow-sm font-semibold"
+                                  : "text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer"
+                              }`}
+                            >
+                              <span className="truncate">{child.name}</span>
+                            </Link>
+                          );
+                        })}
+                    </div>
+                  );
+                }
 
                 return (
                   <Link
