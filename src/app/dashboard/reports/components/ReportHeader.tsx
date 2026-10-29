@@ -3,6 +3,8 @@ import Image from "next/image";
 interface ReportHeaderProps {
   title: string;
   description: string;
+  /** Path under /public for the 28px tile icon. */
+  icon?: string;
   onPrint?: () => void;
   onDownload?: () => void;
 }
@@ -11,13 +13,14 @@ interface ReportHeaderProps {
 export default function ReportHeader({
   title,
   description,
+  icon = "/Reports/DocumentChartBar.svg",
   onPrint,
   onDownload,
 }: ReportHeaderProps) {
   return (
     <div className="flex flex-wrap items-center gap-4">
       <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-        <Image src="/Reports/DocumentChartBar.svg" alt="" width={28} height={28} />
+        <Image src={icon} alt="" width={28} height={28} />
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">

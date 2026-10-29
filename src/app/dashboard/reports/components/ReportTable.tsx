@@ -13,7 +13,8 @@ export interface ReportColumn<T> {
   sortValue?: (row: T) => string | number;
   /** Width classes for the column, e.g. "min-w-[155px]". */
   className?: string;
-  cell: (row: T) => React.ReactNode;
+  /** `index` is the row's 0-based position in the sorted report, across pages. */
+  cell: (row: T, index: number) => React.ReactNode;
 }
 
 interface ReportTableProps<T> {
@@ -26,6 +27,11 @@ interface ReportTableProps<T> {
   /** Every row of the report — the table sorts and pages them itself. */
   rows: T[];
   getRowKey: (row: T, index: number) => string;
+  /**
+   * A tinted "Total" row under the body, keyed by column key; columns left out
+   * stay blank. It totals the whole report, so it shows on every page.
+   */
+  totalRow?: Partial<Record<string, React.ReactNode>>;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50];
@@ -48,6 +54,7 @@ export default function ReportTable<T>({
   columns,
   rows,
   getRowKey,
+  totalRow,
 }: ReportTableProps<T>) {
   const [sort, setSort] = useState<SortState>(null);
   const [page, setPage] = useState(1);
@@ -163,22 +170,43 @@ export default function ReportTable<T>({
               </tr>
             )}
 
-            {pageRows.map((row, index) => (
-              <tr key={getRowKey(row, index)} className="[&:last-child>td]:border-b-0">
+            {pageRows.map((row, i) => {
+              const index = (currentPage - 1) * pageSize + i;
+              return (
+                <tr key={getRowKey(row, index)} className="[&:last-child>td]:border-b-0">
+                  {columns.map((column) => (
+                    <td
+                      key={column.key}
+                      className={clsx(
+                        "h-15 border-r border-b border-pneutral-200 bg-white px-3 py-2 text-p3 text-pneutral-900 last:border-r-0",
+                        column.align === "right" && "text-right",
+                      )}
+                    >
+                      {column.cell(row, index)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+
+          {totalRow && pageRows.length > 0 && (
+            <tfoot>
+              <tr>
                 {columns.map((column) => (
                   <td
                     key={column.key}
                     className={clsx(
-                      "h-15 border-r border-b border-pneutral-200 bg-white px-3 py-2 text-p3 text-pneutral-900 last:border-r-0",
+                      "h-15 border-t border-r border-pneutral-200 bg-primary-100 px-3 py-2 text-p3 font-semibold whitespace-nowrap text-primary-900 last:border-r-0",
                       column.align === "right" && "text-right",
                     )}
                   >
-                    {column.cell(row)}
+                    {totalRow[column.key]}
                   </td>
                 ))}
               </tr>
-            ))}
-          </tbody>
+            </tfoot>
+          )}
         </table>
       </div>
 
