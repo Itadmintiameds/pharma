@@ -24,7 +24,10 @@ interface ReportTableProps<T> {
   generatedOn: string;
   generatedBy: string;
   columns: ReportColumn<T>[];
-  /** Every row of the report — the table sorts and pages them itself. */
+  /**
+   * The rows to draw: every row of the report, which the table pages itself —
+   * or, with `serverPagination`, just the page the server returned.
+   */
   rows: T[];
   getRowKey: (row: T, index: number) => string;
   /**
@@ -32,19 +35,33 @@ interface ReportTableProps<T> {
    * stay blank. It totals the whole report, so it shows on every page.
    */
   totalRow?: Partial<Record<string, React.ReactNode>>;
+  /** Paging done by the API: the table draws `rows` as they are and reports page changes. */
+  serverPagination?: ServerPagination;
+  /** Drawn in place of the table and paging row when there are no rows. */
+  emptyState?: React.ReactNode;
 }
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50];
+export interface ServerPagination {
+  /** 1-based. */
+  page: number;
+  pageSize: number;
+  /** Rows across every page. */
+  totalItems: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+}
+
+export const PAGE_SIZE_OPTIONS = [10, 25, 50];
 
 type SortState = { key: string; direction: "asc" | "desc" } | null;
 
 /**
  * The results card of a report: title block, the table, and the paging row.
  *
- * Like the module's other tables, a report arrives in one call, so sorting and
- * paging are client-side over `rows`. The table scrolls sideways rather than
- * squeezing when the columns outgrow the card (the detailed sale report has
- * fifteen of them).
+ * Paging is client-side over `rows` unless `serverPagination` is given. Sorting
+ * is always over the rows in hand — so with server paging it orders the current
+ * page only. The table scrolls sideways rather than squeezing when the columns
+ * outgrow the card (the detailed sale report has fifteen of them).
  */
 export default function ReportTable<T>({
   title,
@@ -55,10 +72,12 @@ export default function ReportTable<T>({
   rows,
   getRowKey,
   totalRow,
+  serverPagination,
+  emptyState,
 }: ReportTableProps<T>) {
   const [sort, setSort] = useState<SortState>(null);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
+  const [localPage, setLocalPage] = useState(1);
+  const [localPageSize, setLocalPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const sortedRows = useMemo(() => {
     const column = sort && columns.find((c) => c.key === sort.key);
@@ -74,12 +93,26 @@ export default function ReportTable<T>({
     });
   }, [rows, columns, sort]);
 
+  const pageSize = serverPagination?.pageSize ?? localPageSize;
+  const totalItems = serverPagination?.totalItems ?? sortedRows.length;
   // A new search can leave fewer pages than the one being viewed.
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  const pageRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const from = sortedRows.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const to = Math.min(currentPage * pageSize, sortedRows.length);
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = serverPagination?.page ?? Math.min(localPage, totalPages);
+  const pageRows = serverPagination
+    ? sortedRows
+    : sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const from = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const to = Math.min((currentPage - 1) * pageSize + pageRows.length, totalItems);
+
+  const changePage = serverPagination?.onPageChange ?? setLocalPage;
+  const changePageSize = (size: number) => {
+    if (serverPagination) {
+      serverPagination.onPageSizeChange(size);
+    } else {
+      setLocalPageSize(size);
+      setLocalPage(1);
+    }
+  };
 
   /** Unsorted → ascending → descending → unsorted. */
   const toggleSort = (key: string) => {
@@ -88,8 +121,10 @@ export default function ReportTable<T>({
       if (prev.direction === "asc") return { key, direction: "desc" };
       return null;
     });
-    setPage(1);
+    if (!serverPagination) setLocalPage(1);
   };
+
+  const showEmptyState = totalItems === 0 && emptyState;
 
   return (
     <div className="flex w-full flex-col gap-4 rounded-2xl bg-white p-4 shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
@@ -98,7 +133,7 @@ export default function ReportTable<T>({
           <div className="flex items-center gap-3">
             <h2 className="text-label-l5 font-semibold text-pneutral-900">{title}</h2>
             <span className="rounded-sm bg-primary-100 px-2 py-1 text-p2 font-medium text-primary-800">
-              {rows.length} {rows.length === 1 ? "record" : "records"}
+              {totalItems} {totalItems === 1 ? "record" : "records"}
             </span>
           </div>
           {subtitles.map((line) => (
@@ -111,6 +146,8 @@ export default function ReportTable<T>({
         </div>
       </div>
 
+      {showEmptyState ? emptyState : (
+      <>
       <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
         <table className="min-w-full border-collapse">
           <thead>
@@ -212,7 +249,7 @@ export default function ReportTable<T>({
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         <p className="flex-1 text-p3 text-pneutral-500">
-          Showing {from} to {to} of {sortedRows.length} records
+          Showing {from} to {to} of {totalItems} records
         </p>
 
         <label className="flex items-center gap-3 text-p3 text-pneutral-500">
@@ -220,10 +257,7 @@ export default function ReportTable<T>({
           <span className="relative">
             <select
               value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setPage(1);
-              }}
+              onChange={(e) => changePageSize(Number(e.target.value))}
               className="h-9 w-21 appearance-none rounded-sm border border-pneutral-300 bg-white px-3 text-p2 text-pneutral-500 outline-none focus:border-secondary-300"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
@@ -243,10 +277,12 @@ export default function ReportTable<T>({
         <PaginationControl
           page={currentPage}
           pageSize={pageSize}
-          totalItems={sortedRows.length}
-          onPageChange={setPage}
+          totalItems={totalItems}
+          onPageChange={changePage}
         />
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -113,6 +113,33 @@ export const describePeriod = (period: ReportPeriod, separator = "–") => {
   }
 };
 
+/**
+ * The period as report query parameters. Today and Specific Day send a single
+ * `date`; By Month sends its first to last day as a range, and By Date Range
+ * its two ends — never both forms at once, since `date` overrides the range.
+ */
+export const periodToParams = (
+  period: ReportPeriod,
+): { date?: string; fromDate?: string; toDate?: string } => {
+  switch (period.mode) {
+    case "today":
+      return { date: toDateInputValue(new Date()) };
+    case "day":
+      return { date: period.day || undefined };
+    case "month": {
+      const [year, month] = period.month.split("-").map(Number);
+      if (!year || !month) return {};
+      // Day 0 of the next month is the last day of this one.
+      return {
+        fromDate: toDateInputValue(new Date(year, month - 1, 1)),
+        toDate: toDateInputValue(new Date(year, month, 0)),
+      };
+    }
+    case "range":
+      return { fromDate: period.from || undefined, toDate: period.to || undefined };
+  }
+};
+
 /** The period's applied-filter chip: "Date Range: 01-Oct-2026 – 08-Oct-2026". */
 export const periodChipLabel = (period: ReportPeriod) => {
   const name =
@@ -120,6 +147,9 @@ export const periodChipLabel = (period: ReportPeriod) => {
   return `${name}: ${describePeriod(period)}`;
 };
 
-/** "Generated on" stamp: "08-Oct-2026 05:30 PM". */
-export const formatGeneratedOn = (date: Date) =>
-  `${formatReportDate(toDateInputValue(date))} ${formatReportTime(date.toISOString())}`;
+/** "Generated on" stamp: "08-Oct-2026 05:30 PM", from a Date or the API's ISO local date-time. */
+export const formatGeneratedOn = (value: Date | string) => {
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) return "—";
+  return `${formatReportDate(toDateInputValue(date))} ${formatReportTime(date.toISOString())}`;
+};

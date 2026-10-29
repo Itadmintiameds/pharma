@@ -22,10 +22,15 @@ export interface AppliedFilterChip {
 interface ReportFilterToolbarProps {
   period: ReportPeriod;
   onPeriodChange: (period: ReportPeriod) => void;
-  /** The filter fields after the date one, one grid cell each. */
+  /** The filter fields after the date one, one grid cell each. Always shown. */
   children: React.ReactNode;
-  /** Shown in the "More Filters (n)" button: how many fields the toggle hides. */
-  filterCount: number;
+  /**
+   * Extra fields, a grid cell each, revealed by "More Filters (n)" under the
+   * first row. Without them the toggle is not rendered.
+   */
+  moreFilters?: React.ReactNode;
+  /** The n in "More Filters (n)": how many fields `moreFilters` holds. */
+  moreFilterCount?: number;
   chips: AppliedFilterChip[];
   onReset: () => void;
   onSearch: () => void;
@@ -182,13 +187,14 @@ export default function ReportFilterToolbar({
   period,
   onPeriodChange,
   children,
-  filterCount,
+  moreFilters,
+  moreFilterCount = 0,
   chips,
   onReset,
   onSearch,
   searching = false,
 }: ReportFilterToolbarProps) {
-  const [showFilters, setShowFilters] = useState(true);
+  const [showMore, setShowMore] = useState(false);
 
   return (
     <div className="@container flex w-full flex-col gap-4 rounded-2xl bg-white p-4 shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
@@ -222,23 +228,18 @@ export default function ReportFilterToolbar({
         </div>
 
         <div className="mb-2 flex flex-wrap gap-3">
-          <button
-            type="button"
-            aria-expanded={showFilters}
-            onClick={() => setShowFilters((prev) => !prev)}
-            className={OUTLINE_BUTTON}
-          >
-            <Image src="/Reports/Funnel.svg" alt="" width={20} height={20} />
-            More Filters ({filterCount})
-            <Image
-              src="/Reports/ChevronDoubleDown.svg"
-              alt=""
-              width={20}
-              height={20}
-              // Points down while the filters are open, as in the design.
-              className={clsx("transition-transform", !showFilters && "rotate-180")}
-            />
-          </button>
+          {moreFilters && (
+            <button
+              type="button"
+              aria-expanded={showMore}
+              onClick={() => setShowMore((prev) => !prev)}
+              className={OUTLINE_BUTTON}
+            >
+              <Image src="/Reports/Funnel.svg" alt="" width={20} height={20} />
+              {showMore ? "Fewer Filters" : `More Filters (${moreFilterCount})`}
+              <Image src="/Reports/ChevronDoubleDown.svg" alt="" width={20} height={20} />
+            </button>
+          )}
           <button type="button" onClick={onReset} className={OUTLINE_BUTTON}>
             Reset
           </button>
@@ -254,12 +255,11 @@ export default function ReportFilterToolbar({
       </div>
 
       {/* Columns follow the card's width, not the viewport's: the sidebar's width varies. */}
-      {showFilters && (
-        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-4">
-          <PeriodField period={period} onChange={onPeriodChange} />
-          {children}
-        </div>
-      )}
+      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-4">
+        <PeriodField period={period} onChange={onPeriodChange} />
+        {children}
+        {showMore && moreFilters}
+      </div>
 
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-3">

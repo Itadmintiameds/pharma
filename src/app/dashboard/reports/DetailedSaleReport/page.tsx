@@ -231,7 +231,6 @@ export default function DetailedSaleReportPage() {
       <ReportFilterToolbar
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
-        filterCount={4}
         chips={chips}
         onReset={handleReset}
         onSearch={handleSearch}

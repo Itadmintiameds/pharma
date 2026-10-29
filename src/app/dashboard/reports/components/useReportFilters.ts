@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { getAllDoctors } from "@/services/DoctorService";
 import type { DropdownOption } from "@/app/components/common/Dropdown";
 import { ReportPeriod, defaultReportPeriod } from "./reportUtils";
 
@@ -80,4 +81,33 @@ export function usePharmacyOptions(onDefault: (pharmacyId: string) => void) {
     options.find((o) => o.value === pharmacyId)?.label ?? "";
 
   return { options, defaultId, labelOf };
+}
+
+/** The referring doctors, for the Referred By filter; their ids go out as `doctorIds`. */
+export function useDoctorOptions() {
+  const [options, setOptions] = useState<DropdownOption[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    getAllDoctors()
+      .then((doctors) => {
+        if (active) setOptions(doctors.map((d) => ({ label: d.doctorName, value: d.doctorId })));
+      })
+      .catch((err) => {
+        // The filter just stays empty; the report itself still loads.
+        console.error("Failed to fetch doctors:", err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const labelOf = (doctorId: number) =>
+    options.find((o) => o.value === doctorId)?.label ?? "";
+
+  return { options, loading, labelOf };
 }

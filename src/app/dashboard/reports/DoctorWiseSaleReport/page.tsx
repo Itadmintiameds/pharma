@@ -170,7 +170,6 @@ export default function DoctorWiseSaleReportPage() {
       <ReportFilterToolbar
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
-        filterCount={3}
         chips={chips}
         onReset={handleReset}
         onSearch={handleSearch}

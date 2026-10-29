@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import clsx from "clsx";
+import Input from "@/app/components/common/Input";
 import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
 import ReportHeader from "../components/ReportHeader";
@@ -25,9 +27,29 @@ interface BillDueFilters {
   pharmacyId: string;
   referredBy: string;
   pendingStatus: string;
+  patientSearch: string;
+  patientNo: string;
+  ipNo: string;
+  billNo: string;
 }
 
-const EMPTY_FILTERS: BillDueFilters = { pharmacyId: "", referredBy: "", pendingStatus: "" };
+const EMPTY_FILTERS: BillDueFilters = {
+  pharmacyId: "",
+  referredBy: "",
+  pendingStatus: "",
+  patientSearch: "",
+  patientNo: "",
+  ipNo: "",
+  billNo: "",
+};
+
+/** The More Filters fields: one free-text search each. */
+const SEARCH_FILTERS = [
+  { key: "patientSearch", label: "Patient Name / Mobile", chip: "Patient", placeholder: "Search name or mobile no." },
+  { key: "patientNo", label: "Patient No.", chip: "Patient No", placeholder: "Search patient no." },
+  { key: "ipNo", label: "IP No.", chip: "IP No", placeholder: "Search IP no." },
+  { key: "billNo", label: "Bill No.", chip: "Bill No", placeholder: "Search bill no." },
+] as const;
 
 /** One In-Patient bill and what is still owed on it. */
 interface BillDueRow {
@@ -217,6 +239,11 @@ export default function BillDueSummaryPage() {
     ...(applied.pendingStatus
       ? [{ key: "pendingStatus", label: `Pending Status: ${applied.pendingStatus}`, onRemove: () => filters.clearField("pendingStatus") }]
       : []),
+    ...SEARCH_FILTERS.filter(({ key }) => applied[key].trim()).map(({ key, chip }) => ({
+      key,
+      label: `${chip}: ${applied[key].trim()}`,
+      onRemove: () => filters.clearField(key),
+    })),
   ];
 
   return (
@@ -230,10 +257,22 @@ export default function BillDueSummaryPage() {
       <ReportFilterToolbar
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
-        filterCount={4}
         chips={chips}
         onReset={handleReset}
         onSearch={handleSearch}
+        moreFilterCount={SEARCH_FILTERS.length}
+        moreFilters={SEARCH_FILTERS.map(({ key, label, placeholder }) => (
+          <Input
+            key={key}
+            label={label}
+            labelClassName="px-1"
+            placeholder={placeholder}
+            value={draft[key]}
+            onChange={(e) => setDraftField(key, e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            leftIcon={<Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />}
+          />
+        ))}
       >
         <Dropdown
           label="Pharmacy"
