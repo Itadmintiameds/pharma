@@ -1,24 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
 import Dropdown from "@/app/components/common/Dropdown";
-import { showToast } from "@/app/components/common/Toast";
-import { usePharmacyStore } from "@/store/pharmacyStore";
 import { getBillSummary } from "@/services/FinancialReportService";
-import { BillSummaryResponse, BillSummaryRow } from "@/types/FinancialReportData";
+import { BillSummaryRow } from "@/types/FinancialReportData";
 import ReportHeader from "../components/ReportHeader";
-import ReportFilterToolbar, { AppliedFilterChip } from "../components/ReportFilterToolbar";
+import ReportFilterToolbar from "../components/ReportFilterToolbar";
 import ReportKpiCard from "../components/ReportKpiCard";
-import ReportTable, { PAGE_SIZE_OPTIONS, ReportColumn } from "../components/ReportTable";
+import ReportTable, { ReportColumn } from "../components/ReportTable";
 import ReportLoadingState from "../components/ReportLoadingState";
 import ReportEmptyState from "../components/ReportEmptyState";
+import { useDoctorOptions } from "../components/useReportFilters";
 import {
-  useDoctorOptions,
-  usePharmacyOptions,
-  useReportFilters,
-} from "../components/useReportFilters";
+  multiSelectChip,
+  textFilterChips,
+  useFinancialReport,
+} from "../components/useFinancialReport";
 import {
   describePeriod,
   formatGeneratedOn,
@@ -26,8 +24,6 @@ import {
   formatReportDate,
   formatReportTime,
   formatRupees,
-  periodChipLabel,
-  periodToParams,
 } from "../components/reportUtils";
 
 interface BillSummaryFilters {
@@ -53,10 +49,10 @@ const EMPTY_FILTERS: BillSummaryFilters = {
 
 /** The More Filters fields: one free-text search each. */
 const NUMBER_FILTERS = [
-  { key: "patientNo", label: "Patient No.", placeholder: "Search patient no." },
-  { key: "ipNo", label: "IP No.", placeholder: "Search IP no." },
-  { key: "opNo", label: "OP No.", placeholder: "Search OP no." },
-  { key: "billNo", label: "Bill No.", placeholder: "Search bill no." },
+  { key: "patientNo", label: "Patient No.", chip: "Patient No", placeholder: "Search patient no." },
+  { key: "ipNo", label: "IP No.", chip: "IP No", placeholder: "Search IP no." },
+  { key: "opNo", label: "OP No.", chip: "OP No", placeholder: "Search OP no." },
+  { key: "billNo", label: "Bill No.", chip: "Bill No", placeholder: "Search bill no." },
 ] as const;
 
 const SEARCH_ICON = <Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />;
@@ -121,127 +117,33 @@ const COLUMNS: ReportColumn<BillSummaryRow>[] = [
 ];
 
 export default function BillSummaryPage() {
-  // The navbar's pharmacy: the default selection, and what the backend
-  // reports on when no pharmacy is sent.
-  const defaultPharmacyId = usePharmacyStore((s) => s.selectedPharmacy?.pharmacyId ?? "");
-  const baseFilters = useMemo(
-    () => ({ ...EMPTY_FILTERS, pharmacyIds: defaultPharmacyId ? [defaultPharmacyId] : [] }),
-    [defaultPharmacyId],
-  );
-
-  const filters = useReportFilters(baseFilters);
-  const { draft, applied, appliedPeriod, setDraftField } = filters;
-
-  const pharmacy = usePharmacyOptions((pharmacyId) => {
-    // Only fills an empty selection — the store can rehydrate after the first render.
-    filters.setDraft((prev) => (prev.pharmacyIds.length ? prev : { ...prev, pharmacyIds: [pharmacyId] }));
-    filters.setApplied((prev) => (prev.pharmacyIds.length ? prev : { ...prev, pharmacyIds: [pharmacyId] }));
-  });
   const doctors = useDoctorOptions();
+  const report = useFinancialReport({
+    emptyFilters: EMPTY_FILTERS,
+    toParams: (f) => ({
+      patientSearch: f.patientSearch.trim(),
+      doctorIds: f.doctorIds,
+      patientNo: f.patientNo.trim(),
+      ipNo: f.ipNo.trim(),
+      opNo: f.opNo.trim(),
+      billNo: f.billNo.trim(),
+    }),
+    fetchReport: getBillSummary,
+    errorMessage: "Failed to fetch the bill summary report",
+  });
+  const { filters, clearField } = report;
+  const { draft, applied, setDraftField } = filters;
 
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
-  // Bumped by Search, so searching again with unchanged filters still refetches.
-  const [searchCount, setSearchCount] = useState(0);
-  const [report, setReport] = useState<BillSummaryResponse | null>(null);
-  const [loadError, setLoadError] = useState("");
-
-  // Identifies the request the current filters call for. Loading is derived
-  // rather than set: until the response for this exact key lands, it is loading.
-  const requestKey = JSON.stringify([applied, appliedPeriod, page, pageSize, searchCount]);
-  const [loadedKey, setLoadedKey] = useState<string | null>(null);
-  const isLoading = loadedKey !== requestKey;
-
-  useEffect(() => {
-    let active = true;
-
-    getBillSummary({
-      ...periodToParams(appliedPeriod),
-      pharmacyIds: applied.pharmacyIds,
-      patientSearch: applied.patientSearch.trim(),
-      doctorIds: applied.doctorIds,
-      patientNo: applied.patientNo.trim(),
-      ipNo: applied.ipNo.trim(),
-      opNo: applied.opNo.trim(),
-      billNo: applied.billNo.trim(),
-      page: page - 1,
-      size: pageSize,
-    })
-      .then((data) => {
-        if (!active) return;
-        setReport(data);
-        setLoadError("");
-      })
-      .catch((err) => {
-        if (!active) return;
-        console.error("Failed to fetch the bill summary report:", err);
-        const message = err?.message || "Failed to fetch the bill summary report.";
-        setReport(null);
-        setLoadError(message);
-        showToast.error(message);
-      })
-      .finally(() => {
-        if (active) setLoadedKey(requestKey);
-      });
-
-    return () => {
-      active = false;
-    };
-    // requestKey is built from these exact values.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestKey]);
-
-  const handleSearch = () => {
-    filters.apply();
-    setPage(1);
-    setSearchCount((n) => n + 1);
-  };
-
-  const handleReset = () => {
-    filters.reset(baseFilters);
-    setPage(1);
-    setSearchCount((n) => n + 1);
-  };
-
-  const clearField = (key: keyof BillSummaryFilters) => {
-    filters.clearField(key);
-    setPage(1);
-  };
-
-  const onEnter = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
-  };
-
-  const pharmacyNames = applied.pharmacyIds.map(pharmacy.labelOf).filter(Boolean).join(", ");
-  const doctorNames = applied.doctorIds.map(doctors.labelOf).filter(Boolean).join(", ");
-  const isDefaultPharmacy =
-    applied.pharmacyIds.length === 1 && applied.pharmacyIds[0] === defaultPharmacyId;
-
-  const chips: AppliedFilterChip[] = [
-    { key: "period", label: periodChipLabel(appliedPeriod) },
-    ...(pharmacyNames
-      ? [{
-          key: "pharmacy",
-          label: `Pharmacy: ${pharmacyNames}`,
-          // Clearing goes back to the navbar's pharmacy, so there is nothing to clear from it.
-          onRemove: isDefaultPharmacy ? undefined : () => clearField("pharmacyIds"),
-        }]
-      : []),
-    ...(applied.patientSearch.trim()
-      ? [{ key: "patientSearch", label: `Patient: ${applied.patientSearch.trim()}`, onRemove: () => clearField("patientSearch") }]
-      : []),
-    ...(doctorNames
-      ? [{ key: "doctorIds", label: `Referred By: ${doctorNames}`, onRemove: () => clearField("doctorIds") }]
-      : []),
-    ...NUMBER_FILTERS.filter(({ key }) => applied[key].trim()).map(({ key, label }) => ({
-      key,
-      label: `${label.replace(/\.$/, "")}: ${applied[key].trim()}`,
-      onRemove: () => clearField(key),
-    })),
+  const chips = [
+    ...report.baseChips,
+    ...textFilterChips(applied, [{ key: "patientSearch", chip: "Patient" }], clearField),
+    ...multiSelectChip("doctorIds", "Referred By", applied.doctorIds, doctors.labelOf, () => clearField("doctorIds")),
+    ...textFilterChips(applied, NUMBER_FILTERS, clearField),
   ];
 
-  const kpi = report?.kpi;
-  const totalBills = report?.billDetails.totalElements ?? 0;
+  const data = report.report;
+  const kpi = data?.kpi;
+  const totalBills = data?.billDetails.totalElements ?? 0;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -255,9 +157,9 @@ export default function BillSummaryPage() {
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
         chips={chips}
-        onReset={handleReset}
-        onSearch={handleSearch}
-        searching={isLoading}
+        onReset={report.reset}
+        onSearch={report.search}
+        searching={report.isLoading}
         moreFilterCount={NUMBER_FILTERS.length}
         moreFilters={NUMBER_FILTERS.map(({ key, label, placeholder }) => (
           <Input
@@ -267,7 +169,7 @@ export default function BillSummaryPage() {
             placeholder={placeholder}
             value={draft[key]}
             onChange={(e) => setDraftField(key, e.target.value)}
-            onKeyDown={onEnter}
+            onKeyDown={report.onEnter}
             leftIcon={SEARCH_ICON}
           />
         ))}
@@ -275,7 +177,7 @@ export default function BillSummaryPage() {
         <Dropdown
           label="Pharmacy"
           labelClassName="px-1"
-          options={pharmacy.options}
+          options={report.pharmacy.options}
           value={draft.pharmacyIds}
           onChange={(value: string[]) => setDraftField("pharmacyIds", value)}
           placeholder="Select"
@@ -287,7 +189,7 @@ export default function BillSummaryPage() {
           placeholder="Search name or mobile no."
           value={draft.patientSearch}
           onChange={(e) => setDraftField("patientSearch", e.target.value)}
-          onKeyDown={onEnter}
+          onKeyDown={report.onEnter}
           leftIcon={SEARCH_ICON}
         />
         <Dropdown
@@ -303,11 +205,11 @@ export default function BillSummaryPage() {
         />
       </ReportFilterToolbar>
 
-      {isLoading ? (
+      {report.isLoading ? (
         <ReportLoadingState kpiCount={3} />
-      ) : !report ? (
+      ) : !data ? (
         <div className="flex h-40 items-center justify-center rounded-2xl bg-white text-label-l4 text-pneutral-500">
-          {loadError || "Failed to fetch the bill summary report."}
+          {report.loadError}
         </div>
       ) : (
         <>
@@ -341,26 +243,17 @@ export default function BillSummaryPage() {
           <ReportTable
             title="Bill Details"
             subtitles={[
-              `Period: ${describePeriod(appliedPeriod, "to")}`,
-              ...(pharmacyNames ? [`Pharmacy: ${pharmacyNames}`] : []),
+              `Period: ${describePeriod(filters.appliedPeriod, "to")}`,
+              ...(report.pharmacyNames ? [`Pharmacy: ${report.pharmacyNames}`] : []),
             ]}
-            generatedOn={formatGeneratedOn(report.generatedOn)}
-            generatedBy={report.generatedBy}
+            generatedOn={formatGeneratedOn(data.generatedOn)}
+            generatedBy={data.generatedBy}
             columns={COLUMNS}
-            rows={report.billDetails.content}
+            rows={data.billDetails.content}
             getRowKey={(row) => String(row.billingId)}
-            serverPagination={{
-              page,
-              pageSize,
-              totalItems: totalBills,
-              onPageChange: setPage,
-              onPageSizeChange: (size) => {
-                setPageSize(size);
-                setPage(1);
-              },
-            }}
+            serverPagination={report.serverPagination(totalBills)}
             emptyState={
-              <ReportEmptyState title="No bills match your filters" onClearFilters={handleReset} />
+              <ReportEmptyState title="No bills match your filters" onClearFilters={report.reset} />
             }
           />
         </>

@@ -83,12 +83,16 @@ export interface ReportPeriod {
   to: string;
 }
 
-/** By Date Range, from the 1st of this month to today. */
+/**
+ * Today — what a report opens on and Reset returns to. The other tabs start
+ * from today too: Specific Day on today, By Month on this month, and By Date
+ * Range from the 1st of this month to today.
+ */
 export const defaultReportPeriod = (): ReportPeriod => {
   const today = new Date();
   const todayValue = toDateInputValue(today);
   return {
-    mode: "range",
+    mode: "today",
     day: todayValue,
     month: todayValue.slice(0, 7),
     from: toDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)),

@@ -1,14 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Image from "next/image";
 import Input from "@/app/components/common/Input";
-import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import Dropdown from "@/app/components/common/Dropdown";
+import { getDetailedSaleReport } from "@/services/FinancialReportService";
+import { DetailedSaleRow } from "@/types/FinancialReportData";
 import ReportHeader from "../components/ReportHeader";
-import ReportFilterToolbar, { AppliedFilterChip } from "../components/ReportFilterToolbar";
+import ReportFilterToolbar from "../components/ReportFilterToolbar";
 import ReportKpiCard from "../components/ReportKpiCard";
 import ReportTable, { ReportColumn } from "../components/ReportTable";
-import { usePharmacyOptions, useReportFilters } from "../components/useReportFilters";
+import ReportLoadingState from "../components/ReportLoadingState";
+import ReportEmptyState from "../components/ReportEmptyState";
+import { useDoctorOptions } from "../components/useReportFilters";
+import {
+  multiSelectChip,
+  textFilterChips,
+  useFinancialReport,
+} from "../components/useFinancialReport";
+import { GST_OPTIONS, optionLabel } from "../components/reportFilterOptions";
 import {
   describePeriod,
   formatGeneratedOn,
@@ -16,46 +25,45 @@ import {
   formatReportDate,
   formatRupees,
   formatRupeesCompact,
-  periodChipLabel,
 } from "../components/reportUtils";
 
 interface DetailedSaleFilters {
-  pharmacyId: string;
-  referredBy: string;
-  product: string;
-}
-
-const EMPTY_FILTERS: DetailedSaleFilters = { pharmacyId: "", referredBy: "", product: "" };
-
-/** One product line of a bill — a bill with three products is three rows. */
-interface DetailedSaleRow {
+  pharmacyIds: string[];
+  doctorIds: number[];
+  productSearch: string;
+  patientSearch: string;
+  patientNo: string;
+  ipNo: string;
+  opNo: string;
   billNo: string;
-  /** ISO date-time. */
-  billedAt: string;
-  patientName: string;
-  referredBy: string;
-  productName: string;
-  batchNo: string;
-  quantity: number;
-  saleUnit: string;
-  hsnCode: string;
-  gstPercent: number;
-  grossAmount: number;
-  discount: number;
-  cgst: number;
-  sgst: number;
-  netAmount: number;
+  hsnSearch: string;
+  gstPercentages: string[];
 }
 
-// Sample data in the design's shape, until the report API is wired in.
-const SAMPLE_ROWS: DetailedSaleRow[] = [
-  { billNo: "PB-1001", billedAt: "2026-10-01T10:25:00", patientName: "Patient A", referredBy: "Dr. A", productName: "Paracetamol 500 mg", batchNo: "PCM001", quantity: 10, saleUnit: "Strip", hsnCode: "3004", gstPercent: 5, grossAmount: 500, discount: 50, cgst: 11.25, sgst: 11.25, netAmount: 472.5 },
-  { billNo: "PB-1001", billedAt: "2026-10-01T10:25:00", patientName: "Patient A", referredBy: "Dr. A", productName: "Amoxicillin 500 mg", batchNo: "AMX021", quantity: 2, saleUnit: "Strip", hsnCode: "3004", gstPercent: 5, grossAmount: 800, discount: 0, cgst: 20, sgst: 20, netAmount: 840 },
-  { billNo: "PB-1002", billedAt: "2026-10-02T11:40:00", patientName: "Patient B", referredBy: "Dr. B", productName: "Pantoprazole 40 mg", batchNo: "PAN112", quantity: 3, saleUnit: "Strip", hsnCode: "3004", gstPercent: 5, grossAmount: 600, discount: 60, cgst: 13.5, sgst: 13.5, netAmount: 567 },
-];
+const EMPTY_FILTERS: DetailedSaleFilters = {
+  pharmacyIds: [],
+  doctorIds: [],
+  productSearch: "",
+  patientSearch: "",
+  patientNo: "",
+  ipNo: "",
+  opNo: "",
+  billNo: "",
+  hsnSearch: "",
+  gstPercentages: [],
+};
 
-// Doctors come with the report APIs.
-const REFERRED_BY_OPTIONS: DropdownOption[] = [];
+/** The free-text More Filters fields; GST % follows them as a multi-select. */
+const SEARCH_FILTERS = [
+  { key: "patientSearch", label: "Patient Name / Mobile", chip: "Patient", placeholder: "Search name or mobile no." },
+  { key: "patientNo", label: "Patient No.", chip: "Patient No", placeholder: "Search patient no." },
+  { key: "ipNo", label: "IP No.", chip: "IP No", placeholder: "Search IP no." },
+  { key: "opNo", label: "OP No.", chip: "OP No", placeholder: "Search OP no." },
+  { key: "billNo", label: "Bill No.", chip: "Bill No", placeholder: "Search bill no." },
+  { key: "hsnSearch", label: "HSN Code", chip: "HSN", placeholder: "Search HSN code" },
+] as const;
+
+const SEARCH_ICON = <Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />;
 
 const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
   {
@@ -70,21 +78,21 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
     key: "billedAt",
     header: "Billed Date",
     className: "min-w-[107px]",
-    sortValue: (row) => row.billedAt,
-    cell: (row) => <span className="whitespace-nowrap">{formatReportDate(row.billedAt)}</span>,
+    sortValue: (row) => row.billedDate,
+    cell: (row) => <span className="whitespace-nowrap">{formatReportDate(row.billedDate)}</span>,
   },
   {
     key: "patient",
     header: "Patient / Customer",
     className: "min-w-[125px]",
-    sortValue: (row) => row.patientName,
-    cell: (row) => <span className="font-semibold">{row.patientName}</span>,
+    sortValue: (row) => row.patientName ?? "",
+    cell: (row) => <span className="font-semibold">{row.patientName || "Walk-In Customer"}</span>,
   },
   {
     key: "referredBy",
     header: "Referred By",
     className: "min-w-[101px]",
-    cell: (row) => <span className="whitespace-nowrap">{row.referredBy}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{row.referredBy || "—"}</span>,
   },
   {
     key: "product",
@@ -96,7 +104,7 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
     key: "batch",
     header: "Batch",
     className: "min-w-[82px]",
-    cell: (row) => <span className="whitespace-nowrap">{row.batchNo}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{row.batchNumber || "—"}</span>,
   },
   {
     key: "quantity",
@@ -109,20 +117,20 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
     key: "saleUnit",
     header: "Sale Unit",
     className: "min-w-[63px]",
-    cell: (row) => row.saleUnit,
+    cell: (row) => row.unit || "—",
   },
   {
     key: "hsn",
     header: "HSN",
     className: "min-w-[60px]",
-    cell: (row) => row.hsnCode,
+    cell: (row) => row.hsnNo || "—",
   },
   {
     key: "gstPercent",
     header: "GST %",
     align: "right",
     className: "min-w-[55px]",
-    cell: (row) => `${row.gstPercent}%`,
+    cell: (row) => (row.gstPercentage ? `${row.gstPercentage}%` : "—"),
   },
   {
     key: "grossAmount",
@@ -136,21 +144,21 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
     header: "Discount",
     align: "right",
     className: "min-w-[100px]",
-    cell: (row) => <span className="whitespace-nowrap">{formatRupeesCompact(row.discount)}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{formatRupeesCompact(row.discountAmount)}</span>,
   },
   {
     key: "cgst",
     header: "CGST",
     align: "right",
     className: "min-w-[71px]",
-    cell: (row) => <span className="whitespace-nowrap">{formatRupees(row.cgst)}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{formatRupees(row.cgstAmount)}</span>,
   },
   {
     key: "sgst",
     header: "SGST",
     align: "right",
     className: "min-w-[71px]",
-    cell: (row) => <span className="whitespace-nowrap">{formatRupees(row.sgst)}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{formatRupees(row.sgstAmount)}</span>,
   },
   {
     key: "netAmount",
@@ -165,60 +173,39 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
 ];
 
 export default function DetailedSaleReportPage() {
-  const filters = useReportFilters(EMPTY_FILTERS);
-  const { draft, applied, setDraftField } = filters;
-  const [generatedAt, setGeneratedAt] = useState(() => new Date());
-
-  const pharmacy = usePharmacyOptions((pharmacyId) => {
-    filters.setDraft((prev) => ({ ...prev, pharmacyId }));
-    filters.setApplied((prev) => ({ ...prev, pharmacyId }));
+  const doctors = useDoctorOptions();
+  const report = useFinancialReport({
+    emptyFilters: EMPTY_FILTERS,
+    toParams: (f) => ({
+      doctorIds: f.doctorIds,
+      productSearch: f.productSearch.trim(),
+      patientSearch: f.patientSearch.trim(),
+      patientNo: f.patientNo.trim(),
+      ipNo: f.ipNo.trim(),
+      opNo: f.opNo.trim(),
+      billNo: f.billNo.trim(),
+      hsnSearch: f.hsnSearch.trim(),
+      gstPercentages: f.gstPercentages,
+    }),
+    fetchReport: getDetailedSaleReport,
+    errorMessage: "Failed to fetch the detailed sale report",
   });
+  const { filters, clearField } = report;
+  const { draft, applied, setDraftField } = filters;
 
-  const rows = SAMPLE_ROWS;
-
-  // The headline figures are sums over the line items.
-  const totals = useMemo(() => {
-    const sum = (pick: (row: DetailedSaleRow) => number) =>
-      rows.reduce((total, row) => total + pick(row), 0);
-    const gross = sum((r) => r.grossAmount);
-    const discount = sum((r) => r.discount);
-    return {
-      gross,
-      discount,
-      gst: sum((r) => r.cgst + r.sgst),
-      taxable: gross - discount,
-      net: sum((r) => r.netAmount),
-      items: rows.length,
-      bills: new Set(rows.map((r) => r.billNo)).size,
-    };
-  }, [rows]);
-
-  const handleSearch = () => {
-    filters.apply();
-    setGeneratedAt(new Date());
-  };
-
-  const handleReset = () => {
-    filters.reset({ ...EMPTY_FILTERS, pharmacyId: pharmacy.defaultId });
-    setGeneratedAt(new Date());
-  };
-
-  const appliedPharmacy = pharmacy.labelOf(applied.pharmacyId);
-  const appliedReferredBy =
-    REFERRED_BY_OPTIONS.find((o) => o.value === applied.referredBy)?.label ?? applied.referredBy;
-
-  const chips: AppliedFilterChip[] = [
-    { key: "period", label: periodChipLabel(filters.appliedPeriod) },
-    ...(appliedPharmacy
-      ? [{ key: "pharmacy", label: `Pharmacy: ${appliedPharmacy}`, onRemove: () => filters.clearField("pharmacyId") }]
-      : []),
-    ...(appliedReferredBy
-      ? [{ key: "referredBy", label: `Referred By: ${appliedReferredBy}`, onRemove: () => filters.clearField("referredBy") }]
-      : []),
-    ...(applied.product
-      ? [{ key: "product", label: `Product: ${applied.product}`, onRemove: () => filters.clearField("product") }]
-      : []),
+  const chips = [
+    ...report.baseChips,
+    ...multiSelectChip("doctorIds", "Referred By", applied.doctorIds, doctors.labelOf, () => clearField("doctorIds")),
+    ...textFilterChips(applied, [{ key: "productSearch", chip: "Product" }], clearField),
+    ...textFilterChips(applied, SEARCH_FILTERS, clearField),
+    ...multiSelectChip("gstPercentages", "GST", applied.gstPercentages, (v) => optionLabel(GST_OPTIONS, v), () => clearField("gstPercentages")),
   ];
+
+  const data = report.report;
+  const kpi = data?.kpi;
+  const totalItems = data?.billDetails.totalElements ?? 0;
+  const gross = kpi?.totalGrossAmount ?? 0;
+  const discount = kpi?.totalDiscountAmount ?? 0;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -232,83 +219,128 @@ export default function DetailedSaleReportPage() {
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
         chips={chips}
-        onReset={handleReset}
-        onSearch={handleSearch}
+        onReset={report.reset}
+        onSearch={report.search}
+        searching={report.isLoading}
+        moreFilterCount={SEARCH_FILTERS.length + 1}
+        moreFilters={
+          <>
+            {SEARCH_FILTERS.map(({ key, label, placeholder }) => (
+              <Input
+                key={key}
+                label={label}
+                labelClassName="px-1"
+                placeholder={placeholder}
+                value={draft[key]}
+                onChange={(e) => setDraftField(key, e.target.value)}
+                onKeyDown={report.onEnter}
+                leftIcon={SEARCH_ICON}
+              />
+            ))}
+            <Dropdown
+              label="GST %"
+              labelClassName="px-1"
+              options={GST_OPTIONS}
+              value={draft.gstPercentages}
+              onChange={(value: string[]) => setDraftField("gstPercentages", value)}
+              placeholder="Select"
+              multiple
+            />
+          </>
+        }
       >
         <Dropdown
           label="Pharmacy"
           labelClassName="px-1"
-          options={pharmacy.options}
-          value={draft.pharmacyId}
-          onChange={(value) => setDraftField("pharmacyId", value)}
+          options={report.pharmacy.options}
+          value={draft.pharmacyIds}
+          onChange={(value: string[]) => setDraftField("pharmacyIds", value)}
           placeholder="Select"
+          multiple
         />
         <Dropdown
           label="Referred By"
           labelClassName="px-1"
-          options={REFERRED_BY_OPTIONS}
-          value={draft.referredBy}
-          onChange={(value) => setDraftField("referredBy", value)}
+          options={doctors.options}
+          value={draft.doctorIds}
+          onChange={(value: number[]) => setDraftField("doctorIds", value)}
           placeholder="Select"
+          isLoading={doctors.loading}
+          searchable
+          multiple
         />
         <Input
           label="Product"
           labelClassName="px-1"
           placeholder="Search"
-          value={draft.product}
-          onChange={(e) => setDraftField("product", e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          leftIcon={<Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />}
+          value={draft.productSearch}
+          onChange={(e) => setDraftField("productSearch", e.target.value)}
+          onKeyDown={report.onEnter}
+          leftIcon={SEARCH_ICON}
         />
       </ReportFilterToolbar>
 
-      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
-        <ReportKpiCard
-          label="Gross Amount"
-          value={formatRupees(totals.gross)}
-          icon="/Reports/Banknotes.svg"
-          tone="primary"
-          highlight={`${totals.items} ${totals.items === 1 ? "item" : "items"}`}
-          caption={`across ${totals.bills} ${totals.bills === 1 ? "bill" : "bills"}`}
-        />
-        <ReportKpiCard
-          label="Total Discount"
-          value={formatRupees(totals.discount)}
-          icon="/Reports/ReceiptRefundBlue.svg"
-          tone="info"
-          highlight={formatPercent(totals.discount, totals.gross)}
-          caption="of gross amount"
-        />
-        <ReportKpiCard
-          label="GST (CGST + SGST)"
-          value={formatRupees(totals.gst)}
-          icon="/Reports/Scale.svg"
-          tone="danger"
-          highlight={formatPercent(totals.gst, totals.taxable)}
-          caption="on taxable value"
-        />
-        <ReportKpiCard
-          label="Net Amount"
-          value={formatRupees(totals.net)}
-          icon="/Reports/CheckCircleSolid.svg"
-          tone="success"
-          highlight={formatPercent(totals.net, totals.gross)}
-          caption="of gross amount"
-        />
-      </div>
+      {report.isLoading ? (
+        <ReportLoadingState kpiCount={4} />
+      ) : !data ? (
+        <div className="flex h-40 items-center justify-center rounded-2xl bg-white text-label-l4 text-pneutral-500">
+          {report.loadError}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-4">
+            <ReportKpiCard
+              label="Gross Amount"
+              value={formatRupees(gross)}
+              icon="/Reports/Banknotes.svg"
+              tone="primary"
+              highlight={`${totalItems} ${totalItems === 1 ? "item" : "items"}`}
+              caption="in this period"
+            />
+            <ReportKpiCard
+              label="Total Discount"
+              value={formatRupees(discount)}
+              icon="/Reports/ReceiptRefundBlue.svg"
+              tone="info"
+              highlight={formatPercent(discount, gross)}
+              caption="of gross amount"
+            />
+            <ReportKpiCard
+              label="GST (CGST + SGST)"
+              value={formatRupees(kpi?.totalGstAmount ?? 0)}
+              icon="/Reports/Scale.svg"
+              tone="danger"
+              highlight={formatPercent(kpi?.totalGstAmount ?? 0, gross - discount)}
+              caption="on taxable value"
+            />
+            <ReportKpiCard
+              label="Net Amount"
+              value={formatRupees(kpi?.totalNetAmount ?? 0)}
+              icon="/Reports/CheckCircleSolid.svg"
+              tone="success"
+              highlight={formatPercent(kpi?.totalNetAmount ?? 0, gross)}
+              caption="of gross amount"
+            />
+          </div>
 
-      <ReportTable
-        title="Bill Item Details"
-        subtitles={[
-          `Period: ${describePeriod(filters.appliedPeriod, "to")}`,
-          ...(appliedPharmacy ? [`Pharmacy: ${appliedPharmacy}`] : []),
-        ]}
-        generatedOn={formatGeneratedOn(generatedAt)}
-        generatedBy="Admin User"
-        columns={COLUMNS}
-        rows={rows}
-        getRowKey={(row, index) => `${row.billNo}-${row.batchNo}-${index}`}
-      />
+          <ReportTable
+            title="Bill Item Details"
+            subtitles={[
+              `Period: ${describePeriod(filters.appliedPeriod, "to")}`,
+              ...(report.pharmacyNames ? [`Pharmacy: ${report.pharmacyNames}`] : []),
+            ]}
+            generatedOn={formatGeneratedOn(data.generatedOn)}
+            generatedBy={data.generatedBy}
+            columns={COLUMNS}
+            rows={data.billDetails.content}
+            getRowKey={(row) => String(row.billingDetailsId)}
+            serverPagination={report.serverPagination(totalItems)}
+            emptyState={
+              <ReportEmptyState title="No bill items match your filters" onClearFilters={report.reset} />
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

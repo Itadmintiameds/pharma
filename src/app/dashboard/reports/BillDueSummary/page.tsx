@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 import Input from "@/app/components/common/Input";
-import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import Dropdown from "@/app/components/common/Dropdown";
 import StatusBadge from "@/app/components/common/table/StatusBadge";
+import { getBillDueSummary } from "@/services/FinancialReportService";
+import { BillDueRow } from "@/types/FinancialReportData";
 import ReportHeader from "../components/ReportHeader";
-import ReportFilterToolbar, { AppliedFilterChip } from "../components/ReportFilterToolbar";
+import ReportFilterToolbar from "../components/ReportFilterToolbar";
 import ReportKpiCard from "../components/ReportKpiCard";
 import ReportTable, { ReportColumn } from "../components/ReportTable";
-import { usePharmacyOptions, useReportFilters } from "../components/useReportFilters";
+import ReportLoadingState from "../components/ReportLoadingState";
+import ReportEmptyState from "../components/ReportEmptyState";
+import { useDoctorOptions } from "../components/useReportFilters";
+import {
+  multiSelectChip,
+  textFilterChips,
+  useFinancialReport,
+} from "../components/useFinancialReport";
+import { PENDING_STATUS_OPTIONS, optionLabel } from "../components/reportFilterOptions";
 import {
   describePeriod,
   formatGeneratedOn,
@@ -18,14 +27,12 @@ import {
   formatReportDate,
   formatReportTime,
   formatRupees,
-  periodChipLabel,
 } from "../components/reportUtils";
 
-type PendingStatus = "Pending" | "Fully Paid";
-
 interface BillDueFilters {
-  pharmacyId: string;
-  referredBy: string;
+  pharmacyIds: string[];
+  doctorIds: number[];
+  /** PENDING or FULLY_PAID; empty is ALL. */
   pendingStatus: string;
   patientSearch: string;
   patientNo: string;
@@ -34,8 +41,8 @@ interface BillDueFilters {
 }
 
 const EMPTY_FILTERS: BillDueFilters = {
-  pharmacyId: "",
-  referredBy: "",
+  pharmacyIds: [],
+  doctorIds: [],
   pendingStatus: "",
   patientSearch: "",
   patientNo: "",
@@ -51,39 +58,7 @@ const SEARCH_FILTERS = [
   { key: "billNo", label: "Bill No.", chip: "Bill No", placeholder: "Search bill no." },
 ] as const;
 
-/** One In-Patient bill and what is still owed on it. */
-interface BillDueRow {
-  patientName: string;
-  patientNo: string;
-  ipNo: string;
-  billNo: string;
-  /** ISO date-time. */
-  billedAt: string;
-  /** Absent when the bill has no Referred By. */
-  referredBy?: string;
-  totalAmount: number;
-  amountReceived: number;
-  pendingAmount: number;
-  status: PendingStatus;
-}
-
-// Sample data in the design's shape, until the report API is wired in.
-const SAMPLE_ROWS: BillDueRow[] = [
-  { patientName: "Patient A", patientNo: "PAT-1001", ipNo: "IP-1001", billNo: "PB-1001", billedAt: "2026-10-01T10:25:00", referredBy: "Dr. A", totalAmount: 10000, amountReceived: 6000, pendingAmount: 4000, status: "Pending" },
-  { patientName: "Patient B", patientNo: "PAT-1002", ipNo: "IP-1002", billNo: "PB-1002", billedAt: "2026-10-03T11:40:00", referredBy: "Dr. B", totalAmount: 8000, amountReceived: 5000, pendingAmount: 3000, status: "Pending" },
-  { patientName: "Patient C", patientNo: "PAT-1003", ipNo: "IP-1003", billNo: "PB-1003", billedAt: "2026-10-05T09:35:00", totalAmount: 5000, amountReceived: 2000, pendingAmount: 3000, status: "Pending" },
-  { patientName: "Patient D", patientNo: "PAT-1004", ipNo: "IP-1004", billNo: "PB-1004", billedAt: "2026-10-06T14:15:00", referredBy: "Dr. A", totalAmount: 6500, amountReceived: 6500, pendingAmount: 0, status: "Fully Paid" },
-  { patientName: "Patient E", patientNo: "PAT-1005", ipNo: "IP-1005", billNo: "PB-1005", billedAt: "2026-10-07T16:10:00", referredBy: "Dr. C", totalAmount: 7500, amountReceived: 3000, pendingAmount: 4500, status: "Pending" },
-  { patientName: "Patient F", patientNo: "PAT-1006", ipNo: "IP-1006", billNo: "PB-1006", billedAt: "2026-10-08T11:15:00", totalAmount: 4000, amountReceived: 4000, pendingAmount: 0, status: "Fully Paid" },
-];
-
-// Doctors come with the report APIs.
-const REFERRED_BY_OPTIONS: DropdownOption[] = [];
-
-const PENDING_STATUS_OPTIONS: DropdownOption[] = [
-  { label: "Pending", value: "Pending" },
-  { label: "Fully Paid", value: "Fully Paid" },
-];
+const SEARCH_ICON = <Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />;
 
 /** Red while anything is owed, green once it is settled. */
 const pendingClass = (amount: number) =>
@@ -100,20 +75,20 @@ const COLUMNS: ReportColumn<BillDueRow>[] = [
     key: "patient",
     header: "Patient Name",
     className: "min-w-[102px]",
-    sortValue: (row) => row.patientName,
-    cell: (row) => <span className="font-semibold">{row.patientName}</span>,
+    sortValue: (row) => row.patientName ?? "",
+    cell: (row) => <span className="font-semibold">{row.patientName || "—"}</span>,
   },
   {
     key: "patientNo",
     header: "Patient No.",
     className: "min-w-[85px]",
-    cell: (row) => <span className="whitespace-nowrap">{row.patientNo}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{row.patientNumber || "—"}</span>,
   },
   {
     key: "ipNo",
     header: "IP No.",
     className: "min-w-[75px]",
-    cell: (row) => <span className="whitespace-nowrap">{row.ipNo}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{row.ipNumber || "—"}</span>,
   },
   {
     key: "billNo",
@@ -127,11 +102,11 @@ const COLUMNS: ReportColumn<BillDueRow>[] = [
     key: "billedAt",
     header: "Billed Date",
     className: "min-w-[171px]",
-    sortValue: (row) => row.billedAt,
+    sortValue: (row) => row.billedDate,
     cell: (row) => (
       <span className="flex gap-1 whitespace-nowrap">
-        <span>{formatReportDate(row.billedAt)}</span>
-        <span className="text-pneutral-500">{formatReportTime(row.billedAt)}</span>
+        <span>{formatReportDate(row.billedDate)}</span>
+        <span className="text-pneutral-500">{formatReportTime(row.billedDate)}</span>
       </span>
     ),
   },
@@ -139,7 +114,7 @@ const COLUMNS: ReportColumn<BillDueRow>[] = [
     key: "referredBy",
     header: "Referred By",
     className: "min-w-[99px]",
-    cell: (row) => <span className="whitespace-nowrap">{row.referredBy ?? "—"}</span>,
+    cell: (row) => <span className="whitespace-nowrap">{row.referredBy || "—"}</span>,
   },
   {
     key: "totalAmount",
@@ -187,64 +162,46 @@ const COLUMNS: ReportColumn<BillDueRow>[] = [
     key: "status",
     header: "Status",
     className: "min-w-[124px]",
-    cell: (row) => <StatusBadge status={row.status} />,
+    cell: (row) => <StatusBadge status={row.status === "FULLY_PAID" ? "Fully Paid" : "Pending"} />,
   },
 ];
 
 export default function BillDueSummaryPage() {
-  const filters = useReportFilters(EMPTY_FILTERS);
-  const { draft, applied, setDraftField } = filters;
-  const [generatedAt, setGeneratedAt] = useState(() => new Date());
-
-  const pharmacy = usePharmacyOptions((pharmacyId) => {
-    filters.setDraft((prev) => ({ ...prev, pharmacyId }));
-    filters.setApplied((prev) => ({ ...prev, pharmacyId }));
+  const doctors = useDoctorOptions();
+  const report = useFinancialReport({
+    emptyFilters: EMPTY_FILTERS,
+    toParams: (f) => ({
+      doctorIds: f.doctorIds,
+      pendingStatus: f.pendingStatus,
+      patientSearch: f.patientSearch.trim(),
+      patientNo: f.patientNo.trim(),
+      ipNo: f.ipNo.trim(),
+      billNo: f.billNo.trim(),
+    }),
+    fetchReport: getBillDueSummary,
+    errorMessage: "Failed to fetch the bill due summary report",
   });
+  const { filters, clearField } = report;
+  const { draft, applied, setDraftField } = filters;
 
-  const rows = SAMPLE_ROWS;
-
-  const totals = useMemo(() => {
-    const sum = (pick: (row: BillDueRow) => number) =>
-      rows.reduce((total, row) => total + pick(row), 0);
-    return {
-      totalAmount: sum((r) => r.totalAmount),
-      amountReceived: sum((r) => r.amountReceived),
-      pendingAmount: sum((r) => r.pendingAmount),
-      bills: rows.length,
-    };
-  }, [rows]);
-
-  const handleSearch = () => {
-    filters.apply();
-    setGeneratedAt(new Date());
-  };
-
-  const handleReset = () => {
-    filters.reset({ ...EMPTY_FILTERS, pharmacyId: pharmacy.defaultId });
-    setGeneratedAt(new Date());
-  };
-
-  const appliedPharmacy = pharmacy.labelOf(applied.pharmacyId);
-  const appliedReferredBy =
-    REFERRED_BY_OPTIONS.find((o) => o.value === applied.referredBy)?.label ?? applied.referredBy;
-
-  const chips: AppliedFilterChip[] = [
-    { key: "period", label: periodChipLabel(filters.appliedPeriod) },
-    ...(appliedPharmacy
-      ? [{ key: "pharmacy", label: `Pharmacy: ${appliedPharmacy}`, onRemove: () => filters.clearField("pharmacyId") }]
-      : []),
-    ...(appliedReferredBy
-      ? [{ key: "referredBy", label: `Referred By: ${appliedReferredBy}`, onRemove: () => filters.clearField("referredBy") }]
-      : []),
+  const chips = [
+    ...report.baseChips,
+    ...multiSelectChip("doctorIds", "Referred By", applied.doctorIds, doctors.labelOf, () => clearField("doctorIds")),
     ...(applied.pendingStatus
-      ? [{ key: "pendingStatus", label: `Pending Status: ${applied.pendingStatus}`, onRemove: () => filters.clearField("pendingStatus") }]
+      ? [{
+          key: "pendingStatus",
+          label: `Pending Status: ${optionLabel(PENDING_STATUS_OPTIONS, applied.pendingStatus)}`,
+          onRemove: () => clearField("pendingStatus"),
+        }]
       : []),
-    ...SEARCH_FILTERS.filter(({ key }) => applied[key].trim()).map(({ key, chip }) => ({
-      key,
-      label: `${chip}: ${applied[key].trim()}`,
-      onRemove: () => filters.clearField(key),
-    })),
+    ...textFilterChips(applied, SEARCH_FILTERS, clearField),
   ];
+
+  const data = report.report;
+  const kpi = data?.kpi;
+  const totalBills = data?.billDetails.totalElements ?? 0;
+  const billed = kpi?.totalIpBillAmount ?? 0;
+  const pending = kpi?.totalPendingAmount ?? 0;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -258,8 +215,9 @@ export default function BillDueSummaryPage() {
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
         chips={chips}
-        onReset={handleReset}
-        onSearch={handleSearch}
+        onReset={report.reset}
+        onSearch={report.search}
+        searching={report.isLoading}
         moreFilterCount={SEARCH_FILTERS.length}
         moreFilters={SEARCH_FILTERS.map(({ key, label, placeholder }) => (
           <Input
@@ -269,84 +227,98 @@ export default function BillDueSummaryPage() {
             placeholder={placeholder}
             value={draft[key]}
             onChange={(e) => setDraftField(key, e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            leftIcon={<Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />}
+            onKeyDown={report.onEnter}
+            leftIcon={SEARCH_ICON}
           />
         ))}
       >
         <Dropdown
           label="Pharmacy"
           labelClassName="px-1"
-          options={pharmacy.options}
-          value={draft.pharmacyId}
-          onChange={(value) => setDraftField("pharmacyId", value)}
+          options={report.pharmacy.options}
+          value={draft.pharmacyIds}
+          onChange={(value: string[]) => setDraftField("pharmacyIds", value)}
           placeholder="Select"
+          multiple
         />
         <Dropdown
           label="Referred By"
           labelClassName="px-1"
-          options={REFERRED_BY_OPTIONS}
-          value={draft.referredBy}
-          onChange={(value) => setDraftField("referredBy", value)}
+          options={doctors.options}
+          value={draft.doctorIds}
+          onChange={(value: number[]) => setDraftField("doctorIds", value)}
           placeholder="Select"
+          isLoading={doctors.loading}
+          searchable
+          multiple
         />
         <Dropdown
           label="Pending Status"
           labelClassName="px-1"
           options={PENDING_STATUS_OPTIONS}
           value={draft.pendingStatus}
-          onChange={(value) => setDraftField("pendingStatus", value)}
-          placeholder="Select"
+          onChange={(value: string) => setDraftField("pendingStatus", value)}
+          placeholder="All"
           clearable
         />
       </ReportFilterToolbar>
 
-      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
-        <ReportKpiCard
-          label="Total IP Bill Amount"
-          value={formatRupees(totals.totalAmount)}
-          icon="/Reports/Banknotes.svg"
-          tone="primary"
-          highlight={`${totals.bills} ${totals.bills === 1 ? "bill" : "bills"}`}
-          caption="in this period"
-        />
-        <ReportKpiCard
-          label="Total Amount Received"
-          value={formatRupees(totals.amountReceived)}
-          icon="/Reports/CheckCircleSolid.svg"
-          tone="success"
-          highlight={formatPercent(totals.amountReceived, totals.totalAmount)}
-          caption="of billed amount"
-        />
-        <ReportKpiCard
-          label="Total Pending Amount"
-          value={formatRupees(totals.pendingAmount)}
-          icon="/Reports/Clock.svg"
-          tone="warning"
-          highlight={formatPercent(totals.pendingAmount, totals.totalAmount)}
-          caption="still outstanding"
-        />
-      </div>
+      {report.isLoading ? (
+        <ReportLoadingState kpiCount={3} />
+      ) : !data ? (
+        <div className="flex h-40 items-center justify-center rounded-2xl bg-white text-label-l4 text-pneutral-500">
+          {report.loadError}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
+            <ReportKpiCard
+              label="Total IP Bill Amount"
+              value={formatRupees(billed)}
+              icon="/Reports/Banknotes.svg"
+              tone="primary"
+              highlight={`${totalBills} ${totalBills === 1 ? "bill" : "bills"}`}
+              caption="in this period"
+            />
+            <ReportKpiCard
+              label="Total Amount Received"
+              value={formatRupees(kpi?.totalAmountReceived ?? 0)}
+              icon="/Reports/CheckCircleSolid.svg"
+              tone="success"
+              highlight={formatPercent(kpi?.totalAmountReceived ?? 0, billed)}
+              caption="of billed amount"
+            />
+            <ReportKpiCard
+              label="Total Pending Amount"
+              value={formatRupees(pending)}
+              icon="/Reports/Clock.svg"
+              tone="warning"
+              highlight={formatPercent(pending, billed)}
+              caption="still outstanding"
+            />
+          </div>
 
-      <ReportTable
-        title="Bill Details"
-        subtitles={[`Period: ${describePeriod(filters.appliedPeriod, "to")}`]}
-        generatedOn={formatGeneratedOn(generatedAt)}
-        generatedBy="Admin User"
-        columns={COLUMNS}
-        rows={rows}
-        getRowKey={(row) => row.billNo}
-        totalRow={{
-          patient: "Total",
-          totalAmount: formatRupees(totals.totalAmount),
-          amountReceived: formatRupees(totals.amountReceived),
-          pendingAmount: (
-            <span className={pendingClass(totals.pendingAmount)}>
-              {formatRupees(totals.pendingAmount)}
-            </span>
-          ),
-        }}
-      />
+          <ReportTable
+            title="Bill Details"
+            subtitles={[`Period: ${describePeriod(filters.appliedPeriod, "to")}`]}
+            generatedOn={formatGeneratedOn(data.generatedOn)}
+            generatedBy={data.generatedBy}
+            columns={COLUMNS}
+            rows={data.billDetails.content}
+            getRowKey={(row) => String(row.billingId)}
+            serverPagination={report.serverPagination(totalBills)}
+            totalRow={{
+              patient: "Total",
+              totalAmount: formatRupees(billed),
+              amountReceived: formatRupees(kpi?.totalAmountReceived ?? 0),
+              pendingAmount: <span className={pendingClass(pending)}>{formatRupees(pending)}</span>,
+            }}
+            emptyState={
+              <ReportEmptyState title="No bills match your filters" onClearFilters={report.reset} />
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

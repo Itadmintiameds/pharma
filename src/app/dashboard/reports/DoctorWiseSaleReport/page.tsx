@@ -1,54 +1,59 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Dropdown, { DropdownOption } from "@/app/components/common/Dropdown";
+import Image from "next/image";
+import Input from "@/app/components/common/Input";
+import Dropdown from "@/app/components/common/Dropdown";
+import { getDoctorWiseSalesReport } from "@/services/FinancialReportService";
+import { DoctorWiseRow } from "@/types/FinancialReportData";
 import ReportHeader from "../components/ReportHeader";
-import ReportFilterToolbar, { AppliedFilterChip } from "../components/ReportFilterToolbar";
+import ReportFilterToolbar from "../components/ReportFilterToolbar";
 import ReportKpiCard from "../components/ReportKpiCard";
 import ReportTable, { ReportColumn } from "../components/ReportTable";
-import { usePharmacyOptions, useReportFilters } from "../components/useReportFilters";
+import ReportLoadingState from "../components/ReportLoadingState";
+import ReportEmptyState from "../components/ReportEmptyState";
+import { useDoctorOptions } from "../components/useReportFilters";
+import {
+  multiSelectChip,
+  textFilterChips,
+  useFinancialReport,
+} from "../components/useFinancialReport";
+import {
+  GST_OPTIONS,
+  PATIENT_TYPE_OPTIONS,
+  optionLabel,
+} from "../components/reportFilterOptions";
 import {
   describePeriod,
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  periodChipLabel,
 } from "../components/reportUtils";
 
 interface DoctorWiseFilters {
-  pharmacyId: string;
-  referredBy: string;
-  patientType: string;
+  pharmacyIds: string[];
+  doctorIds: number[];
+  patientTypes: string[];
+  productSearch: string;
+  hsnSearch: string;
+  gstPercentages: string[];
 }
 
-const EMPTY_FILTERS: DoctorWiseFilters = { pharmacyId: "", referredBy: "", patientType: "" };
+const EMPTY_FILTERS: DoctorWiseFilters = {
+  pharmacyIds: [],
+  doctorIds: [],
+  patientTypes: [],
+  productSearch: "",
+  hsnSearch: "",
+  gstPercentages: [],
+};
 
-/** One product's sales under one Referred By value. */
-interface DoctorWiseRow {
-  referredBy: string;
-  productName: string;
-  saleQuantity: number;
-  returnQuantity: number;
-  saleValue: number;
-  returnValue: number;
-  netSaleValue: number;
-}
+/** The free-text More Filters fields; GST % follows them as a multi-select. */
+const SEARCH_FILTERS = [
+  { key: "productSearch", label: "Product", chip: "Product", placeholder: "Search product" },
+  { key: "hsnSearch", label: "HSN Code", chip: "HSN", placeholder: "Search HSN code" },
+] as const;
 
-// Sample data in the design's shape, until the report API is wired in.
-const SAMPLE_ROWS: DoctorWiseRow[] = [
-  { referredBy: "Dr. A", productName: "Paracetamol 500 mg", saleQuantity: 20, returnQuantity: 2, saleValue: 1000, returnValue: 100, netSaleValue: 900 },
-  { referredBy: "Dr. A", productName: "Amoxicillin 500 mg", saleQuantity: 10, returnQuantity: 0, saleValue: 4000, returnValue: 0, netSaleValue: 4000 },
-  { referredBy: "Dr. B", productName: "Pantoprazole 40 mg", saleQuantity: 15, returnQuantity: 3, saleValue: 3000, returnValue: 600, netSaleValue: 2400 },
-  { referredBy: "Dr. B", productName: "Azithromycin 500 mg", saleQuantity: 5, returnQuantity: 0, saleValue: 2500, returnValue: 0, netSaleValue: 2500 },
-];
-
-// Doctors come with the report APIs.
-const REFERRED_BY_OPTIONS: DropdownOption[] = [];
-
-const PATIENT_TYPE_OPTIONS: DropdownOption[] = [
-  { label: "In-Patient", value: "IP" },
-  { label: "Out-Patient", value: "OP" },
-];
+const SEARCH_ICON = <Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />;
 
 const COLUMNS: ReportColumn<DoctorWiseRow>[] = [
   {
@@ -106,57 +111,41 @@ const COLUMNS: ReportColumn<DoctorWiseRow>[] = [
 ];
 
 export default function DoctorWiseSaleReportPage() {
-  const filters = useReportFilters(EMPTY_FILTERS);
-  const { draft, applied, setDraftField } = filters;
-  const [generatedAt, setGeneratedAt] = useState(() => new Date());
-
-  const pharmacy = usePharmacyOptions((pharmacyId) => {
-    filters.setDraft((prev) => ({ ...prev, pharmacyId }));
-    filters.setApplied((prev) => ({ ...prev, pharmacyId }));
+  const doctors = useDoctorOptions();
+  const report = useFinancialReport({
+    emptyFilters: EMPTY_FILTERS,
+    toParams: (f) => ({
+      doctorIds: f.doctorIds,
+      patientTypes: f.patientTypes,
+      productSearch: f.productSearch.trim(),
+      hsnSearch: f.hsnSearch.trim(),
+      gstPercentages: f.gstPercentages,
+    }),
+    fetchReport: getDoctorWiseSalesReport,
+    errorMessage: "Failed to fetch the doctor-wise sales report",
   });
+  const { filters, clearField } = report;
+  const { draft, applied, setDraftField } = filters;
 
-  const rows = SAMPLE_ROWS;
-
-  const totals = useMemo(() => {
-    const sum = (pick: (row: DoctorWiseRow) => number) =>
-      rows.reduce((total, row) => total + pick(row), 0);
-    return {
-      saleQuantity: sum((r) => r.saleQuantity),
-      returnQuantity: sum((r) => r.returnQuantity),
-      saleValue: sum((r) => r.saleValue),
-      returnValue: sum((r) => r.returnValue),
-      netSaleValue: sum((r) => r.netSaleValue),
-    };
-  }, [rows]);
-
-  const handleSearch = () => {
-    filters.apply();
-    setGeneratedAt(new Date());
-  };
-
-  const handleReset = () => {
-    filters.reset({ ...EMPTY_FILTERS, pharmacyId: pharmacy.defaultId });
-    setGeneratedAt(new Date());
-  };
-
-  const appliedPharmacy = pharmacy.labelOf(applied.pharmacyId);
-  const appliedReferredBy =
-    REFERRED_BY_OPTIONS.find((o) => o.value === applied.referredBy)?.label ?? applied.referredBy;
-  const appliedPatientType =
-    PATIENT_TYPE_OPTIONS.find((o) => o.value === applied.patientType)?.label ?? "";
-
-  const chips: AppliedFilterChip[] = [
-    { key: "period", label: periodChipLabel(filters.appliedPeriod) },
-    ...(appliedPharmacy
-      ? [{ key: "pharmacy", label: `Pharmacy: ${appliedPharmacy}`, onRemove: () => filters.clearField("pharmacyId") }]
-      : []),
-    ...(appliedReferredBy
-      ? [{ key: "referredBy", label: `Referred By: ${appliedReferredBy}`, onRemove: () => filters.clearField("referredBy") }]
-      : []),
-    ...(appliedPatientType
-      ? [{ key: "patientType", label: `Patient Type: ${appliedPatientType}`, onRemove: () => filters.clearField("patientType") }]
-      : []),
+  const chips = [
+    ...report.baseChips,
+    ...multiSelectChip("doctorIds", "Referred By", applied.doctorIds, doctors.labelOf, () => clearField("doctorIds")),
+    ...multiSelectChip("patientTypes", "Patient Type", applied.patientTypes, (v) => optionLabel(PATIENT_TYPE_OPTIONS, v), () => clearField("patientTypes")),
+    ...textFilterChips(applied, SEARCH_FILTERS, clearField),
+    ...multiSelectChip("gstPercentages", "GST", applied.gstPercentages, (v) => optionLabel(GST_OPTIONS, v), () => clearField("gstPercentages")),
   ];
+
+  const data = report.report;
+  const kpi = data?.kpi;
+  const rows = data?.billDetails.content ?? [];
+  const totalRows = data?.billDetails.totalElements ?? 0;
+  const saleValue = kpi?.totalSaleValue ?? 0;
+
+  // The KPIs carry value totals for the whole report, but not quantities —
+  // those can only be summed when every row is on this page.
+  const allRowsShown = rows.length === totalRows;
+  const sum = (pick: (row: DoctorWiseRow) => number) =>
+    rows.reduce((total, row) => total + pick(row), 0);
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -171,83 +160,128 @@ export default function DoctorWiseSaleReportPage() {
         period={filters.draftPeriod}
         onPeriodChange={filters.setDraftPeriod}
         chips={chips}
-        onReset={handleReset}
-        onSearch={handleSearch}
+        onReset={report.reset}
+        onSearch={report.search}
+        searching={report.isLoading}
+        moreFilterCount={SEARCH_FILTERS.length + 1}
+        moreFilters={
+          <>
+            {SEARCH_FILTERS.map(({ key, label, placeholder }) => (
+              <Input
+                key={key}
+                label={label}
+                labelClassName="px-1"
+                placeholder={placeholder}
+                value={draft[key]}
+                onChange={(e) => setDraftField(key, e.target.value)}
+                onKeyDown={report.onEnter}
+                leftIcon={SEARCH_ICON}
+              />
+            ))}
+            <Dropdown
+              label="GST %"
+              labelClassName="px-1"
+              options={GST_OPTIONS}
+              value={draft.gstPercentages}
+              onChange={(value: string[]) => setDraftField("gstPercentages", value)}
+              placeholder="Select"
+              multiple
+            />
+          </>
+        }
       >
         <Dropdown
           label="Pharmacy"
           labelClassName="px-1"
-          options={pharmacy.options}
-          value={draft.pharmacyId}
-          onChange={(value) => setDraftField("pharmacyId", value)}
+          options={report.pharmacy.options}
+          value={draft.pharmacyIds}
+          onChange={(value: string[]) => setDraftField("pharmacyIds", value)}
           placeholder="Select"
+          multiple
         />
         <Dropdown
           label="Referred By"
           labelClassName="px-1"
-          options={REFERRED_BY_OPTIONS}
-          value={draft.referredBy}
-          onChange={(value) => setDraftField("referredBy", value)}
+          options={doctors.options}
+          value={draft.doctorIds}
+          onChange={(value: number[]) => setDraftField("doctorIds", value)}
           placeholder="Select"
+          isLoading={doctors.loading}
+          searchable
+          multiple
         />
         <Dropdown
           label="Patient Type"
           labelClassName="px-1"
           options={PATIENT_TYPE_OPTIONS}
-          value={draft.patientType}
-          onChange={(value) => setDraftField("patientType", value)}
+          value={draft.patientTypes}
+          onChange={(value: string[]) => setDraftField("patientTypes", value)}
           placeholder="Select"
-          clearable
+          multiple
         />
       </ReportFilterToolbar>
 
-      <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
-        <ReportKpiCard
-          label="Total Sale Value"
-          value={formatRupees(totals.saleValue)}
-          icon="/Reports/Banknotes.svg"
-          tone="primary"
-          highlight={`${totals.saleQuantity} ${totals.saleQuantity === 1 ? "unit" : "units"}`}
-          caption="sold"
-        />
-        <ReportKpiCard
-          label="Total Return Value"
-          value={formatRupees(totals.returnValue)}
-          icon="/Reports/ReceiptRefundRed.svg"
-          tone="warning"
-          highlight={formatPercent(totals.returnValue, totals.saleValue)}
-          caption="of sale value"
-        />
-        <ReportKpiCard
-          label="Net Sale Value"
-          value={formatRupees(totals.netSaleValue)}
-          icon="/Reports/CheckCircleSolid.svg"
-          tone="success"
-          highlight={formatPercent(totals.netSaleValue, totals.saleValue)}
-          caption="retained after returns"
-        />
-      </div>
+      {report.isLoading ? (
+        <ReportLoadingState kpiCount={3} />
+      ) : !data ? (
+        <div className="flex h-40 items-center justify-center rounded-2xl bg-white text-label-l4 text-pneutral-500">
+          {report.loadError}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
+            <ReportKpiCard
+              label="Total Sale Value"
+              value={formatRupees(saleValue)}
+              icon="/Reports/Banknotes.svg"
+              tone="primary"
+              highlight={`${totalRows} ${totalRows === 1 ? "product line" : "product lines"}`}
+              caption="in this period"
+            />
+            <ReportKpiCard
+              label="Total Return Value"
+              value={formatRupees(kpi?.totalReturnValue ?? 0)}
+              icon="/Reports/ReceiptRefundRed.svg"
+              tone="warning"
+              highlight={formatPercent(kpi?.totalReturnValue ?? 0, saleValue)}
+              caption="of sale value"
+            />
+            <ReportKpiCard
+              label="Net Sale Value"
+              value={formatRupees(kpi?.netSaleValue ?? 0)}
+              icon="/Reports/CheckCircleSolid.svg"
+              tone="success"
+              highlight={formatPercent(kpi?.netSaleValue ?? 0, saleValue)}
+              caption="retained after returns"
+            />
+          </div>
 
-      <ReportTable
-        title="Referred By Sales Details"
-        subtitles={[
-          `Period: ${describePeriod(filters.appliedPeriod, "to")}`,
-          ...(appliedPharmacy ? [`Pharmacy: ${appliedPharmacy}`] : []),
-        ]}
-        generatedOn={formatGeneratedOn(generatedAt)}
-        generatedBy="Admin User"
-        columns={COLUMNS}
-        rows={rows}
-        getRowKey={(row, index) => `${row.referredBy}-${row.productName}-${index}`}
-        totalRow={{
-          referredBy: "Total",
-          saleQuantity: totals.saleQuantity,
-          returnQuantity: totals.returnQuantity,
-          saleValue: formatRupees(totals.saleValue),
-          returnValue: formatRupees(totals.returnValue),
-          netSaleValue: formatRupees(totals.netSaleValue),
-        }}
-      />
+          <ReportTable
+            title="Referred By Sales Details"
+            subtitles={[
+              `Period: ${describePeriod(filters.appliedPeriod, "to")}`,
+              ...(report.pharmacyNames ? [`Pharmacy: ${report.pharmacyNames}`] : []),
+            ]}
+            generatedOn={formatGeneratedOn(data.generatedOn)}
+            generatedBy={data.generatedBy}
+            columns={COLUMNS}
+            rows={rows}
+            getRowKey={(row) => `${row.pharmacyId}-${row.doctorId}-${row.productId}`}
+            serverPagination={report.serverPagination(totalRows)}
+            totalRow={{
+              referredBy: "Total",
+              saleQuantity: allRowsShown ? sum((r) => r.saleQuantity) : undefined,
+              returnQuantity: allRowsShown ? sum((r) => r.returnQuantity) : undefined,
+              saleValue: formatRupees(saleValue),
+              returnValue: formatRupees(kpi?.totalReturnValue ?? 0),
+              netSaleValue: formatRupees(kpi?.netSaleValue ?? 0),
+            }}
+            emptyState={
+              <ReportEmptyState title="No sales match your filters" onClearFilters={report.reset} />
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

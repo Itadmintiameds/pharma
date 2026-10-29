@@ -84,3 +84,106 @@ export interface BillSummaryRow {
 }
 
 export type BillSummaryResponse = FinancialReportResponse<BillSummaryKpi, BillSummaryRow>;
+
+/** Totals of every line matching the filters. */
+export interface DetailedSaleKpi {
+  totalGrossAmount: number;
+  totalDiscountAmount: number;
+  /** CGST + SGST */
+  totalGstAmount: number;
+  totalNetAmount: number;
+}
+
+/** One product line of a bill — a bill with two products is two rows. */
+export interface DetailedSaleRow {
+  billingId: number;
+  billingDetailsId: number;
+  billNo: string;
+  /** ISO local date-time. */
+  billedDate: string;
+  pharmacyId: string;
+  pharmacyName: string;
+  customerId: number | null;
+  patientName: string | null;
+  patientMobileNo: string | null;
+  doctorId: number | null;
+  referredBy: string | null;
+  productId: string;
+  productName: string;
+  batchId: string | null;
+  batchNumber: string | null;
+  /** In the unit it was billed in. */
+  quantity: number;
+  unit: string | null;
+  purchaseUnit: string | null;
+  smallestSaleUnit: string | null;
+  hsnNo: string | null;
+  /** The product's current rate, e.g. "5". */
+  gstPercentage: string | null;
+  grossAmount: number;
+  discountAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  netAmount: number;
+}
+
+export type DetailedSaleResponse = FinancialReportResponse<DetailedSaleKpi, DetailedSaleRow>;
+
+export interface DoctorWiseKpi {
+  totalSaleValue: number;
+  totalReturnValue: number;
+  /** totalSaleValue − totalReturnValue */
+  netSaleValue: number;
+}
+
+/** One product sold on bills referred by one doctor, in one pharmacy. */
+export interface DoctorWiseRow {
+  pharmacyId: string;
+  pharmacyName: string;
+  doctorId: number;
+  referredBy: string;
+  productId: string;
+  productName: string;
+  /** In the smallest sale unit. */
+  saleQuantity: number;
+  returnQuantity: number;
+  saleValue: number;
+  returnValue: number;
+  netSaleValue: number;
+}
+
+export type DoctorWiseResponse = FinancialReportResponse<DoctorWiseKpi, DoctorWiseRow>;
+
+export interface BillDueKpi {
+  totalIpBillAmount: number;
+  totalAmountReceived: number;
+  /** totalIpBillAmount − totalAmountReceived */
+  totalPendingAmount: number;
+}
+
+export type BillDueStatus = "PENDING" | "FULLY_PAID";
+
+/** One In-Patient bill and what is still owed on it. */
+export interface BillDueRow {
+  pharmacyId: string;
+  pharmacyName: string;
+  billingId: number;
+  billNo: string;
+  /** ISO local date-time. */
+  billedDate: string;
+  customerId: number | null;
+  patientName: string | null;
+  patientMobileNo: string | null;
+  patientNumber: string | null;
+  ipNumber: string | null;
+  doctorId: number | null;
+  referredBy: string | null;
+  totalAmount: number;
+  /** Every payment recorded against the bill. */
+  amountReceived: number;
+  /** Never below zero. */
+  pendingAmount: number;
+  status: BillDueStatus;
+}
+
+export type BillDueResponse = FinancialReportResponse<BillDueKpi, BillDueRow>;
