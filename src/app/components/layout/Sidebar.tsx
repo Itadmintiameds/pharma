@@ -64,22 +64,7 @@ const Sidebar = () => {
   // Items with sub-items (Reports) expand downwards in place. Starts open when
   // the current page is one of the sub-items, so the active link stays visible.
   const [openItems, setOpenItems] = useState<Record<string, boolean>>(() => ({
-    Reports:
-      pathname.startsWith("/dashboard/inventorySalesReport") ||
-      pathname.startsWith("/dashboard/currentStockSummaryReport") ||
-      pathname.startsWith("/dashboard/stockMovementReport") ||
-      pathname.startsWith("/dashboard/stockExpiryReport") ||
-      pathname.startsWith("/dashboard/stockDamageReport") ||
-      pathname.startsWith("/dashboard/stockReturnReport") ||
-      pathname.startsWith("/dashboard/stockAdjustmentReport") ||
-      pathname.startsWith("/dashboard/purchaseRegisterReport") ||
-      pathname.startsWith("/dashboard/supplierPurchaseReturnReport") ||
-      pathname.startsWith("/dashboard/supplierOutstandingReport") ||
-      pathname.startsWith("/dashboard/supplierPaymentReport") ||
-      pathname.startsWith("/dashboard/pharmacySalesReturnReport") ||
-      pathname.startsWith("/dashboard/grossProfitReport") ||
-      pathname.startsWith("/dashboard/userwiseCollectionReport") ||
-      pathname.startsWith("/dashboard/productwisePurchase&SalesAnalysisReport"),
+    Reports: pathname.startsWith("/dashboard/reports/"),
   }));
   const toggleItem = (name: string) =>
     setOpenItems((prev) => ({ ...prev, [name]: !prev[name] }));
@@ -291,63 +276,63 @@ const Sidebar = () => {
           children: [
             {
               name: "Inventory Sales Report",
-              path: "/dashboard/inventorySalesReport",
+              path: "/dashboard/reports/inventorySalesReport",
             },
             {
               name: "Current Stock Summary Report",
-              path: "/dashboard/currentStockSummaryReport",
+              path: "/dashboard/reports/currentStockSummaryReport",
             },
             {
               name: "Stock Movement Report",
-              path: "/dashboard/stockMovementReport",
+              path: "/dashboard/reports/stockMovementReport",
             },
             {
               name: "Stock Expiry Report",
-              path: "/dashboard/stockExpiryReport",
+              path: "/dashboard/reports/stockExpiryReport",
             },
             {
               name: "Stock Damage Report",
-              path: "/dashboard/stockDamageReport",
+              path: "/dashboard/reports/stockDamageReport",
             },
             {
               name: "Stock Return Report",
-              path: "/dashboard/stockReturnReport",
+              path: "/dashboard/reports/stockReturnReport",
             },
             {
               name: "Stock Adjustment Report",
-              path: "/dashboard/stockAdjustmentReport",
+              path: "/dashboard/reports/stockAdjustmentReport",
             },
             {
               name: "Purchase Register Report",
-              path: "/dashboard/purchaseRegisterReport",
+              path: "/dashboard/reports/purchaseRegisterReport",
             },
             {
               name: "Supplier Purchase Return Report",
-              path: "/dashboard/supplierPurchaseReturnReport",
+              path: "/dashboard/reports/supplierPurchaseReturnReport",
             },
             {
               name: "Supplier Outstanding Report",
-              path: "/dashboard/supplierOutstandingReport",
+              path: "/dashboard/reports/supplierOutstandingReport",
             },
             {
               name: "Supplier Payment Report",
-              path: "/dashboard/supplierPaymentReport",
+              path: "/dashboard/reports/supplierPaymentReport",
             },
             {
               name: "Pharmacy Sales Return Report",
-              path: "/dashboard/pharmacySalesReturnReport",
+              path: "/dashboard/reports/pharmacySalesReturnReport",
             },
             {
               name: "Gross Profit Report",
-              path: "/dashboard/grossProfitReport",
+              path: "/dashboard/reports/grossProfitReport",
             },
             {
               name: "User-wise Collection Report",
-              path: "/dashboard/userwiseCollectionReport",
+              path: "/dashboard/reports/userwiseCollectionReport",
             },
             {
               name: "Product-wise Purchase and Sales Analysis Report",
-              path: "/dashboard/productwisePurchase&SalesAnalysisReport",
+              path: "/dashboard/reports/productwisePurchase&SalesAnalysisReport",
             },
           ],
         },
