@@ -350,6 +350,18 @@ const Sidebar = () => {
               name: "Bill Due Summary",
               path: "/dashboard/reports/BillDueSummary",
             },
+            {
+              name: "Sales Summary",
+              path: "/dashboard/reports/SalesSummary",
+            },
+            {
+              name: "Payment Mode Summary",
+              path: "/dashboard/reports/PaymentModeSummary",
+            },
+            {
+              name: "Receipt Details",
+              path: "/dashboard/reports/ReceiptDetails",
+            },
           ],
         },
       ],

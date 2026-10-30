@@ -51,7 +51,8 @@ export interface ServerPagination {
   onPageSizeChange: (pageSize: number) => void;
 }
 
-export const PAGE_SIZE_OPTIONS = [10, 25, 50];
+/** The backend accepts a size of 1–500. */
+export const PAGE_SIZE_OPTIONS = [5, 10, 15, 20, 25];
 
 type SortState = { key: string; direction: "asc" | "desc" } | null;
 

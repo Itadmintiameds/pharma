@@ -51,7 +51,8 @@ export function useFinancialReport<F extends { pharmacyIds: string[] }, R>({
   });
 
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
+  // 10, the backend's own default size.
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[1]);
   const [searchCount, setSearchCount] = useState(0);
   const [report, setReport] = useState<R | null>(null);
   const [loadError, setLoadError] = useState("");

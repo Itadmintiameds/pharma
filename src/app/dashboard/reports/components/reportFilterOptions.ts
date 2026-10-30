@@ -18,6 +18,13 @@ export const PATIENT_TYPE_OPTIONS: DropdownOption[] = [
   { label: "Day Care", value: "DAY_CARE" },
 ];
 
+export const PAYMENT_MODE_OPTIONS: DropdownOption[] = [
+  { label: "Cash", value: "CASH" },
+  { label: "UPI", value: "UPI" },
+  { label: "Card", value: "CARD" },
+  { label: "Credit", value: "CREDIT" },
+];
+
 /** No selection means ALL on the backend. */
 export const PENDING_STATUS_OPTIONS: DropdownOption[] = [
   { label: "Pending", value: "PENDING" },
