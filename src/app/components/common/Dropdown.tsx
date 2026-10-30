@@ -8,6 +8,9 @@ export interface DropdownOption {
   value: string | number;
 }
 
+// The value behind the "All" row of a `selectAll` menu; never passed to onChange.
+const SELECT_ALL_VALUE = "__SELECT_ALL__";
+
 interface DropdownProps {
   label?: string;
   required?: boolean;
@@ -32,6 +35,12 @@ interface DropdownProps {
    * default — on a required field there is nothing sensible to clear back to.
    */
   clearable?: boolean;
+  /**
+   * Multi-select only. Puts an "All" option at the top of the menu that ticks
+   * every option at once (and clears them all when ticked again). It is shown
+   * ticked whenever every option is selected, and the field then reads "All".
+   */
+  selectAll?: boolean;
   menuPlacement?: 'top' | 'bottom';
   /**
    * "fixed" positions the open menu against the viewport instead of the field,
@@ -66,6 +75,7 @@ const Dropdown: React.FC<DropdownProps> = ({
   isLoading = false,
   allowOther = false,
   clearable = false,
+  selectAll = false,
   menuPlacement = 'bottom',
   menuStrategy = 'absolute',
   labelAction,
@@ -82,6 +92,12 @@ const Dropdown: React.FC<DropdownProps> = ({
   const controlRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
+
+  const hasSelectAll = multiple && selectAll && options.length > 0;
+  const allSelected =
+    hasSelectAll &&
+    Array.isArray(value) &&
+    options.every((o) => value.includes(o.value));
 
   const dynamicOptions = allowOther
     ? [...options, { label: "Other", value: "OTHER" }]
@@ -172,6 +188,10 @@ const Dropdown: React.FC<DropdownProps> = ({
    */
   const handleSelect = (option: DropdownOption, fromKeyboard = false) => {
     if (multiple) {
+      if (option.value === SELECT_ALL_VALUE) {
+        onChange(allSelected ? [] : options.map((o) => o.value));
+        return;
+      }
       const currentValues = Array.isArray(value) ? value : [];
       const isSelected = currentValues.includes(option.value);
 
@@ -201,9 +221,15 @@ const Dropdown: React.FC<DropdownProps> = ({
     }
   };
 
-  const filteredOptions = dynamicOptions.filter((option) =>
+  const matchingOptions = dynamicOptions.filter((option) =>
     option.label.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // "All" means every option, not every match, so it is left out of a search.
+  const filteredOptions =
+    hasSelectAll && !searchQuery
+      ? [{ label: "All", value: SELECT_ALL_VALUE }, ...matchingOptions]
+      : matchingOptions;
 
   // Non-interactive when disabled or readonly.
   const isLocked = disabled || readOnly;
@@ -283,6 +309,7 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (multiple) {
       const currentValues = Array.isArray(value) ? value : [];
       if (currentValues.length === 0) return "";
+      if (allSelected) return "All";
       if (currentValues.length === 1) {
         return dynamicOptions.find((o) => o.value === currentValues[0])?.label || "";
       }
@@ -517,9 +544,12 @@ const Dropdown: React.FC<DropdownProps> = ({
               </div>
             ) : (
               filteredOptions.map((option, index) => {
-                const isSelected = multiple
-                  ? Array.isArray(value) && value.includes(option.value)
-                  : value === option.value;
+                const isSelected =
+                  option.value === SELECT_ALL_VALUE
+                    ? allSelected
+                    : multiple
+                    ? Array.isArray(value) && value.includes(option.value)
+                    : value === option.value;
                 const isActive = index === activeIndex;
 
                 return (
