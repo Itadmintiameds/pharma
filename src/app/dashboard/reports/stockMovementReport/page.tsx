@@ -56,10 +56,15 @@ const MOVEMENT_TYPE_OPTIONS: DropdownOption[] = (Object.keys(MOVEMENT_TYPE_LABEL
   (value) => ({ label: MOVEMENT_TYPE_LABEL[value], value }),
 );
 
-// The slice of a /product/batches/pharmacy/{id} row the Product Name filter needs.
+// The slice of a /product/batches/pharmacy/{id} row (BatchStockDto) the Product Name
+// and Batch No. filters need.
 interface ReportProduct {
   productId: string;
   productName: string;
+}
+
+interface PharmacyBatchRow extends ReportProduct {
+  batchNumber: string;
 }
 
 const DEFAULT_FROM_DATE = "2026-10-01";
@@ -173,6 +178,8 @@ const StockMovementReportPage = () => {
   const { warehouses, loading: warehousesLoading } = useWarehouseStore();
   const [productId, setProductId] = useState("");
   const [products, setProducts] = useState<ReportProduct[]>([]);
+  // Batch numbers held at the selected pharmacies, by productId.
+  const [batchesByProduct, setBatchesByProduct] = useState<Map<string, string[]>>(new Map());
   const [productsLoading, setProductsLoading] = useState(true);
   const [movementType, setMovementType] = useState("");
 
@@ -227,17 +234,29 @@ const StockMovementReportPage = () => {
         if (!active) return;
         // Batches repeat a product once per batch (and per pharmacy); keep one row per product.
         const byId = new Map<string, ReportProduct>();
+        const batchSets = new Map<string, Set<string>>();
         responses.forEach((res) =>
-          (res?.data ?? []).forEach((b: ReportProduct) => {
-            if (b.productId && !byId.has(b.productId)) {
+          (res?.data ?? []).forEach((b: PharmacyBatchRow) => {
+            if (!b.productId) return;
+            if (!byId.has(b.productId)) {
               byId.set(b.productId, { productId: b.productId, productName: b.productName });
+            }
+            if (b.batchNumber) {
+              if (!batchSets.has(b.productId)) batchSets.set(b.productId, new Set());
+              batchSets.get(b.productId)!.add(b.batchNumber);
             }
           }),
         );
         setProducts([...byId.values()].sort((a, b) => a.productName.localeCompare(b.productName)));
+        setBatchesByProduct(
+          new Map([...batchSets].map(([id, set]) => [id, [...set].sort((a, b) => a.localeCompare(b))])),
+        );
       } catch (error) {
         console.error("Unable to fetch products for the selected pharmacies", error);
-        if (active) setProducts([]);
+        if (active) {
+          setProducts([]);
+          setBatchesByProduct(new Map());
+        }
       } finally {
         if (active) setProductsLoading(false);
       }
@@ -247,6 +266,20 @@ const StockMovementReportPage = () => {
       active = false;
     };
   }, [pharmacyIdsKey]);
+
+  // The picked product's batches; with no product picked, every batch at the selected pharmacies.
+  const batchOptions: DropdownOption[] = useMemo(() => {
+    const numbers = productId
+      ? (batchesByProduct.get(productId) ?? [])
+      : [...new Set([...batchesByProduct.values()].flat())].sort((a, b) => a.localeCompare(b));
+    return numbers.map((n) => ({ label: n, value: n }));
+  }, [productId, batchesByProduct]);
+
+  const handleProductChange = (value: string) => {
+    setProductId(value);
+    // A batch of the previous product would match nothing.
+    setBatchNo("");
+  };
 
   const productOptions: DropdownOption[] = useMemo(
     () => products.map((p) => ({ label: p.productName, value: p.productId })),
@@ -644,7 +677,7 @@ const StockMovementReportPage = () => {
             labelClassName="px-xxsm"
             options={productOptions}
             value={productId}
-            onChange={(value: string) => setProductId(value)}
+            onChange={handleProductChange}
             placeholder="Search"
             searchable
             clearable
@@ -652,13 +685,15 @@ const StockMovementReportPage = () => {
           />
 
           <Dropdown
-            label="Movement Type"
+            label="Batch No."
             labelClassName="px-xxsm"
-            options={MOVEMENT_TYPE_OPTIONS}
-            value={movementType}
-            onChange={(value: string) => setMovementType(value)}
-            placeholder="Select"
+            options={batchOptions}
+            value={batchNo}
+            onChange={(value: string) => setBatchNo(value)}
+            placeholder="Search"
+            searchable
             clearable
+            isLoading={productsLoading}
           />
 
           {/* Same grid as the primary filters, so these flow on four to a row. */}
@@ -675,20 +710,6 @@ const StockMovementReportPage = () => {
                 placeholder="Select"
                 isLoading={warehousesLoading}
               />
-
-              <label className="flex min-w-0 flex-col">
-                <span className={fieldLabelClass}>Batch No.</span>
-                <span className={fieldBoxClass}>
-                  <Search className="size-5 shrink-0 text-pneutral-500" />
-                  <input
-                    type="text"
-                    value={batchNo}
-                    onChange={(e) => setBatchNo(e.target.value)}
-                    placeholder="Search"
-                    className="min-w-0 flex-1 bg-transparent text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500"
-                  />
-                </span>
-              </label>
 
               <label className="flex min-w-0 flex-col">
                 <span className={fieldLabelClass}>Reference No.</span>
@@ -726,6 +747,16 @@ const StockMovementReportPage = () => {
                 placeholder="Select"
                 searchable
                 isLoading={pharmaciesLoading || warehousesLoading}
+              />
+
+              <Dropdown
+                label="Movement Type"
+                labelClassName="px-xxsm"
+                options={MOVEMENT_TYPE_OPTIONS}
+                value={movementType}
+                onChange={(value: string) => setMovementType(value)}
+                placeholder="Select"
+                clearable
               />
             </>
           )}

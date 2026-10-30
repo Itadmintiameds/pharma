@@ -16,7 +16,6 @@ import {
   Download,
   Funnel,
   Printer,
-  Search,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -48,11 +47,16 @@ const STOCK_STATUS_OPTIONS: DropdownOption[] = [
   { label: "Expired Stock Held", value: "EXPIRED_STOCK_HELD" },
 ];
 
-// The slice of a /product/batches/pharmacy/{id} row the Product Name and Brand Name filters need.
+// The slice of a /product/batches/pharmacy/{id} row (BatchStockDto) the Product Name,
+// Brand Name and Batch No. filters need.
 interface ReportProduct {
   productId: string;
   productName: string;
   brandName: string;
+}
+
+interface PharmacyBatchRow extends ReportProduct {
+  batchNumber: string;
 }
 
 interface ProductCategory {
@@ -157,6 +161,8 @@ const CurrentStockSummaryReportPage = () => {
   const { warehouses, loading: warehousesLoading } = useWarehouseStore();
   const [productId, setProductId] = useState("");
   const [products, setProducts] = useState<ReportProduct[]>([]);
+  // Batch numbers held at the selected pharmacies, by productId.
+  const [batchesByProduct, setBatchesByProduct] = useState<Map<string, string[]>>(new Map());
   const [productsLoading, setProductsLoading] = useState(true);
   const [stockStatus, setStockStatus] = useState("");
 
@@ -233,17 +239,29 @@ const CurrentStockSummaryReportPage = () => {
         if (!active) return;
         // Batches repeat a product once per batch (and per pharmacy); keep one row per product.
         const byId = new Map<string, ReportProduct>();
+        const batchSets = new Map<string, Set<string>>();
         responses.forEach((res) =>
-          (res?.data ?? []).forEach((b: ReportProduct) => {
-            if (b.productId && !byId.has(b.productId)) {
+          (res?.data ?? []).forEach((b: PharmacyBatchRow) => {
+            if (!b.productId) return;
+            if (!byId.has(b.productId)) {
               byId.set(b.productId, { productId: b.productId, productName: b.productName, brandName: b.brandName ?? "" });
+            }
+            if (b.batchNumber) {
+              if (!batchSets.has(b.productId)) batchSets.set(b.productId, new Set());
+              batchSets.get(b.productId)!.add(b.batchNumber);
             }
           }),
         );
         setProducts([...byId.values()].sort((a, b) => a.productName.localeCompare(b.productName)));
+        setBatchesByProduct(
+          new Map([...batchSets].map(([id, set]) => [id, [...set].sort((a, b) => a.localeCompare(b))])),
+        );
       } catch (error) {
         console.error("Unable to fetch products for the selected pharmacies", error);
-        if (active) setProducts([]);
+        if (active) {
+          setProducts([]);
+          setBatchesByProduct(new Map());
+        }
       } finally {
         if (active) setProductsLoading(false);
       }
@@ -258,6 +276,20 @@ const CurrentStockSummaryReportPage = () => {
     () => products.map((p) => ({ label: p.productName, value: p.productId })),
     [products],
   );
+
+  // The picked product's batches; with no product picked, every batch at the selected pharmacies.
+  const batchOptions: DropdownOption[] = useMemo(() => {
+    const numbers = productId
+      ? (batchesByProduct.get(productId) ?? [])
+      : [...new Set([...batchesByProduct.values()].flat())].sort((a, b) => a.localeCompare(b));
+    return numbers.map((n) => ({ label: n, value: n }));
+  }, [productId, batchesByProduct]);
+
+  const handleProductChange = (value: string) => {
+    setProductId(value);
+    // A batch of the previous product would match nothing.
+    setBatchNo("");
+  };
 
   const brandOptions: DropdownOption[] = useMemo(
     () =>
@@ -591,7 +623,7 @@ const CurrentStockSummaryReportPage = () => {
             labelClassName="px-xxsm"
             options={productOptions}
             value={productId}
-            onChange={(value: string) => setProductId(value)}
+            onChange={handleProductChange}
             placeholder="Search"
             searchable
             clearable
@@ -599,13 +631,15 @@ const CurrentStockSummaryReportPage = () => {
           />
 
           <Dropdown
-            label="Stock Status"
+            label="Batch No."
             labelClassName="px-xxsm"
-            options={STOCK_STATUS_OPTIONS}
-            value={stockStatus}
-            onChange={(value: string) => setStockStatus(value)}
-            placeholder="All"
+            options={batchOptions}
+            value={batchNo}
+            onChange={(value: string) => setBatchNo(value)}
+            placeholder="Search"
+            searchable
             clearable
+            isLoading={productsLoading}
           />
 
           {/* Same grid as the primary filters, so these flow on four to a row. */}
@@ -645,20 +679,6 @@ const CurrentStockSummaryReportPage = () => {
                 searchable
                 isLoading={productsLoading}
               />
-
-              <label className="flex min-w-0 flex-col">
-                <span className={fieldLabelClass}>Batch No.</span>
-                <span className={fieldBoxClass}>
-                  <Search className="size-5 shrink-0 text-pneutral-500" />
-                  <input
-                    type="text"
-                    value={batchNo}
-                    onChange={(e) => setBatchNo(e.target.value)}
-                    placeholder="Search"
-                    className="min-w-0 flex-1 bg-transparent text-p4 text-pneutral-900 outline-none placeholder:text-pneutral-500"
-                  />
-                </span>
-              </label>
 
               <div className="relative flex min-w-0 flex-col">
                 <span className={fieldLabelClass}>Expiry Date</span>
@@ -707,6 +727,16 @@ const CurrentStockSummaryReportPage = () => {
                   className={`${hiddenPickerClass} right-0`}
                 />
               </div>
+
+              <Dropdown
+                label="Stock Status"
+                labelClassName="px-xxsm"
+                options={STOCK_STATUS_OPTIONS}
+                value={stockStatus}
+                onChange={(value: string) => setStockStatus(value)}
+                placeholder="All"
+                clearable
+              />
             </>
           )}
         </div>
@@ -841,7 +871,8 @@ const CurrentStockSummaryReportPage = () => {
           )}
         </div>
 
-        <div className="hidden w-full rounded-lg border border-pneutral-200 lg:block">
+        {/* overflow-hidden clips the header and total row to the rounded corners. */}
+        <div className="hidden w-full overflow-hidden rounded-lg border border-pneutral-200 lg:block">
           <table className="w-full table-fixed border-collapse">
             <thead>
               <tr className="bg-secondary-600">
