@@ -14,35 +14,8 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-/** KPI cards, as /financial-report/sales-summary returns them. */
-interface SalesSummaryKpi {
-  totalSales: number;
-  totalSalesReturn: number;
-  netSales: number;
-  ipPendingAmount: number;
-}
-
-/** One cumulative figure; `code` is the stable key, e.g. TOTAL_SALES. */
-interface SalesSummaryRow {
-  code: string;
-  metric: string;
-  amount: number;
-}
-
-// Sample figures from the design, until /financial-report/sales-summary is wired in.
-const fetchSalesSummary = sampleReport<SalesSummaryKpi, SalesSummaryRow>(
-  { totalSales: 50000, totalSalesReturn: 3000, netSales: 47000, ipPendingAmount: 8000 },
-  [
-    { code: "TOTAL_SALES", metric: "Total Sales", amount: 50000 },
-    { code: "TOTAL_DISCOUNT", metric: "Total Discount", amount: 2000 },
-    { code: "TOTAL_SALES_RETURN", metric: "Total Sales Return", amount: 3000 },
-    { code: "NET_SALES", metric: "Net Sales", amount: 47000 },
-    { code: "IP_PENDING_AMOUNT", metric: "IP Pending Amount", amount: 8000 },
-  ],
-);
+import { getSalesSummary } from "@/services/FinancialReportService";
 
 const TITLE = "Pharmacy Receipts Report - Sales Summary";
 
@@ -50,7 +23,7 @@ export default function SalesSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
-    fetchReport: fetchSalesSummary,
+    fetchReport: getSalesSummary,
     errorMessage: "Failed to fetch the sales summary report",
   });
 

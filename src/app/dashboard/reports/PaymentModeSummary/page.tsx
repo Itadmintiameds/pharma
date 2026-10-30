@@ -14,37 +14,14 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-interface PaymentModeKpi {
-  totalReceived: number;
-}
-
-/** What was received through one payment mode. */
-interface PaymentModeRow {
-  /** CASH, CARD, UPI, … */
-  paymentMode: string;
-  label: string;
-  amountReceived: number;
-}
-
-// Sample figures from the design, until the payment mode summary API is wired in.
-const fetchPaymentModeSummary = sampleReport<PaymentModeKpi, PaymentModeRow>(
-  { totalReceived: 45000 },
-  [
-    { paymentMode: "CASH", label: "Cash", amountReceived: 18000 },
-    { paymentMode: "CARD", label: "Card", amountReceived: 12000 },
-    { paymentMode: "UPI", label: "UPI", amountReceived: 10000 },
-    { paymentMode: "NEFT", label: "NEFT", amountReceived: 5000 },
-  ],
-);
+import { getPaymentModeSummary } from "@/services/FinancialReportService";
 
 /** The modes with a KPI card of their own, in the design's order. */
 const MODE_CARDS = [
-  { mode: "CASH", label: "Cash", icon: "/Reports/Cube.svg", tone: "primary" },
-  { mode: "CARD", label: "Card", icon: "/Reports/ScaleBlue.svg", tone: "info" },
-  { mode: "UPI", label: "UPI", icon: "/Reports/ArrowPath.svg", tone: "danger" },
+  { mode: "cash", label: "Cash", icon: "/Reports/Cube.svg", tone: "primary" },
+  { mode: "card", label: "Card", icon: "/Reports/ScaleBlue.svg", tone: "info" },
+  { mode: "upi", label: "UPI", icon: "/Reports/ArrowPath.svg", tone: "danger" },
 ] as const;
 
 const TITLE = "Pharmacy Receipts Report - Payment Mode Summary";
@@ -53,16 +30,14 @@ export default function PaymentModeSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
-    fetchReport: fetchPaymentModeSummary,
+    fetchReport: getPaymentModeSummary,
     errorMessage: "Failed to fetch the payment mode summary report",
   });
 
   const data = report.report;
   const rows = data?.billDetails.content ?? [];
   const totalReceived = data?.kpi.totalReceived ?? 0;
-  const modesUsed = rows.filter((r) => r.amountReceived > 0).length;
-  const amountFor = (mode: string) =>
-    rows.find((r) => r.paymentMode === mode)?.amountReceived ?? 0;
+  const modesUsed = rows.filter((r) => r.code !== "TOTAL" && r.amountReceived > 0).length;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -96,10 +71,10 @@ export default function PaymentModeSummaryPage() {
               <ReportKpiCard
                 key={mode}
                 label={label}
-                value={formatRupees(amountFor(mode))}
+                value={formatRupees(data.kpi[mode])}
                 icon={icon}
                 tone={tone}
-                highlight={formatPercent(amountFor(mode), totalReceived)}
+                highlight={formatPercent(data.kpi[mode], totalReceived)}
                 caption="of total received"
               />
             ))}
@@ -115,14 +90,12 @@ export default function PaymentModeSummaryPage() {
             generatedBy={data.generatedBy}
             labelHeader="Payment Mode"
             amountHeader="Amount Received"
-            lines={[
-              ...rows.map((row) => ({
-                key: row.paymentMode,
-                label: row.label,
-                amount: row.amountReceived,
-              })),
-              { key: "TOTAL", label: "Total", amount: totalReceived, highlight: true },
-            ]}
+            lines={rows.map((row) => ({
+              key: row.code,
+              label: row.paymentMode,
+              amount: row.amountReceived,
+              highlight: row.code === "TOTAL",
+            }))}
           />
         </>
       )}

@@ -187,3 +187,48 @@ export interface BillDueRow {
 }
 
 export type BillDueResponse = FinancialReportResponse<BillDueKpi, BillDueRow>;
+
+export interface SalesSummaryKpi {
+  totalSales: number;
+  totalSalesReturn: number;
+  /** totalSales − totalSalesReturn */
+  netSales: number;
+  /** Outstanding on IP bills as of the period's end. */
+  ipPendingAmount: number;
+}
+
+/** One cumulative figure across the selected pharmacies and period. */
+export interface SalesSummaryRow {
+  /** Stable key: TOTAL_SALES, TOTAL_DISCOUNT, TOTAL_SALES_RETURN, NET_SALES, IP_PENDING_AMOUNT. */
+  code: string;
+  /** Display label, e.g. "Total Sales". */
+  metric: string;
+  /** Where the figure comes from, e.g. "Pharmacy Bill". */
+  source: string;
+  /** How it is calculated. */
+  calculation: string;
+  amount: number;
+}
+
+/** Always a single page holding all five rows. */
+export type SalesSummaryResponse = FinancialReportResponse<SalesSummaryKpi, SalesSummaryRow>;
+
+/** Amount received through each payment mode. */
+export interface PaymentModeKpi {
+  cash: number;
+  card: number;
+  upi: number;
+  credit: number;
+  totalReceived: number;
+}
+
+export interface PaymentModeRow {
+  /** CASH, CARD, UPI, CREDIT, or TOTAL for the closing total line. */
+  code: string;
+  /** Display label, e.g. "Cash". */
+  paymentMode: string;
+  amountReceived: number;
+}
+
+/** Always a single page: one row per mode, then the TOTAL row. */
+export type PaymentModeResponse = FinancialReportResponse<PaymentModeKpi, PaymentModeRow>;

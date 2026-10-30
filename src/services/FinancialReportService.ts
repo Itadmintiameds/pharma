@@ -6,6 +6,8 @@ import {
   DetailedSaleResponse,
   DoctorWiseResponse,
   FinancialReportParams,
+  PaymentModeResponse,
+  SalesSummaryResponse,
 } from '@/types/FinancialReportData';
 
 /**
@@ -73,5 +75,29 @@ export const getBillDueSummary = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the bill due summary report.');
+  }
+};
+
+// Cumulative sales, discount, returns, net sales and IP pending for the period.
+export const getSalesSummary = async (
+  params: FinancialReportParams
+): Promise<SalesSummaryResponse> => {
+  try {
+    const response = await getReport('/financial-report/sales-summary', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the sales summary report.');
+  }
+};
+
+// Payments received in the period, per payment mode, with a closing TOTAL row.
+export const getPaymentModeSummary = async (
+  params: FinancialReportParams
+): Promise<PaymentModeResponse> => {
+  try {
+    const response = await getReport('/financial-report/payment-mode-summary', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the payment mode summary report.');
   }
 };
