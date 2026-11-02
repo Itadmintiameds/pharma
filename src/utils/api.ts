@@ -95,6 +95,12 @@ api.interceptors.response.use(
 
 api.interceptors.request.use(
   (config) => {
+    // A request that names its own location (e.g. a report listing suppliers
+    // across every pharmacy and warehouse) keeps it as-is.
+    if (config.headers["X-Pharmacy-Id"] || config.headers["X-Warehouse-Id"]) {
+      return config;
+    }
+
     // Exactly one location header travels with a request — the two must never
     // both be present. Scope decides which:
     //   - acting as a warehouse (a Super Admin who toggled into one): warehouse.

@@ -22,6 +22,25 @@ export const getAllSupplier = async (): Promise<SupplierData[]> => {
   }
 };
 
+// Suppliers of one given pharmacy or warehouse, rather than the location selected
+// in the navbar. Suppliers belong to a single location, so reports spanning several
+// locations call this once per location.
+export const getSuppliersForLocation = async (
+  location: { pharmacyId: string } | { warehouseId: string }
+): Promise<SupplierData[]> => {
+  try {
+    const response = await api.get('/supplier/allSupplier', {
+      headers:
+        'warehouseId' in location
+          ? { 'X-Warehouse-Id': location.warehouseId }
+          : { 'X-Pharmacy-Id': location.pharmacyId },
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch suppliers.');
+  }
+};
+
 // Fetch a single supplier by id
 export const getSupplierById = async (supplierId: number | string): Promise<SupplierData> => {
   try {
