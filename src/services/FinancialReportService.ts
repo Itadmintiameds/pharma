@@ -4,12 +4,16 @@ import {
   BillCountResponse,
   BillDueResponse,
   BillingByPatientTypeResponse,
+  BillingByUserResponse,
   BillSummaryResponse,
+  CurrentBillDetailsResponse,
   DetailedSaleResponse,
   DoctorWiseResponse,
   FinancialReportParams,
   PaymentModeResponse,
+  ReceiptByUserResponse,
   ReceiptDetailsResponse,
+  SalesReturnDetailsResponse,
   SalesSummaryResponse,
 } from '@/types/FinancialReportData';
 
@@ -138,5 +142,53 @@ export const getBillingByPatientType = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the billing by patient type report.');
+  }
+};
+
+// Day Close: bill count and sales per user and pharmacy, with a closing TOTAL row.
+export const getBillingByUser = async (
+  params: FinancialReportParams
+): Promise<BillingByUserResponse> => {
+  try {
+    const response = await getReport('/financial-report/billing-by-user', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the billing by user report.');
+  }
+};
+
+// Day Close: receipt count and amount collected per user and pharmacy, with a closing TOTAL row.
+export const getReceiptByUser = async (
+  params: FinancialReportParams
+): Promise<ReceiptByUserResponse> => {
+  try {
+    const response = await getReport('/financial-report/receipt-by-user', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the receipt by user report.');
+  }
+};
+
+// Day Close: bills raised on the day with amount received and IP pending (paged).
+export const getCurrentBillDetails = async (
+  params: FinancialReportParams
+): Promise<CurrentBillDetailsResponse> => {
+  try {
+    const response = await getReport('/financial-report/current-bill-details', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the current bill details report.');
+  }
+};
+
+// Day Close: completed sales returns made on the day (paged).
+export const getSalesReturnDetails = async (
+  params: FinancialReportParams
+): Promise<SalesReturnDetailsResponse> => {
+  try {
+    const response = await getReport('/financial-report/sales-return-details', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the sales return details report.');
   }
 };

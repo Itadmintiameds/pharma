@@ -17,50 +17,17 @@ import {
   formatReportDate,
   formatReportTime,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
+import { getSalesReturnDetails } from "@/services/FinancialReportService";
+import { SalesReturnDetailsRow } from "@/types/FinancialReportData";
 
-interface SalesReturnKpi {
-  totalReturns: number;
-  totalReturnAmount: number;
-  /** Distinct customers who returned something that day. */
-  customerNames: string[];
-  /** Null on a day without returns. */
-  largestReturn: { returnNo: string; patientName: string | null; amount: number } | null;
-}
-
-/** One sales return processed on the day, against the bill it reverses. */
-interface SalesReturnRow {
-  returnId: number;
-  returnNo: string;
-  billNo: string;
-  patientName: string | null;
-  /** ISO local date-time. */
-  returnDate: string;
-  returnAmount: number;
-}
-
-// Sample figures from the design, until the day close sales return details API is wired in.
-const fetchSalesReturns = sampleReport<SalesReturnKpi, SalesReturnRow>(
-  {
-    totalReturns: 2,
-    totalReturnAmount: 3000,
-    customerNames: ["Patient C", "Patient D"],
-    largestReturn: { returnNo: "SR-1001", patientName: "Patient C", amount: 2000 },
-  },
-  [
-    { returnId: 1001, returnNo: "SR-1001", billNo: "PB-0980", patientName: "Patient C", returnDate: "2026-10-08T12:20:00", returnAmount: 2000 },
-    { returnId: 1002, returnNo: "SR-1002", billNo: "PB-0995", patientName: "Patient D", returnDate: "2026-10-08T16:10:00", returnAmount: 1000 },
-  ],
-);
-
-const COLUMNS: ReportColumn<SalesReturnRow>[] = [
+const COLUMNS: ReportColumn<SalesReturnDetailsRow>[] = [
   {
     key: "returnNo",
     header: "Sales Return No.",
     className: "min-w-[150px]",
     cell: (row) => (
-      <span className="font-semibold whitespace-nowrap text-primary-800">{row.returnNo}</span>
+      <span className="font-semibold whitespace-nowrap text-primary-800">{row.salesReturnNo}</span>
     ),
   },
   {
@@ -73,17 +40,17 @@ const COLUMNS: ReportColumn<SalesReturnRow>[] = [
     key: "patient",
     header: "Patient / Customer Name",
     className: "min-w-[190px]",
-    sortValue: (row) => row.patientName ?? "",
-    cell: (row) => <span className="font-semibold">{row.patientName || "—"}</span>,
+    sortValue: (row) => row.customerName ?? "",
+    cell: (row) => <span className="font-semibold">{row.customerName || "—"}</span>,
   },
   {
     key: "returnDate",
     header: "Return Date & Time",
     className: "min-w-[200px]",
-    sortValue: (row) => row.returnDate,
+    sortValue: (row) => row.returnedAt,
     cell: (row) => (
       <span className="whitespace-nowrap">
-        {formatReportDate(row.returnDate)} {formatReportTime(row.returnDate)}
+        {formatReportDate(row.returnedAt)} {formatReportTime(row.returnedAt)}
       </span>
     ),
   },
@@ -104,16 +71,22 @@ export default function DayCloseSalesReturnDetailsPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchSalesReturns,
+    fetchReport: getSalesReturnDetails,
     errorMessage: "Failed to fetch the sales return details",
   });
 
   const data = report.report;
   const kpi = data?.kpi;
+  const rows = data?.billDetails.content ?? [];
   const returns = kpi?.totalReturns ?? 0;
   const amount = kpi?.totalReturnAmount ?? 0;
-  const customers = kpi?.customerNames ?? [];
-  const largest = kpi?.largestReturn ?? null;
+  // The API totals only count and amount, so customers and the largest return
+  // are read off the rows loaded — exact while every return fits on one page.
+  const customers = [...new Set(rows.map((r) => r.customerName).filter((n): n is string => !!n))];
+  const largest = rows.reduce<SalesReturnDetailsRow | null>(
+    (max, row) => (!max || row.returnAmount > max.returnAmount ? row : max),
+    null,
+  );
   const day = describePeriod(report.filters.appliedPeriod);
 
   return (
@@ -154,11 +127,11 @@ export default function DayCloseSalesReturnDetailsPage() {
             />
             <ReportKpiCard
               label="Largest Return"
-              value={formatRupees(largest?.amount ?? 0)}
+              value={formatRupees(largest?.returnAmount ?? 0)}
               icon="/Reports/ScaleBlue.svg"
               tone="info"
-              highlight={largest?.returnNo ?? "—"}
-              caption={largest?.patientName ?? ""}
+              highlight={largest?.salesReturnNo ?? "—"}
+              caption={largest?.customerName ?? ""}
             />
           </div>
 
@@ -171,8 +144,8 @@ export default function DayCloseSalesReturnDetailsPage() {
             generatedOn={formatGeneratedOn(data.generatedOn)}
             generatedBy={data.generatedBy}
             columns={COLUMNS}
-            rows={data.billDetails.content}
-            getRowKey={(row) => String(row.returnId)}
+            rows={rows}
+            getRowKey={(row) => String(row.salesReturnId)}
             serverPagination={report.serverPagination(data.billDetails.totalElements)}
             totalRow={{
               returnNo: "Total",

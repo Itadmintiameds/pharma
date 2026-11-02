@@ -17,42 +17,11 @@ import {
   formatPercent,
   formatReportDate,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
+import { getCurrentBillDetails } from "@/services/FinancialReportService";
+import { CurrentBillDetailsRow } from "@/types/FinancialReportData";
 
-interface CurrentBillKpi {
-  totalBills: number;
-  totalAmount: number;
-  amountReceived: number;
-  /** totalAmount − amountReceived */
-  pendingAmount: number;
-}
-
-/** A bill raised on the day, and how much of it was paid. */
-interface CurrentBillRow {
-  billingId: number;
-  billNo: string;
-  patientName: string | null;
-  /** Display label, e.g. "Walk-In". */
-  patientType: string;
-  /** ISO local date-time. */
-  billedDate: string;
-  totalAmount: number;
-  amountReceived: number;
-  pendingAmount: number;
-}
-
-// Sample figures from the design, until the day close current bill details API is wired in.
-const fetchCurrentBills = sampleReport<CurrentBillKpi, CurrentBillRow>(
-  { totalBills: 3, totalAmount: 13500, amountReceived: 9500, pendingAmount: 4000 },
-  [
-    { billingId: 1001, billNo: "PB-1001", patientName: "Patient A", patientType: "IP", billedDate: "2026-10-08T10:15:00", totalAmount: 10000, amountReceived: 6000, pendingAmount: 4000 },
-    { billingId: 1002, billNo: "PB-1002", patientName: "Patient B", patientType: "OP", billedDate: "2026-10-08T11:40:00", totalAmount: 2000, amountReceived: 2000, pendingAmount: 0 },
-    { billingId: 1003, billNo: "PB-1003", patientName: "Walk-In", patientType: "Walk-In", billedDate: "2026-10-08T15:05:00", totalAmount: 1500, amountReceived: 1500, pendingAmount: 0 },
-  ],
-);
-
-const COLUMNS: ReportColumn<CurrentBillRow>[] = [
+const COLUMNS: ReportColumn<CurrentBillDetailsRow>[] = [
   {
     key: "billNo",
     header: "Bill No.",
@@ -65,8 +34,8 @@ const COLUMNS: ReportColumn<CurrentBillRow>[] = [
     key: "patient",
     header: "Patient / Customer",
     className: "min-w-[160px]",
-    sortValue: (row) => row.patientName ?? "",
-    cell: (row) => <span className="font-semibold">{row.patientName || "—"}</span>,
+    sortValue: (row) => row.customerName ?? "",
+    cell: (row) => <span className="font-semibold">{row.customerName || "—"}</span>,
   },
   {
     key: "patientType",
@@ -78,8 +47,8 @@ const COLUMNS: ReportColumn<CurrentBillRow>[] = [
     key: "billedDate",
     header: "Billed Date",
     className: "min-w-[143px]",
-    sortValue: (row) => row.billedDate,
-    cell: (row) => <span className="whitespace-nowrap">{formatReportDate(row.billedDate)}</span>,
+    sortValue: (row) => row.billedAt,
+    cell: (row) => <span className="whitespace-nowrap">{formatReportDate(row.billedAt)}</span>,
   },
   {
     key: "totalAmount",
@@ -112,7 +81,7 @@ export default function DayCloseCurrentBillDetailsPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchCurrentBills,
+    fetchReport: getCurrentBillDetails,
     errorMessage: "Failed to fetch the current bill details",
   });
 
@@ -120,8 +89,8 @@ export default function DayCloseCurrentBillDetailsPage() {
   const kpi = data?.kpi;
   const bills = kpi?.totalBills ?? 0;
   const total = kpi?.totalAmount ?? 0;
-  const received = kpi?.amountReceived ?? 0;
-  const pending = kpi?.pendingAmount ?? 0;
+  const received = kpi?.totalAmountReceived ?? 0;
+  const pending = kpi?.totalPendingAmount ?? 0;
   const day = describePeriod(report.filters.appliedPeriod);
 
   return (

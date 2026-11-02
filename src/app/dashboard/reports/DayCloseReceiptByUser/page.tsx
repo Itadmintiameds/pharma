@@ -14,33 +14,25 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
+import { getReceiptByUser } from "@/services/FinancialReportService";
+import { ReceiptByUserRow } from "@/types/FinancialReportData";
 
-interface ReceiptByUserKpi {
-  totalReceipts: number;
-  amountReceived: number;
-  /** Users who took at least one payment that day. */
-  userCount: number;
+/**
+ * Rows come per user and pharmacy, so a user who collected in two pharmacies
+ * appears twice. Folds those into one entry per user, for the KPI cards.
+ */
+function totalsPerUser(rows: ReceiptByUserRow[]) {
+  const byUser = new Map<string, { userId: string; userName: string; receiptCount: number; amountReceived: number }>();
+  for (const row of rows) {
+    if (row.code === "TOTAL" || !row.userId) continue;
+    const entry = byUser.get(row.userId) ?? { userId: row.userId, userName: row.userName, receiptCount: 0, amountReceived: 0 };
+    entry.receiptCount += row.receiptCount;
+    entry.amountReceived += row.amountReceived;
+    byUser.set(row.userId, entry);
+  }
+  return [...byUser.values()];
 }
-
-interface ReceiptByUserRow {
-  /** The user's id, or TOTAL for the closing total line. */
-  code: string;
-  userName: string;
-  receiptCount: number;
-  amountReceived: number;
-}
-
-// Sample figures from the design, until the day close receipt by user API is wired in.
-const fetchReceiptByUser = sampleReport<ReceiptByUserKpi, ReceiptByUserRow>(
-  { totalReceipts: 30, amountReceived: 45000, userCount: 2 },
-  [
-    { code: "USR-2026-00001", userName: "Pharmacist A", receiptCount: 18, amountReceived: 28000 },
-    { code: "USR-2026-00002", userName: "Pharmacist B", receiptCount: 12, amountReceived: 17000 },
-    { code: "TOTAL", userName: "Total", receiptCount: 30, amountReceived: 45000 },
-  ],
-);
 
 /** The design gives the two top-collecting users a card each, in these colours. */
 const USER_CARDS = [
@@ -54,19 +46,21 @@ export default function DayCloseReceiptByUserPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchReceiptByUser,
+    fetchReport: getReceiptByUser,
     errorMessage: "Failed to fetch the receipt by user report",
   });
 
   const data = report.report;
   const rows = data?.billDetails.content ?? [];
   const totalReceipts = data?.kpi.totalReceipts ?? 0;
-  const amountReceived = data?.kpi.amountReceived ?? 0;
-  const userCount = data?.kpi.userCount ?? 0;
-  const topUsers = rows
-    .filter((r) => r.code !== "TOTAL")
+  const amountReceived = data?.kpi.totalAmountReceived ?? 0;
+  const users = totalsPerUser(rows);
+  const userCount = users.length;
+  const topUsers = users
     .sort((a, b) => b.amountReceived - a.amountReceived)
     .slice(0, USER_CARDS.length);
+  // Name the pharmacy on each line only when the rows span more than one.
+  const multiPharmacy = new Set(rows.map((r) => r.pharmacyId).filter(Boolean)).size > 1;
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
@@ -107,7 +101,7 @@ export default function DayCloseReceiptByUserPage() {
             />
             {topUsers.map((user, i) => (
               <ReportKpiCard
-                key={user.code}
+                key={user.userId}
                 label={user.userName}
                 value={formatRupees(user.amountReceived)}
                 icon={USER_CARDS[i].icon}
@@ -130,8 +124,8 @@ export default function DayCloseReceiptByUserPage() {
             countHeader="Receipt Count"
             amountHeader="Amount Received"
             lines={rows.map((row) => ({
-              key: row.code,
-              label: row.userName,
+              key: `${row.code}-${row.pharmacyId}-${row.userId}`,
+              label: multiPharmacy && row.pharmacyName ? `${row.userName} (${row.pharmacyName})` : row.userName,
               count: row.receiptCount,
               amount: row.amountReceived,
               highlight: row.code === "TOTAL",

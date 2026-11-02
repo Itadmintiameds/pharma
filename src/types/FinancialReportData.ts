@@ -305,3 +305,103 @@ export type BillingByPatientTypeResponse = FinancialReportResponse<
   BillingByPatientTypeKpi,
   BillingByPatientTypeRow
 >;
+
+export interface BillingByUserKpi {
+  totalBills: number;
+  totalSales: number;
+}
+
+/** A user's bills in one pharmacy, or the closing total line. */
+export interface BillingByUserRow {
+  /** USER, or TOTAL for the closing total line. */
+  code: string;
+  /** Null on the TOTAL row. */
+  pharmacyId: string | null;
+  pharmacyName: string | null;
+  userId: string | null;
+  /** Falls back to the user id when the user has no name; "Total" on the TOTAL row. */
+  userName: string;
+  billCount: number;
+  totalSales: number;
+}
+
+/** Always a single page: one row per user and pharmacy, then the TOTAL row. */
+export type BillingByUserResponse = FinancialReportResponse<BillingByUserKpi, BillingByUserRow>;
+
+export interface ReceiptByUserKpi {
+  /** Payment transactions, credit entries excluded. */
+  totalReceipts: number;
+  totalAmountReceived: number;
+}
+
+/** What a user collected in one pharmacy, or the closing total line. */
+export interface ReceiptByUserRow {
+  /** USER, or TOTAL for the closing total line. */
+  code: string;
+  pharmacyId: string | null;
+  pharmacyName: string | null;
+  userId: string | null;
+  userName: string;
+  receiptCount: number;
+  amountReceived: number;
+}
+
+/** Always a single page: one row per user and pharmacy, then the TOTAL row. */
+export type ReceiptByUserResponse = FinancialReportResponse<ReceiptByUserKpi, ReceiptByUserRow>;
+
+/** Totals over every matching bill, not just the page. */
+export interface CurrentBillDetailsKpi {
+  totalBills: number;
+  totalAmount: number;
+  totalAmountReceived: number;
+  /** Still due on IP bills at the end of the day. */
+  totalPendingAmount: number;
+}
+
+export interface CurrentBillDetailsRow {
+  pharmacyId: string;
+  pharmacyName: string;
+  billingId: number;
+  billNo: string;
+  /** Null when the bill has no customer. */
+  customerName: string | null;
+  /** IP, OP, Walk-In, Day Care, or the stored type for any other. */
+  patientType: string;
+  /** ISO local date-time. */
+  billedAt: string;
+  totalAmount: number;
+  /** Received up to the end of the business day. */
+  amountReceived: number;
+  /** Zero for every type but IP. */
+  pendingAmount: number;
+}
+
+export type CurrentBillDetailsResponse = FinancialReportResponse<
+  CurrentBillDetailsKpi,
+  CurrentBillDetailsRow
+>;
+
+/** Totals over every matching return, not just the page. */
+export interface SalesReturnDetailsKpi {
+  totalReturns: number;
+  totalReturnAmount: number;
+}
+
+export interface SalesReturnDetailsRow {
+  pharmacyId: string;
+  pharmacyName: string;
+  salesReturnId: number;
+  salesReturnNo: string;
+  /** The original bill. */
+  billNo: string;
+  /** Customer of the original bill; null when it has none. */
+  customerName: string | null;
+  /** ISO local date-time. */
+  returnedAt: string;
+  returnAmount: number;
+}
+
+export type SalesReturnDetailsResponse = FinancialReportResponse<
+  SalesReturnDetailsKpi,
+  SalesReturnDetailsRow
+>;

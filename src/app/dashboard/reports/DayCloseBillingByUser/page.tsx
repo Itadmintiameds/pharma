@@ -14,33 +14,25 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
+import { getBillingByUser } from "@/services/FinancialReportService";
+import { BillingByUserRow } from "@/types/FinancialReportData";
 
-interface BillingByUserKpi {
-  totalBills: number;
-  totalSales: number;
-  /** Users who raised at least one bill that day. */
-  userCount: number;
+/**
+ * Rows come per user and pharmacy, so a user who billed in two pharmacies
+ * appears twice. Folds those into one entry per user, for the KPI cards.
+ */
+function totalsPerUser(rows: BillingByUserRow[]) {
+  const byUser = new Map<string, { userId: string; userName: string; billCount: number; totalSales: number }>();
+  for (const row of rows) {
+    if (row.code === "TOTAL" || !row.userId) continue;
+    const entry = byUser.get(row.userId) ?? { userId: row.userId, userName: row.userName, billCount: 0, totalSales: 0 };
+    entry.billCount += row.billCount;
+    entry.totalSales += row.totalSales;
+    byUser.set(row.userId, entry);
+  }
+  return [...byUser.values()];
 }
-
-interface BillingByUserRow {
-  /** The user's id, or TOTAL for the closing total line. */
-  code: string;
-  userName: string;
-  billCount: number;
-  totalSales: number;
-}
-
-// Sample figures from the design, until the day close billing by user API is wired in.
-const fetchBillingByUser = sampleReport<BillingByUserKpi, BillingByUserRow>(
-  { totalBills: 25, totalSales: 50000, userCount: 2 },
-  [
-    { code: "USR-2026-00001", userName: "Pharmacist A", billCount: 15, totalSales: 30000 },
-    { code: "USR-2026-00002", userName: "Pharmacist B", billCount: 10, totalSales: 20000 },
-    { code: "TOTAL", userName: "Total", billCount: 25, totalSales: 50000 },
-  ],
-);
 
 /** The design gives the two top-selling users a card each, in these colours. */
 const USER_CARDS = [
@@ -54,7 +46,7 @@ export default function DayCloseBillingByUserPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchBillingByUser,
+    fetchReport: getBillingByUser,
     errorMessage: "Failed to fetch the billing by user report",
   });
 
@@ -62,11 +54,13 @@ export default function DayCloseBillingByUserPage() {
   const rows = data?.billDetails.content ?? [];
   const totalBills = data?.kpi.totalBills ?? 0;
   const totalSales = data?.kpi.totalSales ?? 0;
-  const userCount = data?.kpi.userCount ?? 0;
-  const topUsers = rows
-    .filter((r) => r.code !== "TOTAL")
+  const users = totalsPerUser(rows);
+  const userCount = users.length;
+  const topUsers = users
     .sort((a, b) => b.totalSales - a.totalSales)
     .slice(0, USER_CARDS.length);
+  // Name the pharmacy on each line only when the rows span more than one.
+  const multiPharmacy = new Set(rows.map((r) => r.pharmacyId).filter(Boolean)).size > 1;
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
@@ -107,7 +101,7 @@ export default function DayCloseBillingByUserPage() {
             />
             {topUsers.map((user, i) => (
               <ReportKpiCard
-                key={user.code}
+                key={user.userId}
                 label={user.userName}
                 value={formatRupees(user.totalSales)}
                 icon={USER_CARDS[i].icon}
@@ -130,8 +124,8 @@ export default function DayCloseBillingByUserPage() {
             countHeader="Bill Count"
             amountHeader="Total Sales"
             lines={rows.map((row) => ({
-              key: row.code,
-              label: row.userName,
+              key: `${row.code}-${row.pharmacyId}-${row.userId}`,
+              label: multiPharmacy && row.pharmacyName ? `${row.userName} (${row.pharmacyName})` : row.userName,
               count: row.billCount,
               amount: row.totalSales,
               highlight: row.code === "TOTAL",
