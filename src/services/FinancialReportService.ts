@@ -7,6 +7,7 @@ import {
   DoctorWiseResponse,
   FinancialReportParams,
   PaymentModeResponse,
+  ReceiptDetailsResponse,
   SalesSummaryResponse,
 } from '@/types/FinancialReportData';
 
@@ -99,5 +100,17 @@ export const getPaymentModeSummary = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the payment mode summary report.');
+  }
+};
+
+// Receipts in the period against current vs previous bills; the period is required.
+export const getReceiptDetails = async (
+  params: FinancialReportParams
+): Promise<ReceiptDetailsResponse> => {
+  try {
+    const response = await getReport('/financial-report/receipt-details', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the receipt details report.');
   }
 };

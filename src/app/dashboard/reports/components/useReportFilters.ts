@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { getAllDoctors } from "@/services/DoctorService";
+import { getAllUsers } from "@/services/UserManagementService";
+import type { UserData } from "@/types/UserData";
 import type { DropdownOption } from "@/app/components/common/Dropdown";
 import { ReportPeriod, defaultReportPeriod } from "./reportUtils";
 
@@ -108,6 +110,32 @@ export function useDoctorOptions() {
 
   const labelOf = (doctorId: number) =>
     options.find((o) => o.value === doctorId)?.label ?? "";
+
+  return { options, loading, labelOf };
+}
+
+/** The organisation's users, for the Day Close reports' User filter; their ids go out as `userIds`. */
+export function useUserOptions() {
+  const [options, setOptions] = useState<DropdownOption[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    // getAllUsers resolves to null on failure rather than throwing.
+    getAllUsers()
+      .then((users: UserData[] | null) => {
+        if (active && users) setOptions(users.map((u) => ({ label: u.fullName, value: u.userId })));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const labelOf = (userId: number) =>
+    options.find((o) => o.value === userId)?.label ?? "";
 
   return { options, loading, labelOf };
 }

@@ -362,6 +362,26 @@ const Sidebar = () => {
               name: "Receipt Details",
               path: "/dashboard/reports/ReceiptDetails",
             },
+            {
+              name: "Day Close Bill Count Summary",
+              path: "/dashboard/reports/DayCloseBillCountSummary",
+            },
+            {
+              name: "Day Close Sales Summary",
+              path: "/dashboard/reports/DayCloseSalesSummary",
+            },
+            {
+              name: "Day Close Payment Mode Summary",
+              path: "/dashboard/reports/DayClosePaymentModeSummary",
+            },
+            {
+              name: "Day Close Receipt Details",
+              path: "/dashboard/reports/DayCloseReceiptDetails",
+            },
+            {
+              name: "Day Close Billing by Patient Type",
+              path: "/dashboard/reports/DayCloseBillingByPatientType",
+            },
           ],
         },
       ],

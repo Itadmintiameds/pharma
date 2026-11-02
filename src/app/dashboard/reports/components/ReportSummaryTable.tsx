@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import clsx from "clsx";
 import { formatRupees } from "./reportUtils";
 
@@ -5,6 +6,8 @@ export interface SummaryLine {
   key: string;
   label: string;
   amount: number;
+  /** The middle column's figure, when the table has one (`countHeader`). */
+  count?: number;
   /** A tinted line: a subtotal mid-table (Net Sales) or the closing total. */
   highlight?: boolean;
 }
@@ -18,8 +21,17 @@ interface ReportSummaryTableProps {
   /** Column headings: the label column, then the amount column. */
   labelHeader: string;
   amountHeader: string;
+  /** Adds a count column between the label and the amount ("Bill Count"). */
+  countHeader?: string;
+  /** How the amount column reads. Default: rupees ("₹1,234.00"). */
+  formatAmount?: (amount: number) => string;
   lines: SummaryLine[];
+  /** Under the table — the design's Note panel. */
+  footer?: ReactNode;
 }
+
+/** "1,250". Also the `formatAmount` for a table whose last column is a count. */
+export const formatCount = (value: number) => value.toLocaleString("en-IN");
 
 const CARD =
   "flex w-full flex-col gap-4 rounded-2xl bg-white p-4 shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]";
@@ -36,8 +48,14 @@ export default function ReportSummaryTable({
   generatedBy,
   labelHeader,
   amountHeader,
+  countHeader,
+  formatAmount = formatRupees,
   lines,
+  footer,
 }: ReportSummaryTableProps) {
+  const HEADER = "h-14 border-b border-pneutral-200 bg-secondary-600 px-3 py-2 text-label-l3 font-semibold text-pneutral-50 uppercase";
+  const CELL = "h-13 border-b border-pneutral-200 px-3 py-2 text-p3";
+
   return (
     <div className={CARD}>
       <div className="flex flex-wrap items-start gap-4">
@@ -57,12 +75,13 @@ export default function ReportSummaryTable({
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="h-14 w-[53%] border-r border-b border-pneutral-200 bg-secondary-600 px-3 py-2 text-left text-label-l3 font-semibold text-pneutral-50 uppercase">
+              <th className={clsx(HEADER, "border-r text-left", countHeader ? "w-1/3" : "w-[53%]")}>
                 {labelHeader}
               </th>
-              <th className="h-14 border-b border-pneutral-200 bg-secondary-600 px-3 py-2 text-right text-label-l3 font-semibold text-pneutral-50 uppercase">
-                {amountHeader}
-              </th>
+              {countHeader && (
+                <th className={clsx(HEADER, "w-1/3 border-r text-right")}>{countHeader}</th>
+              )}
+              <th className={clsx(HEADER, "text-right")}>{amountHeader}</th>
             </tr>
           </thead>
           <tbody>
@@ -76,17 +95,22 @@ export default function ReportSummaryTable({
                     : "bg-white text-pneutral-900",
                 )}
               >
-                <td className="h-13 border-r border-b border-pneutral-200 px-3 py-2 text-p3">
-                  {line.label}
-                </td>
-                <td className="h-13 border-b border-pneutral-200 px-3 py-2 text-right text-p3 whitespace-nowrap">
-                  {formatRupees(line.amount)}
+                <td className={clsx(CELL, "border-r")}>{line.label}</td>
+                {countHeader && (
+                  <td className={clsx(CELL, "border-r text-right")}>
+                    {formatCount(line.count ?? 0)}
+                  </td>
+                )}
+                <td className={clsx(CELL, "text-right whitespace-nowrap")}>
+                  {formatAmount(line.amount)}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {footer}
     </div>
   );
 }

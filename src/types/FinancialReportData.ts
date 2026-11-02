@@ -32,6 +32,8 @@ export interface FinancialReportParams {
   gstPercentages?: string[];
   /** PENDING, FULLY_PAID or ALL (default). */
   pendingStatus?: string;
+  /** User ids from /user/all: who raised the bill or took the payment (Day Close reports). */
+  userIds?: number[];
   /** Zero-based. */
   page?: number;
   size?: number;
@@ -232,3 +234,29 @@ export interface PaymentModeRow {
 
 /** Always a single page: one row per mode, then the TOTAL row. */
 export type PaymentModeResponse = FinancialReportResponse<PaymentModeKpi, PaymentModeRow>;
+
+/**
+ * Payments received in the period, split by whether the bill they settle was
+ * raised in the period (current) or before it (previous).
+ */
+export interface ReceiptDetailsKpi {
+  currentBillReceipts: number;
+  previousBillReceipts: number;
+  /** currentBillReceipts + previousBillReceipts */
+  totalReceipts: number;
+}
+
+export interface ReceiptDetailsRow {
+  /** CURRENT_BILL_RECEIPTS, PREVIOUS_BILL_RECEIPTS or TOTAL_RECEIPTS. */
+  code: string;
+  /** Display label, e.g. "Current Bill Receipts". */
+  particular: string;
+  /** Where the figure comes from, e.g. "Payment Records". */
+  source: string;
+  /** How it is calculated. */
+  calculation: string;
+  amount: number;
+}
+
+/** Always a single page holding all three rows. */
+export type ReceiptDetailsResponse = FinancialReportResponse<ReceiptDetailsKpi, ReceiptDetailsRow>;

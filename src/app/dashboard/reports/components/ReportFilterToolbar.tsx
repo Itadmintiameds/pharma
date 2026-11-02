@@ -7,6 +7,7 @@ import Button from "@/app/components/common/Button";
 import {
   PERIOD_TABS,
   ReportPeriod,
+  ReportPeriodMode,
   formatReportDate,
   formatReportMonth,
   toDateInputValue,
@@ -22,6 +23,10 @@ export interface AppliedFilterChip {
 interface ReportFilterToolbarProps {
   period: ReportPeriod;
   onPeriodChange: (period: ReportPeriod) => void;
+  /** The period tabs to offer, in PERIOD_TABS order. Default: all four. */
+  periodModes?: ReportPeriodMode[];
+  /** Fields per row on a wide card, the date field included: 4 (default) or 5. */
+  columns?: 4 | 5;
   /** The filter fields after the date one, one grid cell each. Always shown. */
   children: React.ReactNode;
   /**
@@ -186,6 +191,8 @@ function PeriodField({
 export default function ReportFilterToolbar({
   period,
   onPeriodChange,
+  periodModes,
+  columns = 4,
   children,
   moreFilters,
   moreFilterCount = 0,
@@ -200,7 +207,7 @@ export default function ReportFilterToolbar({
     <div className="@container flex w-full flex-col gap-4 rounded-2xl bg-white p-4 shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
       <div className="flex flex-wrap items-center gap-4 border-b border-pneutral-200">
         <div role="tablist" aria-label="Reporting period" className="flex flex-1 flex-wrap items-start">
-          {PERIOD_TABS.map(({ mode, label }) => {
+          {PERIOD_TABS.filter(({ mode }) => !periodModes || periodModes.includes(mode)).map(({ mode, label }) => {
             const active = period.mode === mode;
             return (
               <button
@@ -255,7 +262,12 @@ export default function ReportFilterToolbar({
       </div>
 
       {/* Columns follow the card's width, not the viewport's: the sidebar's width varies. */}
-      <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-4">
+      <div
+        className={clsx(
+          "grid grid-cols-1 gap-4 @xl:grid-cols-2",
+          columns === 5 ? "@3xl:grid-cols-3 @4xl:grid-cols-5" : "@4xl:grid-cols-4",
+        )}
+      >
         <PeriodField period={period} onChange={onPeriodChange} />
         {children}
         {showMore && moreFilters}

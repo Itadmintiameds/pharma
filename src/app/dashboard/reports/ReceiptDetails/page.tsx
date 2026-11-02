@@ -14,24 +14,8 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-/**
- * Payments received in the period, split by whether the bill they settle was
- * raised in the period (current) or before it (previous).
- */
-interface ReceiptDetailsKpi {
-  currentBillReceipts: number;
-  previousBillReceipts: number;
-  totalReceipts: number;
-}
-
-// Sample figures from the design, until the receipt details API is wired in.
-const fetchReceiptDetails = sampleReport<ReceiptDetailsKpi, never>(
-  { currentBillReceipts: 38000, previousBillReceipts: 7000, totalReceipts: 45000 },
-  [],
-);
+import { getReceiptDetails } from "@/services/FinancialReportService";
 
 const TITLE = "Pharmacy Receipts Report - Receipt Details";
 
@@ -39,7 +23,7 @@ export default function ReceiptDetailsPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
-    fetchReport: fetchReceiptDetails,
+    fetchReport: getReceiptDetails,
     errorMessage: "Failed to fetch the receipt details report",
   });
 
@@ -104,11 +88,12 @@ export default function ReceiptDetailsPage() {
             generatedBy={data.generatedBy}
             labelHeader="Particular"
             amountHeader="Amount"
-            lines={[
-              { key: "CURRENT", label: "Current Bill Receipts", amount: current },
-              { key: "PREVIOUS", label: "Previous Bill Receipts", amount: previous },
-              { key: "TOTAL", label: "Total Receipts", amount: total, highlight: true },
-            ]}
+            lines={data.billDetails.content.map((row) => ({
+              key: row.code,
+              label: row.particular,
+              amount: row.amount,
+              highlight: row.code === "TOTAL_RECEIPTS",
+            }))}
           />
         </>
       )}
