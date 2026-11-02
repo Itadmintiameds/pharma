@@ -14,40 +14,15 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-interface PatientTypeKpi {
-  totalBills: number;
-  totalAmount: number;
-}
-
-interface PatientTypeRow {
-  /** IP, OP, WALK_IN, DAY_CARE, or TOTAL for the closing total line. */
-  code: string;
-  patientType: string;
-  billCount: number;
-  totalAmount: number;
-}
-
-// Sample figures from the design, until the day close billing by patient type API is wired in.
-const fetchBillingByPatientType = sampleReport<PatientTypeKpi, PatientTypeRow>(
-  { totalBills: 25, totalAmount: 50000 },
-  [
-    { code: "IP", patientType: "IP", billCount: 5, totalAmount: 15000 },
-    { code: "OP", patientType: "OP", billCount: 8, totalAmount: 16000 },
-    { code: "WALK_IN", patientType: "Walk-In", billCount: 9, totalAmount: 13000 },
-    { code: "DAY_CARE", patientType: "Day Care", billCount: 3, totalAmount: 6000 },
-    { code: "TOTAL", patientType: "Total", billCount: 25, totalAmount: 50000 },
-  ],
-);
+import { getBillingByPatientType } from "@/services/FinancialReportService";
 
 /** A KPI card per patient type, in the design's order. */
 const TYPE_CARDS = [
-  { code: "IP", label: "IP", icon: "/Reports/DocumentChartBarSmall.svg", tone: "primary" },
-  { code: "OP", label: "OP", icon: "/Reports/DocumentChartBarBlue.svg", tone: "info" },
-  { code: "WALK_IN", label: "Walk-In", icon: "/Reports/DocumentChartBarGreen.svg", tone: "success" },
-  { code: "DAY_CARE", label: "Day Care", icon: "/Reports/DocumentChartBarYellow.svg", tone: "danger" },
+  { key: "ip", label: "IP", icon: "/Reports/DocumentChartBarSmall.svg", tone: "primary" },
+  { key: "op", label: "OP", icon: "/Reports/DocumentChartBarBlue.svg", tone: "info" },
+  { key: "walkIn", label: "Walk-In", icon: "/Reports/DocumentChartBarGreen.svg", tone: "success" },
+  { key: "dayCare", label: "Day Care", icon: "/Reports/DocumentChartBarYellow.svg", tone: "danger" },
 ] as const;
 
 const TITLE = "Pharmacy Day Closing Summary - Billing by Patient Type";
@@ -56,14 +31,14 @@ export default function DayCloseBillingByPatientTypePage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchBillingByPatientType,
+    fetchReport: getBillingByPatientType,
     errorMessage: "Failed to fetch the billing by patient type report",
   });
 
   const data = report.report;
   const rows = data?.billDetails.content ?? [];
-  const totalAmount = data?.kpi.totalAmount ?? 0;
-  const rowFor = (code: string) => rows.find((r) => r.code === code);
+  // The KPI has no grand total; the TOTAL row carries it.
+  const totalAmount = rows.find((r) => r.code === "TOTAL")?.totalAmount ?? 0;
 
   return (
     <div className="@container flex flex-col gap-4">
@@ -85,12 +60,11 @@ export default function DayCloseBillingByPatientTypePage() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @4xl:grid-cols-4">
-            {TYPE_CARDS.map(({ code, label, icon, tone }) => {
-              const amount = rowFor(code)?.totalAmount ?? 0;
-              const bills = rowFor(code)?.billCount ?? 0;
+            {TYPE_CARDS.map(({ key, label, icon, tone }) => {
+              const { totalAmount: amount, billCount: bills } = data.kpi[key];
               return (
                 <ReportKpiCard
-                  key={code}
+                  key={key}
                   label={label}
                   value={formatRupees(amount)}
                   icon={icon}

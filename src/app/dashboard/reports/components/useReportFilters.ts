@@ -3,8 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { getAllDoctors } from "@/services/DoctorService";
-import { getAllUsers } from "@/services/UserManagementService";
-import type { UserData } from "@/types/UserData";
+import { getUserNames } from "@/services/UserManagementService";
 import type { DropdownOption } from "@/app/components/common/Dropdown";
 import { ReportPeriod, defaultReportPeriod } from "./reportUtils";
 
@@ -114,28 +113,37 @@ export function useDoctorOptions() {
   return { options, loading, labelOf };
 }
 
-/** The organisation's users, for the Day Close reports' User filter; their ids go out as `userIds`. */
-export function useUserOptions() {
+/**
+ * The users of the given pharmacies, for the Day Close reports' User filter;
+ * their ids go out as `userIds`. Reloads when the pharmacy selection changes.
+ */
+export function useUserOptions(pharmacyIds: string[]) {
   const [options, setOptions] = useState<DropdownOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The selection the options were loaded for; loading until it matches.
+  const pharmacyKey = pharmacyIds.join(",");
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    // getAllUsers resolves to null on failure rather than throwing.
-    getAllUsers()
-      .then((users: UserData[] | null) => {
-        if (active && users) setOptions(users.map((u) => ({ label: u.fullName, value: u.userId })));
+    getUserNames(pharmacyKey ? pharmacyKey.split(",") : [])
+      .then((users) => {
+        if (active) setOptions(users.map((u) => ({ label: u.userName, value: u.userId })));
+      })
+      .catch((err) => {
+        // The filter just stays empty; the report itself still loads.
+        console.error("Failed to fetch users:", err);
+        if (active) setOptions([]);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLoadedKey(pharmacyKey);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [pharmacyKey]);
 
-  const labelOf = (userId: number) =>
+  const labelOf = (userId: string) =>
     options.find((o) => o.value === userId)?.label ?? "";
 
-  return { options, loading, labelOf };
+  return { options, loading: loadedKey !== pharmacyKey, labelOf };
 }

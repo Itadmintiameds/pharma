@@ -15,34 +15,9 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-interface DayCloseSalesKpi {
-  totalSales: number;
-  totalDiscount: number;
-  totalSalesReturn: number;
-  /** totalSales âˆ’ totalSalesReturn; the discount is already inside totalSales. */
-  netSales: number;
-}
-
-interface DayCloseSalesRow {
-  /** TOTAL_SALES, TOTAL_DISCOUNT, TOTAL_SALES_RETURN or NET_SALES. */
-  code: string;
-  particular: string;
-  amount: number;
-}
-
-// Sample figures from the design, until the day close sales summary API is wired in.
-const fetchDayCloseSales = sampleReport<DayCloseSalesKpi, DayCloseSalesRow>(
-  { totalSales: 50000, totalDiscount: 2000, totalSalesReturn: 3000, netSales: 47000 },
-  [
-    { code: "TOTAL_SALES", particular: "Total Sales", amount: 50000 },
-    { code: "TOTAL_DISCOUNT", particular: "Total Discount", amount: 2000 },
-    { code: "TOTAL_SALES_RETURN", particular: "Total Sales Return", amount: 3000 },
-    { code: "NET_SALES", particular: "Net Sales", amount: 47000 },
-  ],
-);
+// The one-day cut of the Sales Summary report.
+import { getSalesSummary } from "@/services/FinancialReportService";
 
 const TITLE = "Pharmacy Day Closing Summary - Sales Summary";
 
@@ -50,14 +25,17 @@ export default function DayCloseSalesSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchDayCloseSales,
+    fetchReport: getSalesSummary,
     errorMessage: "Failed to fetch the day close sales summary",
   });
 
   const data = report.report;
   const kpi = data?.kpi;
+  // The day close shows only the sales lines; IP pending has a report of its own.
+  const rows = (data?.billDetails.content ?? []).filter((r) => r.code !== "IP_PENDING_AMOUNT");
   const totalSales = kpi?.totalSales ?? 0;
-  const discount = kpi?.totalDiscount ?? 0;
+  // The KPI has no discount figure; it is a table row.
+  const discount = rows.find((r) => r.code === "TOTAL_DISCOUNT")?.amount ?? 0;
   const returns = kpi?.totalSalesReturn ?? 0;
   const netSales = kpi?.netSales ?? 0;
 
@@ -125,9 +103,9 @@ export default function DayCloseSalesSummaryPage() {
             generatedBy={data.generatedBy}
             labelHeader="Particular"
             amountHeader="Amount"
-            lines={data.billDetails.content.map((row) => ({
+            lines={rows.map((row) => ({
               key: row.code,
-              label: row.particular,
+              label: row.metric,
               amount: row.amount,
               highlight: row.code === "NET_SALES",
             }))}

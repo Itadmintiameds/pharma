@@ -9,24 +9,9 @@ import DayCloseReportToolbar, {
   dayCloseFiltersToParams,
 } from "../components/DayCloseReportToolbar";
 import { useFinancialReport } from "../components/useFinancialReport";
-import {
-  describePeriod,
-  formatGeneratedOn,
-  formatRupees,
-  sampleReport,
-} from "../components/reportUtils";
-import type { ReceiptDetailsKpi, ReceiptDetailsRow } from "@/types/FinancialReportData";
-
-// Sample figures from the design, until the day close receipt details API is
-// wired in. Shaped like /financial-report/receipt-details, its one-day cut.
-const fetchDayCloseReceipts = sampleReport<ReceiptDetailsKpi, ReceiptDetailsRow>(
-  { currentBillReceipts: 35000, previousBillReceipts: 7000, totalReceipts: 45000 },
-  [
-    { code: "CURRENT_BILL_RECEIPTS", particular: "Current Bill Receipts", source: "", calculation: "", amount: 35000 },
-    { code: "PREVIOUS_BILL_RECEIPTS", particular: "Previous Bill Receipts", source: "", calculation: "", amount: 7000 },
-    { code: "TOTAL_RECEIPTS", particular: "Total Receipts", source: "", calculation: "", amount: 45000 },
-  ],
-);
+import { describePeriod, formatGeneratedOn, formatRupees } from "../components/reportUtils";
+// The one-day cut of the Receipt Details report; the toolbar always sends a date.
+import { getReceiptDetails } from "@/services/FinancialReportService";
 
 const TITLE = "Pharmacy Day Closing Summary - Receipt Details";
 
@@ -34,7 +19,7 @@ export default function DayCloseReceiptDetailsPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchDayCloseReceipts,
+    fetchReport: getReceiptDetails,
     errorMessage: "Failed to fetch the day close receipt details",
   });
 

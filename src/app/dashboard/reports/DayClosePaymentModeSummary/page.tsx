@@ -14,36 +14,9 @@ import {
   formatGeneratedOn,
   formatPercent,
   formatRupees,
-  sampleReport,
 } from "../components/reportUtils";
-
-/** Shaped like /financial-report/payment-mode-summary, which this is the one-day cut of. */
-interface DayClosePaymentModeKpi {
-  cash: number;
-  card: number;
-  upi: number;
-  credit: number;
-  totalReceived: number;
-}
-
-interface DayClosePaymentModeRow {
-  /** CASH, CARD, UPI, â€¦, or TOTAL for the closing total line. */
-  code: string;
-  paymentMode: string;
-  amountReceived: number;
-}
-
-// Sample figures from the design, until the day close payment mode API is wired in.
-const fetchDayClosePaymentModes = sampleReport<DayClosePaymentModeKpi, DayClosePaymentModeRow>(
-  { cash: 18000, card: 12000, upi: 10000, credit: 0, totalReceived: 45000 },
-  [
-    { code: "CASH", paymentMode: "Cash", amountReceived: 18000 },
-    { code: "CARD", paymentMode: "Card", amountReceived: 12000 },
-    { code: "UPI", paymentMode: "UPI", amountReceived: 10000 },
-    { code: "NEFT", paymentMode: "NEFT", amountReceived: 5000 },
-    { code: "TOTAL", paymentMode: "Total", amountReceived: 45000 },
-  ],
-);
+// The one-day cut of the Payment Mode Summary report.
+import { getPaymentModeSummary } from "@/services/FinancialReportService";
 
 /** The modes with a KPI card of their own, in the design's order. */
 const MODE_CARDS = [
@@ -58,7 +31,7 @@ export default function DayClosePaymentModeSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchDayClosePaymentModes,
+    fetchReport: getPaymentModeSummary,
     errorMessage: "Failed to fetch the day close payment mode summary",
   });
 

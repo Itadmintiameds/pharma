@@ -110,6 +110,23 @@ export const getAllUsers = async () => {
     }
   }
   
+/** One row of /user/names. */
+export interface UserNameOption {
+  userId: string;
+  userName: string;
+  pharmacyIds: string[];
+}
+
+/** The users working at any of the given pharmacies; none given, the X-Pharmacy-Id one. */
+export const getUserNames = async (pharmacyIds: string[]): Promise<UserNameOption[]> => {
+  const response = await api.get("/user/names", {
+    params: pharmacyIds.length ? { pharmacyIds } : {},
+    // pharmacyIds=A&pharmacyIds=B, not pharmacyIds[]=A.
+    paramsSerializer: { indexes: null },
+  });
+  return response.data ?? [];
+};
+
 export const getUserById = async (userId: string | number) => {
   const response = await api.get(`/user/${userId}`);
   return response.data;

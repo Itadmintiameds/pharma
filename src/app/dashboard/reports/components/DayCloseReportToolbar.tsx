@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Dropdown from "@/app/components/common/Dropdown";
 import type { FinancialReportParams } from "@/types/FinancialReportData";
 import ReportFilterToolbar from "./ReportFilterToolbar";
@@ -17,7 +18,7 @@ export interface DayCloseFilters {
   pharmacyIds: string[];
   patientTypes: string[];
   paymentModes: string[];
-  userIds: number[];
+  userIds: string[];
 }
 
 export const EMPTY_DAY_CLOSE_FILTERS: DayCloseFilters = {
@@ -40,15 +41,28 @@ export default function DayCloseReportToolbar<R>({
 }: {
   report: ReturnType<typeof useFinancialReport<DayCloseFilters, R>>;
 }) {
-  const users = useUserOptions();
   const { filters, clearField } = report;
-  const { draft, applied, setDraftField } = filters;
+  const { draft, applied, setDraft, setDraftField } = filters;
+  // The users of the pharmacies being picked, so the list follows the Pharmacy field.
+  const users = useUserOptions(draft.pharmacyIds);
+
+  // Drop picked users who do not work at the newly picked pharmacies.
+  useEffect(() => {
+    if (users.loading) return;
+    const known = new Set(users.options.map((o) => o.value));
+    setDraft((prev) =>
+      prev.userIds.every((id) => known.has(id))
+        ? prev
+        : { ...prev, userIds: prev.userIds.filter((id) => known.has(id)) },
+    );
+  }, [users.loading, users.options, setDraft]);
 
   const chips = [
     ...report.baseChips,
     ...multiSelectChip("patientTypes", "Patient Type", applied.patientTypes, (v) => optionLabel(PATIENT_TYPE_OPTIONS, v), () => clearField("patientTypes")),
     ...multiSelectChip("paymentModes", "Payment Mode", applied.paymentModes, (v) => optionLabel(PAYMENT_MODE_OPTIONS, v), () => clearField("paymentModes")),
-    ...multiSelectChip("userIds", "User", applied.userIds, users.labelOf, () => clearField("userIds")),
+    // Falls back to the id: the list follows the draft pharmacies, which may no longer hold an applied user.
+    ...multiSelectChip("userIds", "User", applied.userIds, (v) => users.labelOf(v) || v, () => clearField("userIds")),
   ];
 
   return (
@@ -94,7 +108,7 @@ export default function DayCloseReportToolbar<R>({
         labelClassName="px-1"
         options={users.options}
         value={draft.userIds}
-        onChange={(value: number[]) => setDraftField("userIds", value)}
+        onChange={(value: string[]) => setDraftField("userIds", value)}
         placeholder="Select"
         isLoading={users.loading}
         searchable

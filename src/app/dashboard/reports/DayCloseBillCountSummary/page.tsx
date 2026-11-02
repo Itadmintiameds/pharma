@@ -9,36 +9,8 @@ import DayCloseReportToolbar, {
   dayCloseFiltersToParams,
 } from "../components/DayCloseReportToolbar";
 import { useFinancialReport } from "../components/useFinancialReport";
-import {
-  describePeriod,
-  formatGeneratedOn,
-  formatPercent,
-  sampleReport,
-} from "../components/reportUtils";
-
-interface BillCountKpi {
-  totalBills: number;
-  fullyPaidBills: number;
-  /** IP bills with a balance still owed — partially paid or not paid at all. */
-  pendingIpBills: number;
-}
-
-interface BillCountRow {
-  /** TOTAL_BILLS, FULLY_PAID_BILLS or PENDING_IP_BILLS. */
-  code: string;
-  particular: string;
-  count: number;
-}
-
-// Sample figures from the design, until the day close bill count API is wired in.
-const fetchBillCountSummary = sampleReport<BillCountKpi, BillCountRow>(
-  { totalBills: 25, fullyPaidBills: 22, pendingIpBills: 3 },
-  [
-    { code: "TOTAL_BILLS", particular: "Total Bills", count: 25 },
-    { code: "FULLY_PAID_BILLS", particular: "Fully Paid Bills", count: 22 },
-    { code: "PENDING_IP_BILLS", particular: "Partially Paid / Pending IP Bills", count: 3 },
-  ],
-);
+import { describePeriod, formatGeneratedOn, formatPercent } from "../components/reportUtils";
+import { getBillCountSummary } from "@/services/FinancialReportService";
 
 const TITLE = "Pharmacy Day Closing Summary - Bill Count Summary";
 
@@ -46,7 +18,7 @@ export default function DayCloseBillCountSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
-    fetchReport: fetchBillCountSummary,
+    fetchReport: getBillCountSummary,
     errorMessage: "Failed to fetch the bill count summary",
   });
 

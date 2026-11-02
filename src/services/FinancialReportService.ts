@@ -1,7 +1,9 @@
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 import {
+  BillCountResponse,
   BillDueResponse,
+  BillingByPatientTypeResponse,
   BillSummaryResponse,
   DetailedSaleResponse,
   DoctorWiseResponse,
@@ -112,5 +114,29 @@ export const getReceiptDetails = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the receipt details report.');
+  }
+};
+
+// Day Close: total, fully paid and pending IP bill counts for one day.
+export const getBillCountSummary = async (
+  params: FinancialReportParams
+): Promise<BillCountResponse> => {
+  try {
+    const response = await getReport('/financial-report/bill-count-summary', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the bill count summary report.');
+  }
+};
+
+// Day Close: bill count and amount per patient type, with a closing TOTAL row.
+export const getBillingByPatientType = async (
+  params: FinancialReportParams
+): Promise<BillingByPatientTypeResponse> => {
+  try {
+    const response = await getReport('/financial-report/billing-by-patient-type', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the billing by patient type report.');
   }
 };

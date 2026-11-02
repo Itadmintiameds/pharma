@@ -32,8 +32,8 @@ export interface FinancialReportParams {
   gstPercentages?: string[];
   /** PENDING, FULLY_PAID or ALL (default). */
   pendingStatus?: string;
-  /** User ids from /user/all: who raised the bill or took the payment (Day Close reports). */
-  userIds?: number[];
+  /** User ids from /user/names, e.g. "USR-2026-00003": who raised the bill (Day Close reports). */
+  userIds?: string[];
   /** Zero-based. */
   page?: number;
   size?: number;
@@ -260,3 +260,48 @@ export interface ReceiptDetailsRow {
 
 /** Always a single page holding all three rows. */
 export type ReceiptDetailsResponse = FinancialReportResponse<ReceiptDetailsKpi, ReceiptDetailsRow>;
+
+/** Finalized bills for the day (Day Close). */
+export interface BillCountKpi {
+  totalBills: number;
+  fullyPaidBills: number;
+  /** IP bills with a balance still owed — partially paid or not paid at all. */
+  pendingIpBills: number;
+}
+
+export interface BillCountRow {
+  /** TOTAL_BILLS, FULLY_PAID_BILLS or PENDING_IP_BILLS. */
+  code: string;
+  /** Display label, e.g. "Total Bills". */
+  particular: string;
+  count: number;
+}
+
+/** Always a single page holding all three rows. */
+export type BillCountResponse = FinancialReportResponse<BillCountKpi, BillCountRow>;
+
+export interface PatientTypeTotals {
+  billCount: number;
+  totalAmount: number;
+}
+
+/** Bills and amount for the day per patient type (Day Close). */
+export interface BillingByPatientTypeKpi {
+  ip: PatientTypeTotals;
+  op: PatientTypeTotals;
+  walkIn: PatientTypeTotals;
+  dayCare: PatientTypeTotals;
+}
+
+export interface BillingByPatientTypeRow extends PatientTypeTotals {
+  /** IP, OP, WALK_IN, DAY_CARE, or TOTAL for the closing total line. */
+  code: string;
+  /** Display label, e.g. "Walk-In". */
+  patientType: string;
+}
+
+/** Always a single page: one row per patient type, then the TOTAL row. */
+export type BillingByPatientTypeResponse = FinancialReportResponse<
+  BillingByPatientTypeKpi,
+  BillingByPatientTypeRow
+>;
