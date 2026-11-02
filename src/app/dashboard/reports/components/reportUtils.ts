@@ -1,3 +1,5 @@
+import type { FinancialReportResponse } from "@/types/FinancialReportData";
+
 /**
  * Formatting and period helpers shared by the report pages.
  *
@@ -150,6 +152,21 @@ export const periodChipLabel = (period: ReportPeriod) => {
     period.mode === "range" ? "Date Range" : period.mode === "month" ? "Month" : "Date";
   return `${name}: ${describePeriod(period)}`;
 };
+
+/**
+ * A stand-in for a report endpoint that is not wired yet: resolves to the
+ * design's sample figures in the same response shape, so swapping in the real
+ * service later changes nothing else on the page.
+ */
+export const sampleReport =
+  <K, T>(kpi: K, rows: T[]) =>
+  (): Promise<FinancialReportResponse<K, T>> =>
+    Promise.resolve({
+      generatedBy: "Admin User",
+      generatedOn: new Date().toISOString(),
+      kpi,
+      billDetails: { content: rows, page: 0, size: rows.length, totalElements: rows.length, totalPages: 1 },
+    });
 
 /** "Generated on" stamp: "08-Oct-2026 05:30 PM", from a Date or the API's ISO local date-time. */
 export const formatGeneratedOn = (value: Date | string) => {

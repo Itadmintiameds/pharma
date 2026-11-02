@@ -382,6 +382,22 @@ const Sidebar = () => {
               name: "Day Close Billing by Patient Type",
               path: "/dashboard/reports/DayCloseBillingByPatientType",
             },
+            {
+              name: "Day Close Billing by User",
+              path: "/dashboard/reports/DayCloseBillingByUser",
+            },
+            {
+              name: "Day Close Receipt by User",
+              path: "/dashboard/reports/DayCloseReceiptByUser",
+            },
+            {
+              name: "Day Close Current Bill Details",
+              path: "/dashboard/reports/DayCloseCurrentBillDetails",
+            },
+            {
+              name: "Day Close Sales Return Details",
+              path: "/dashboard/reports/DayCloseSalesReturnDetails",
+            },
           ],
         },
       ],
