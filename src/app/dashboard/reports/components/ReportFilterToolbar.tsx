@@ -204,7 +204,7 @@ export default function ReportFilterToolbar({
   const [showMore, setShowMore] = useState(false);
 
   return (
-    <div className="@container flex w-full flex-col gap-4 rounded-2xl bg-white p-4 shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
+    <div className="@container flex w-full flex-col gap-4 rounded-2xl bg-white p-4 print:hidden shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
       <div className="flex flex-wrap items-center gap-4 border-b border-pneutral-200">
         <div role="tablist" aria-label="Reporting period" className="flex flex-1 flex-wrap items-start">
           {PERIOD_TABS.filter(({ mode }) => !periodModes || periodModes.includes(mode)).map(({ mode, label }) => {

@@ -129,6 +129,7 @@ export default function BillSummaryPage() {
       billNo: f.billNo.trim(),
     }),
     fetchReport: getBillSummary,
+    exportKey: "bill-summary",
     errorMessage: "Failed to fetch the bill summary report",
   });
   const { filters, clearField } = report;
@@ -146,11 +147,13 @@ export default function BillSummaryPage() {
   const totalBills = data?.billDetails.totalElements ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title="Pharma Bill Summary"
         description="A bill-level summary of pharmacy sales for the selected reporting period."
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReportFilterToolbar

@@ -47,6 +47,7 @@ export default function DayCloseReceiptByUserPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getReceiptByUser,
+    exportKey: "receipt-by-user",
     errorMessage: "Failed to fetch the receipt by user report",
   });
 
@@ -64,12 +65,14 @@ export default function DayCloseReceiptByUserPage() {
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Receipt count and amount received for the business day, grouped by user."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

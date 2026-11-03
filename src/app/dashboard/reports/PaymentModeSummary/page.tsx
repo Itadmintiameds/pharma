@@ -31,6 +31,7 @@ export default function PaymentModeSummaryPage() {
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
     fetchReport: getPaymentModeSummary,
+    exportKey: "payment-mode-summary",
     errorMessage: "Failed to fetch the payment mode summary report",
   });
 
@@ -40,12 +41,14 @@ export default function PaymentModeSummaryPage() {
   const modesUsed = rows.filter((r) => r.code !== "TOTAL" && r.amountReceived > 0).length;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Payments received during the selected reporting period, grouped by payment mode."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReceiptsReportToolbar report={report} />

@@ -20,6 +20,7 @@ export default function DayCloseReceiptDetailsPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getReceiptDetails,
+    exportKey: "receipt-details",
     errorMessage: "Failed to fetch the day close receipt details",
   });
 
@@ -27,12 +28,14 @@ export default function DayCloseReceiptDetailsPage() {
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Payments received against current and previous bills during the business day."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

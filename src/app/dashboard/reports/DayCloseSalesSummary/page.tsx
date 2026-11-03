@@ -26,6 +26,7 @@ export default function DayCloseSalesSummaryPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getSalesSummary,
+    exportKey: "sales-summary",
     errorMessage: "Failed to fetch the day close sales summary",
   });
 
@@ -40,12 +41,14 @@ export default function DayCloseSalesSummaryPage() {
   const netSales = kpi?.netSales ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Sales, discounts, sales returns and net sales for the business day."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

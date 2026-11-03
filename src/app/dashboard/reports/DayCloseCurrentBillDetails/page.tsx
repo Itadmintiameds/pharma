@@ -82,6 +82,7 @@ export default function DayCloseCurrentBillDetailsPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getCurrentBillDetails,
+    exportKey: "current-bill-details",
     errorMessage: "Failed to fetch the current bill details",
   });
 
@@ -94,11 +95,13 @@ export default function DayCloseCurrentBillDetailsPage() {
   const day = describePeriod(report.filters.appliedPeriod);
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Bills generated on the business day with total, received and pending amounts."
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

@@ -72,6 +72,7 @@ export default function DayCloseSalesReturnDetailsPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getSalesReturnDetails,
+    exportKey: "sales-return-details",
     errorMessage: "Failed to fetch the sales return details",
   });
 
@@ -90,12 +91,14 @@ export default function DayCloseSalesReturnDetailsPage() {
   const day = describePeriod(report.filters.appliedPeriod);
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Sales returns processed on the business day."
         icon="/Reports/ReceiptRefund.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

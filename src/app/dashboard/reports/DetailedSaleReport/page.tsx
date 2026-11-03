@@ -188,6 +188,7 @@ export default function DetailedSaleReportPage() {
       gstPercentages: f.gstPercentages,
     }),
     fetchReport: getDetailedSaleReport,
+    exportKey: "detailed-sale-report",
     errorMessage: "Failed to fetch the detailed sale report",
   });
   const { filters, clearField } = report;
@@ -208,11 +209,13 @@ export default function DetailedSaleReportPage() {
   const discount = kpi?.totalDiscountAmount ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title="Pharma Bill Detailed Sales"
         description="Product-level details of pharmacy sales for the selected reporting period."
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReportFilterToolbar

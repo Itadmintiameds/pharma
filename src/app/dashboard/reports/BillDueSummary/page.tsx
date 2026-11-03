@@ -179,6 +179,7 @@ export default function BillDueSummaryPage() {
       billNo: f.billNo.trim(),
     }),
     fetchReport: getBillDueSummary,
+    exportKey: "bill-due-summary",
     errorMessage: "Failed to fetch the bill due summary report",
   });
   const { filters, clearField } = report;
@@ -204,11 +205,13 @@ export default function BillDueSummaryPage() {
   const pending = kpi?.totalPendingAmount ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title="Bill Due Summary (In-Patient)"
         description="View pending amounts against In-Patient (IP) pharmacy bills for the selected reporting period."
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReportFilterToolbar

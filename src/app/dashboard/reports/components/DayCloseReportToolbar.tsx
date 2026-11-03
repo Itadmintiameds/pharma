@@ -5,7 +5,7 @@ import Dropdown from "@/app/components/common/Dropdown";
 import type { FinancialReportParams } from "@/types/FinancialReportData";
 import ReportFilterToolbar from "./ReportFilterToolbar";
 import { useUserOptions } from "./useReportFilters";
-import { multiSelectChip, useFinancialReport } from "./useFinancialReport";
+import { multiSelectChip, useFinancialReport, type PagedReport } from "./useFinancialReport";
 import { PATIENT_TYPE_OPTIONS, PAYMENT_MODE_OPTIONS, optionLabel } from "./reportFilterOptions";
 import type { ReportPeriodMode } from "./reportUtils";
 
@@ -36,7 +36,7 @@ export const dayCloseFiltersToParams = (f: DayCloseFilters): FinancialReportPara
 
 const DAY_CLOSE_PERIODS: ReportPeriodMode[] = ["today", "day"];
 
-export default function DayCloseReportToolbar<R>({
+export default function DayCloseReportToolbar<R extends PagedReport>({
   report,
 }: {
   report: ReturnType<typeof useFinancialReport<DayCloseFilters, R>>;

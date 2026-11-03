@@ -24,6 +24,7 @@ export default function SalesSummaryPage() {
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
     fetchReport: getSalesSummary,
+    exportKey: "sales-summary",
     errorMessage: "Failed to fetch the sales summary report",
   });
 
@@ -34,12 +35,14 @@ export default function SalesSummaryPage() {
   const discount = rows.find((r) => r.code === "TOTAL_DISCOUNT")?.amount ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Total sales, discounts, sales returns, net sales and IP pending amount for the selected reporting period."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReceiptsReportToolbar report={report} />

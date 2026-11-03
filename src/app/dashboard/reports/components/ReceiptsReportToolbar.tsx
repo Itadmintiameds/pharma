@@ -6,7 +6,7 @@ import Dropdown from "@/app/components/common/Dropdown";
 import type { FinancialReportParams } from "@/types/FinancialReportData";
 import ReportFilterToolbar from "./ReportFilterToolbar";
 import { useDoctorOptions } from "./useReportFilters";
-import { multiSelectChip, textFilterChips, useFinancialReport } from "./useFinancialReport";
+import { multiSelectChip, textFilterChips, useFinancialReport, type PagedReport } from "./useFinancialReport";
 import { PATIENT_TYPE_OPTIONS, PAYMENT_MODE_OPTIONS, optionLabel } from "./reportFilterOptions";
 
 /**
@@ -55,7 +55,7 @@ const SEARCH_FILTERS = [
 
 const SEARCH_ICON = <Image src="/Reports/MagnifyingGlass.svg" alt="" width={20} height={20} />;
 
-export default function ReceiptsReportToolbar<R>({
+export default function ReceiptsReportToolbar<R extends PagedReport>({
   report,
 }: {
   report: ReturnType<typeof useFinancialReport<ReceiptsFilters, R>>;

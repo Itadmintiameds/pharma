@@ -1,3 +1,4 @@
+import axios from 'axios';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 import {
@@ -13,6 +14,8 @@ import {
   PaymentModeResponse,
   ReceiptByUserResponse,
   ReceiptDetailsResponse,
+  ReportExportFormat,
+  ReportExportKey,
   SalesReturnDetailsResponse,
   SalesSummaryResponse,
 } from '@/types/FinancialReportData';
@@ -190,5 +193,53 @@ export const getSalesReturnDetails = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the sales return details report.');
+  }
+};
+
+/** The server's file name from Content-Disposition, e.g. bill-summary_2026-11-03.xlsx. */
+const fileNameFrom = (disposition: string | undefined, fallback: string) => {
+  const match = disposition?.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+  const name = match?.[1] ?? match?.[2];
+  return name ? decodeURIComponent(name) : fallback;
+};
+
+/**
+ * CSV / Excel download of any report with the same filters as the screen —
+ * every matching row, not just the page. The file streams from the backend and
+ * is handed to the browser to save.
+ */
+export const downloadReportExport = async (
+  report: ReportExportKey,
+  format: ReportExportFormat,
+  params: FinancialReportParams
+): Promise<void> => {
+  try {
+    const response = await api.get<Blob>('/financial-report/export', {
+      params: toQuery({ ...params, page: undefined, size: undefined, unpaged: undefined, report, format } as FinancialReportParams),
+      paramsSerializer: { indexes: null },
+      responseType: 'blob',
+    });
+
+    const url = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileNameFrom(response.headers['content-disposition'], `${report}.${format}`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // The click has handed the blob to the download by now.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    // With responseType blob the error body is a Blob too; read it back to
+    // text/JSON so the backend's message ("Too many rows…") reaches the toast.
+    if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+      const text = await error.response.data.text();
+      try {
+        error.response.data = JSON.parse(text);
+      } catch {
+        error.response.data = text;
+      }
+    }
+    throw handleApiError(error, 'Failed to download the report.');
   }
 };

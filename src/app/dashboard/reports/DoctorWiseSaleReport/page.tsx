@@ -122,6 +122,7 @@ export default function DoctorWiseSaleReportPage() {
       gstPercentages: f.gstPercentages,
     }),
     fetchReport: getDoctorWiseSalesReport,
+    exportKey: "doctor-wise-sales-report",
     errorMessage: "Failed to fetch the doctor-wise sales report",
   });
   const { filters, clearField } = report;
@@ -148,12 +149,14 @@ export default function DoctorWiseSaleReportPage() {
     rows.reduce((total, row) => total + pick(row), 0);
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title="Doctor-wise / Referred By Pharma Sales"
         description="Product-level pharmacy sales grouped by the Referred By value captured during billing."
         icon="/Reports/ChartBar.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReportFilterToolbar

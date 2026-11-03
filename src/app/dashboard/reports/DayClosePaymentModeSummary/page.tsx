@@ -32,6 +32,7 @@ export default function DayClosePaymentModeSummaryPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getPaymentModeSummary,
+    exportKey: "payment-mode-summary",
     errorMessage: "Failed to fetch the day close payment mode summary",
   });
 
@@ -42,12 +43,14 @@ export default function DayClosePaymentModeSummaryPage() {
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Payments collected during the business day, grouped by payment mode."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

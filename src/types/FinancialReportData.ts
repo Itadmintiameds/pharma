@@ -37,7 +37,30 @@ export interface FinancialReportParams {
   /** Zero-based. */
   page?: number;
   size?: number;
+  /**
+   * Print / PDF: every matching row on one page, ignoring page and size. The
+   * backend refuses it past its print limit (2,000 rows).
+   */
+  unpaged?: boolean;
 }
+
+/** Report keys for /financial-report/export: each report's own path. */
+export type ReportExportKey =
+  | 'bill-summary'
+  | 'detailed-sale-report'
+  | 'doctor-wise-sales-report'
+  | 'bill-due-summary'
+  | 'sales-summary'
+  | 'payment-mode-summary'
+  | 'receipt-details'
+  | 'bill-count-summary'
+  | 'billing-by-patient-type'
+  | 'billing-by-user'
+  | 'receipt-by-user'
+  | 'current-bill-details'
+  | 'sales-return-details';
+
+export type ReportExportFormat = 'xlsx' | 'csv';
 
 /** One page of report rows. `page` is zero-based, matching the request. */
 export interface ReportPage<T> {

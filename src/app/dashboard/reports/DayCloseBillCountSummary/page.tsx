@@ -19,6 +19,7 @@ export default function DayCloseBillCountSummaryPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getBillCountSummary,
+    exportKey: "bill-count-summary",
     errorMessage: "Failed to fetch the bill count summary",
   });
 
@@ -29,11 +30,13 @@ export default function DayCloseBillCountSummaryPage() {
   const day = describePeriod(report.filters.appliedPeriod);
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Count of finalized pharmacy bills for the business day, including fully paid and partially paid or pending IP bills."
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

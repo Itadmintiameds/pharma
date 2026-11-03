@@ -47,6 +47,7 @@ export default function DayCloseBillingByUserPage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getBillingByUser,
+    exportKey: "billing-by-user",
     errorMessage: "Failed to fetch the billing by user report",
   });
 
@@ -64,12 +65,14 @@ export default function DayCloseBillingByUserPage() {
   const isToday = report.filters.appliedPeriod.mode === "today";
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Bill count and total sales for the business day, grouped by user."
         icon="/Reports/ChartBar.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

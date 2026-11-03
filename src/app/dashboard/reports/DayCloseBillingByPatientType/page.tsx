@@ -32,6 +32,7 @@ export default function DayCloseBillingByPatientTypePage() {
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
     toParams: dayCloseFiltersToParams,
     fetchReport: getBillingByPatientType,
+    exportKey: "billing-by-patient-type",
     errorMessage: "Failed to fetch the billing by patient type report",
   });
 
@@ -41,12 +42,14 @@ export default function DayCloseBillingByPatientTypePage() {
   const totalAmount = rows.find((r) => r.code === "TOTAL")?.totalAmount ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Bill count and total amount for the business day, grouped by patient type."
         icon="/Reports/ChartBar.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <DayCloseReportToolbar report={report} />

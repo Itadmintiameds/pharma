@@ -248,7 +248,7 @@ export default function ReportTable<T>({
         </table>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3 print:hidden">
         <p className="flex-1 text-p3 text-pneutral-500">
           Showing {from} to {to} of {totalItems} records
         </p>

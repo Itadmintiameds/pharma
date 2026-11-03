@@ -24,6 +24,7 @@ export default function ReceiptDetailsPage() {
     emptyFilters: EMPTY_RECEIPTS_FILTERS,
     toParams: receiptsFiltersToParams,
     fetchReport: getReceiptDetails,
+    exportKey: "receipt-details",
     errorMessage: "Failed to fetch the receipt details report",
   });
 
@@ -33,12 +34,14 @@ export default function ReceiptDetailsPage() {
   const total = data?.kpi.totalReceipts ?? 0;
 
   return (
-    <div className="@container flex flex-col gap-4">
+    <div id={report.printId} className="@container flex flex-col gap-4">
       <ReportHeader
         title={TITLE}
         description="Payments received against current and previous bills during the selected reporting period."
         icon="/Reports/BanknotesHeader.svg"
-        onPrint={() => window.print()}
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
       />
 
       <ReceiptsReportToolbar report={report} />
