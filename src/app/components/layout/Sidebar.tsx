@@ -332,7 +332,7 @@ const Sidebar = () => {
             },
             {
               name: "Product-wise Purchase and Sales Analysis Report",
-              path: "/dashboard/reports/productwisePurchase&SalesAnalysisReport",
+              path: "/dashboard/reports/productwisePurchaseandSalesAnalysisReport",
             },
           ],
         },
