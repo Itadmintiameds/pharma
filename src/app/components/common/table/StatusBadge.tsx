@@ -8,7 +8,9 @@ export type BadgeStatus =
   | "Expired"
   | "Expired batch"
   | "Out of Stock"
-  | "Received";
+  | "Received"
+  | "Fully Paid"
+  | "Pending";
 
 interface Props {
   status: BadgeStatus;
@@ -18,6 +20,9 @@ const styles: Record<BadgeStatus, string> = {
   Active: "bg-success-50 text-success-800 border-success-600",
   Healthy: "bg-success-50 text-success-800 border-success-600",
   Received: "bg-success-50 text-success-800 border-success-600",
+  "Fully Paid": "bg-success-50 text-success-800 border-success-600",
+
+  Pending: "bg-warning-50 text-warning-600 border-warning-600",
 
   Inactive: "bg-warning-50 text-warning-600 border-warning-600",
   Locked: "bg-warning-50 text-warning-600 border-warning-600",

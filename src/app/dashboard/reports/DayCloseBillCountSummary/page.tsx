@@ -1,0 +1,100 @@
+"use client";
+
+import ReportHeader from "../components/ReportHeader";
+import ReportKpiCard from "../components/ReportKpiCard";
+import ReportLoadingState from "../components/ReportLoadingState";
+import ReportSummaryTable, { formatCount } from "../components/ReportSummaryTable";
+import DayCloseReportToolbar, {
+  EMPTY_DAY_CLOSE_FILTERS,
+  dayCloseFiltersToParams,
+} from "../components/DayCloseReportToolbar";
+import { useFinancialReport } from "../components/useFinancialReport";
+import { describePeriod, formatGeneratedOn, formatPercent } from "../components/reportUtils";
+import { getBillCountSummary } from "@/services/FinancialReportService";
+
+const TITLE = "Pharmacy Day Closing Summary - Bill Count Summary";
+
+export default function DayCloseBillCountSummaryPage() {
+  const report = useFinancialReport({
+    emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
+    toParams: dayCloseFiltersToParams,
+    fetchReport: getBillCountSummary,
+    exportKey: "bill-count-summary",
+    errorMessage: "Failed to fetch the bill count summary",
+  });
+
+  const data = report.report;
+  const total = data?.kpi.totalBills ?? 0;
+  const fullyPaid = data?.kpi.fullyPaidBills ?? 0;
+  const pending = data?.kpi.pendingIpBills ?? 0;
+  const day = describePeriod(report.filters.appliedPeriod);
+
+  return (
+    <div id={report.printId} className="@container flex flex-col gap-4">
+      <ReportHeader
+        title={TITLE}
+        description="Count of finalized pharmacy bills for the business day, including fully paid and partially paid or pending IP bills."
+        onPrint={report.print}
+        onDownload={report.download}
+        busy={report.busy}
+      />
+
+      <DayCloseReportToolbar report={report} />
+
+      {report.isLoading ? (
+        <ReportLoadingState kpiCount={3} />
+      ) : !data ? (
+        <div className="flex h-40 items-center justify-center rounded-2xl bg-white text-label-l4 text-pneutral-500">
+          {report.loadError}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-3">
+            <ReportKpiCard
+              label="Total Bills"
+              value={formatCount(total)}
+              icon="/Reports/DocumentChartBarSmall.svg"
+              tone="primary"
+              highlight="1 day"
+              caption={day}
+            />
+            <ReportKpiCard
+              label="Fully Paid Bills"
+              value={formatCount(fullyPaid)}
+              icon="/Reports/CheckCircleSolid.svg"
+              tone="success"
+              highlight={formatPercent(fullyPaid, total)}
+              caption="of total bills"
+            />
+            <ReportKpiCard
+              label="Partially Paid / Pending IP Bills"
+              value={formatCount(pending)}
+              icon="/Reports/ClockYellow.svg"
+              tone="danger"
+              highlight={formatPercent(pending, total)}
+              caption="of total bills"
+            />
+          </div>
+
+          <ReportSummaryTable
+            title={TITLE}
+            subtitles={[
+              `Date: ${day}`,
+              ...(report.pharmacyNames ? [`Pharmacy: ${report.pharmacyNames}`] : []),
+            ]}
+            generatedOn={formatGeneratedOn(data.generatedOn)}
+            generatedBy={data.generatedBy}
+            labelHeader="Particular"
+            amountHeader="Count"
+            formatAmount={formatCount}
+            lines={data.billDetails.content.map((row) => ({
+              key: row.code,
+              label: row.particular,
+              amount: row.count,
+            }))}
+          />
+        </>
+      )}
+    </div>
+  );
+}

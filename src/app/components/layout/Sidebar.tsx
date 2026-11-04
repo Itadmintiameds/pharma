@@ -334,6 +334,70 @@ const Sidebar = () => {
               name: "Product-wise Purchase and Sales Analysis Report",
               path: "/dashboard/reports/productwisePurchaseandSalesAnalysisReport",
             },
+            {
+              name: "Bill Summary",
+              path: "/dashboard/reports/BillSummary",
+            },
+            {
+              name: "Detailed Sale Report",
+              path: "/dashboard/reports/DetailedSaleReport",
+            },
+            {
+              name: "Doctor-wise Sale Report",
+              path: "/dashboard/reports/DoctorWiseSaleReport",
+            },
+            {
+              name: "Bill Due Summary",
+              path: "/dashboard/reports/BillDueSummary",
+            },
+            {
+              name: "Sales Summary",
+              path: "/dashboard/reports/SalesSummary",
+            },
+            {
+              name: "Payment Mode Summary",
+              path: "/dashboard/reports/PaymentModeSummary",
+            },
+            {
+              name: "Receipt Details",
+              path: "/dashboard/reports/ReceiptDetails",
+            },
+            {
+              name: "Day Close Bill Count Summary",
+              path: "/dashboard/reports/DayCloseBillCountSummary",
+            },
+            {
+              name: "Day Close Sales Summary",
+              path: "/dashboard/reports/DayCloseSalesSummary",
+            },
+            {
+              name: "Day Close Payment Mode Summary",
+              path: "/dashboard/reports/DayClosePaymentModeSummary",
+            },
+            {
+              name: "Day Close Receipt Details",
+              path: "/dashboard/reports/DayCloseReceiptDetails",
+            },
+            {
+              name: "Day Close Billing by Patient Type",
+              path: "/dashboard/reports/DayCloseBillingByPatientType",
+            },
+            {
+              name: "Day Close Billing by User",
+              path: "/dashboard/reports/DayCloseBillingByUser",
+            },
+            {
+              name: "Day Close Receipt by User",
+              path: "/dashboard/reports/DayCloseReceiptByUser",
+            },
+            {
+              name: "Day Close Current Bill Details",
+              path: "/dashboard/reports/DayCloseCurrentBillDetails",
+            },
+            {
+              name: "Day Close Sales Return Details",
+              path: "/dashboard/reports/DayCloseSalesReturnDetails",
+            },
           ],
         },
       ],
