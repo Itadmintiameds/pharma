@@ -22,6 +22,9 @@ export interface UserWiseCollectionReportFilter {
   page?: number;
   // Backend default 10.
   size?: number;
+  // Print / PDF: every matching receipt on one page, ignoring page and size.
+  // Refused by the backend above 2,000 rows.
+  unpaged?: boolean;
   // Backend default collectionDate.
   sortBy?: UserWiseCollectionSortBy;
   // Backend default desc.

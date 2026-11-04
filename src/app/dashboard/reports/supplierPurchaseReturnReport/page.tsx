@@ -13,14 +13,17 @@ import {
   Calendar,
   ChevronDown,
   ChevronsDown,
-  Download,
   Funnel,
-  Printer,
   Scale,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
-import { getSupplierPurchaseReturnReport } from "@/services/AuditReports/SupplierPurchaseReturnService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import {
+  downloadSupplierPurchaseReturnExport,
+  getSupplierPurchaseReturnReport,
+} from "@/services/AuditReports/SupplierPurchaseReturnService";
 import { ProductMasterService } from "@/services/ProductMasterService";
 import { ProductService } from "@/services/ProductService";
 import { getSuppliersForLocation } from "@/services/SupplierService";
@@ -538,18 +541,42 @@ const SupplierPurchaseReturnReportPage = () => {
     };
   }, [requestKey]);
 
-  const rows = report?.purchaseReturnDetails?.data ?? [];
-  const summary = report?.summary;
+  // Print / PDF and the CSV / Excel download, over every row matching the
+  // report on screen (the last search, in the current sort), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<SupplierPurchaseReturnReportResponse>({
+    report,
+    hasMoreRows: (r) =>
+      (r.purchaseReturnDetails?.totalRecords ?? 0) > (r.purchaseReturnDetails?.data.length ?? 0),
+    fetchAll: () => getSupplierPurchaseReturnReport({ ...activeFilter, sortBy, sortDir, unpaged: true }),
+    exportReport: (format) => downloadSupplierPurchaseReturnExport(format, { ...activeFilter, sortBy, sortDir }),
+    // supplier-purchase-return_2026-10-08, supplier-purchase-return_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `supplier-purchase-return_${
+      !activeFilter.fromDate
+        ? toIsoDate(new Date())
+        : !activeFilter.toDate || activeFilter.toDate === activeFilter.fromDate
+          ? activeFilter.fromDate
+          : `${activeFilter.fromDate}_to_${activeFilter.toDate}`
+    }`,
+  });
+
+  // Every row is swapped in only while the print copy is taken; it all sits
+  // on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const rows = shownReport?.purchaseReturnDetails?.data ?? [];
+  const summary = shownReport?.summary;
   const totalReturnAmount = summary?.totalReturnAmount ?? 0;
   const gstAmount = summary?.gstReversalAmount ?? 0;
   const physicalReturnQuantity = summary?.totalPhysicalReturnQuantity ?? 0;
   const returnFreeQuantity = summary?.freeReturnQuantity ?? 0;
   // The physical quantity counts free units too; the Return Purchase Qty total does not.
   const returnPurchaseQuantity = physicalReturnQuantity - returnFreeQuantity;
-  const totalRecords = report?.purchaseReturnDetails?.totalRecords ?? 0;
+  const totalRecords = shownReport?.purchaseReturnDetails?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.purchaseReturnDetails?.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   const reportPeriodLabel =
     activeFilter.fromDate || activeFilter.toDate
@@ -749,42 +776,18 @@ const SupplierPurchaseReturnReportPage = () => {
   const showRows = !reportLoading && !reportError && rows.length > 0;
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <Image src="/StockReturn/receipt-refund-outline.svg" alt="" width={28} height={28} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">Supplier Purchase Return Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              A transaction-wise view of products returned to suppliers through the Purchase Return workflow during a
-              selected reporting period.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="Supplier Purchase Return Report"
+        description="A transaction-wise view of products returned to suppliers through the Purchase Return workflow during a selected reporting period."
+        icon="/StockReturn/receipt-refund-outline.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -1191,8 +1194,9 @@ const SupplierPurchaseReturnReportPage = () => {
           )}
         </div>
 
-        {/* Eighteen columns are cramped on phones, so rows stack as cards below md. */}
-        <div className="flex flex-col gap-sm md:hidden">
+        {/* Eighteen columns are cramped on phones, so rows stack as cards below md.
+            Paper always gets the table. */}
+        <div className="flex flex-col gap-sm md:hidden print:hidden">
           {!showRows && (
             <p
               className={`rounded-lg border border-pneutral-200 px-sm py-md text-center text-p3 ${
@@ -1243,7 +1247,7 @@ const SupplierPurchaseReturnReportPage = () => {
 
         {/* The design's columns are wider than the card, so the table always scrolls sideways
             with the styled track sitting 16px below it. */}
-        <div className={`hidden w-full overflow-x-auto pb-md md:block ${scrollbarClass}`}>
+        <div className={`hidden w-full overflow-x-auto pb-md md:block print:block! print:pb-0 ${scrollbarClass}`}>
           <div className="min-w-[1733px] overflow-hidden rounded-lg border border-pneutral-200">
             <table className="w-full table-fixed border-collapse">
               <thead>
@@ -1326,7 +1330,7 @@ const SupplierPurchaseReturnReportPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

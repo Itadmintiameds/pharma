@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { StockExpiryReportFilter, StockExpiryReportResponse } from '@/types/AuditReports/StockExpiryData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -29,4 +31,15 @@ export const getStockExpiryReport = async (filter: StockExpiryReportFilter): Pro
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the stock expiry report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadStockExpiryExport = (
+  format: ReportExportFormat,
+  filter: StockExpiryReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/stock-expiry/export', params, `stock-expiry.${format}`);
 };

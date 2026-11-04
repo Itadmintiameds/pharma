@@ -12,16 +12,19 @@ import {
   Calendar,
   ChevronDown,
   ChevronsDown,
-  Download,
   Funnel,
-  Printer,
   RefreshCw,
   Scale,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
-import { getUserWiseCollectionReport } from "@/services/AuditReports/UserWiseCollectionService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import {
+  downloadUserWiseCollectionExport,
+  getUserWiseCollectionReport,
+} from "@/services/AuditReports/UserWiseCollectionService";
 import { getAllUsers } from "@/services/UserManagementService";
 import type {
   CollectionPaymentMode,
@@ -461,13 +464,40 @@ const UserWiseCollectionReportPage = () => {
     };
   }, [requestKey]);
 
-  const rows = report?.collectionTransactions?.data ?? [];
-  const userRows = report?.userWiseSummary ?? [];
-  const summary = report?.summary;
-  const totalRecords = report?.collectionTransactions?.totalRecords ?? 0;
+  // Both tables' sorts, as on screen.
+  const sorts = { sortBy, sortDir, summarySortBy, summarySortDir };
+
+  // Print / PDF and the CSV / Excel download, over every receipt matching the
+  // report on screen (the last search, in the current sorts), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<UserWiseCollectionReportResponse>({
+    report,
+    hasMoreRows: (r) =>
+      (r.collectionTransactions?.totalRecords ?? 0) > (r.collectionTransactions?.data.length ?? 0),
+    fetchAll: () => getUserWiseCollectionReport({ ...activeFilter, ...sorts, unpaged: true }),
+    exportReport: (format) => downloadUserWiseCollectionExport(format, { ...activeFilter, ...sorts }),
+    // user-wise-collection_2026-10-08, user-wise-collection_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `user-wise-collection_${
+      !activeFilter.fromDate
+        ? toIsoDate(new Date())
+        : !activeFilter.toDate || activeFilter.toDate === activeFilter.fromDate
+          ? activeFilter.fromDate
+          : `${activeFilter.fromDate}_to_${activeFilter.toDate}`
+    }`,
+  });
+
+  // Every receipt is swapped in only while the print copy is taken; it all
+  // sits on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const rows = shownReport?.collectionTransactions?.data ?? [];
+  const userRows = shownReport?.userWiseSummary ?? [];
+  const summary = shownReport?.summary;
+  const totalRecords = shownReport?.collectionTransactions?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.collectionTransactions?.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   // The backend's own reading of the period (a missing date means today), already formatted.
   const reportingDateLabel = !report
@@ -588,7 +618,7 @@ const UserWiseCollectionReportPage = () => {
       align: "right",
       width: "w-[164px]",
       render: (r) => money(r.collectedAmount),
-      total: money(report?.collectionTransactions?.displayedTotal),
+      total: money(shownReport?.collectionTransactions?.displayedTotal),
       bodyClass: "font-semibold",
     },
   ];
@@ -652,41 +682,18 @@ const UserWiseCollectionReportPage = () => {
   );
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <Banknote className="size-7 text-secondary-700" strokeWidth={1.5} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">User-wise Collection Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              Payments collected and recorded by individual users through pharmacy billing and receipt transactions.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="User-wise Collection Report"
+        description="Payments collected and recorded by individual users through pharmacy billing and receipt transactions."
+        icon="/Reports/Banknotes.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -960,7 +967,7 @@ const UserWiseCollectionReportPage = () => {
           <h3 className="text-label-l4 font-semibold text-pneutral-900">User-wise Collection Summary</h3>
 
           {/* Rows stack as cards below md. */}
-          <div className="flex flex-col gap-sm md:hidden">
+          <div className="flex flex-col gap-sm md:hidden print:hidden">
             {!showUserRows && emptyCard}
             {showUserRows &&
               userRows.map((row, index) => (
@@ -989,7 +996,7 @@ const UserWiseCollectionReportPage = () => {
             )}
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden md:block print:block!">
             <ReportTable
               columns={summaryColumns}
               rows={userRows}
@@ -1010,7 +1017,7 @@ const UserWiseCollectionReportPage = () => {
         <div className="flex flex-col gap-md">
           <h3 className="text-label-l4 font-semibold text-pneutral-900">Collection Transaction Details</h3>
 
-          <div className="flex flex-col gap-sm md:hidden">
+          <div className="flex flex-col gap-sm md:hidden print:hidden">
             {!showRows && emptyCard}
             {showRows &&
               rows.map((row, index) => (
@@ -1040,12 +1047,12 @@ const UserWiseCollectionReportPage = () => {
             {showRows && (
               <div className="flex items-center justify-between gap-sm rounded-lg bg-primary-100 p-sm text-p3 font-semibold text-primary-900">
                 <span>Displayed Transactions Total</span>
-                <span>₹{money(report?.collectionTransactions?.displayedTotal)}</span>
+                <span>₹{money(shownReport?.collectionTransactions?.displayedTotal)}</span>
               </div>
             )}
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden md:block print:block!">
             <ReportTable
               columns={transactionColumns}
               rows={rows}
@@ -1063,7 +1070,7 @@ const UserWiseCollectionReportPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

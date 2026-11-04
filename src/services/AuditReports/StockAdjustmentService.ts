@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { StockAdjustmentReportFilter, StockAdjustmentReportResponse } from '@/types/AuditReports/StockAdjustmentData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -32,4 +34,15 @@ export const getStockAdjustmentReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the stock adjustment report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadStockAdjustmentExport = (
+  format: ReportExportFormat,
+  filter: StockAdjustmentReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/stock-adjustment/export', params, `stock-adjustment.${format}`);
 };

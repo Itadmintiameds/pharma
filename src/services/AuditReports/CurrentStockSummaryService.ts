@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { CurrentStockSummaryFilter, CurrentStockSummaryResponse } from '@/types/AuditReports/CurrentStockSummaryData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -32,4 +34,15 @@ export const getCurrentStockSummaryReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the current stock summary report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadCurrentStockSummaryExport = (
+  format: ReportExportFormat,
+  filter: CurrentStockSummaryFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/current-stock-summary/export', params, `current-stock-summary.${format}`);
 };

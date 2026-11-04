@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { InventorySalesReportFilter, InventorySalesReportResponse } from '@/types/AuditReports/InventorySalesData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -31,4 +33,15 @@ export const getInventorySalesReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the inventory sales report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters as the screen:
+// every matching row, not just the page.
+export const downloadInventorySalesExport = (
+  format: ReportExportFormat,
+  filter: InventorySalesReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/inventory-sales/export', params, `inventory-sales.${format}`);
 };

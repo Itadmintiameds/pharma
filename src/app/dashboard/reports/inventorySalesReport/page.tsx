@@ -12,15 +12,18 @@ import {
   ChevronDown,
   ChevronsDown,
   CircleCheck,
-  Download,
   Funnel,
-  Printer,
   ReceiptText,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
-import { getInventorySalesReport } from "@/services/AuditReports/InventorySalesService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import {
+  downloadInventorySalesExport,
+  getInventorySalesReport,
+} from "@/services/AuditReports/InventorySalesService";
 import { getAllDoctors } from "@/services/DoctorService";
 import { ProductMasterService } from "@/services/ProductMasterService";
 import { ProductService } from "@/services/ProductService";
@@ -444,12 +447,35 @@ const InventorySalesReportPage = () => {
     setPageIndex(0);
   };
 
-  const rows = report?.productSalesDetails.data ?? [];
-  const summary = report?.summary;
-  const totalRecords = report?.productSalesDetails.totalRecords ?? 0;
+  // Print / PDF and the CSV / Excel download, over every row matching the
+  // report on screen (the last search), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<InventorySalesReportResponse>({
+    report,
+    hasMoreRows: (r) => r.productSalesDetails.totalRecords > r.productSalesDetails.data.length,
+    fetchAll: () => getInventorySalesReport({ ...activeFilter, unpaged: true }),
+    exportReport: (format) => downloadInventorySalesExport(format, activeFilter),
+    // inventory-sales_2026-10-08, inventory-sales_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `inventory-sales_${
+      !activeFilter.fromDate
+        ? toIsoDate(new Date())
+        : !activeFilter.toDate || activeFilter.toDate === activeFilter.fromDate
+          ? activeFilter.fromDate
+          : `${activeFilter.fromDate}_to_${activeFilter.toDate}`
+    }`,
+  });
+
+  // Every row is swapped in only while the print copy is taken; it all sits
+  // on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const rows = shownReport?.productSalesDetails.data ?? [];
+  const summary = shownReport?.summary;
+  const totalRecords = shownReport?.productSalesDetails.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.productSalesDetails.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   // The API totals amounts and net quantity over every matching row, but not
   // sale/return quantity; those are only known when every row is on this page.
@@ -524,41 +550,18 @@ const InventorySalesReportPage = () => {
   };
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <Box className="size-7 fill-secondary-700 text-white" strokeWidth={1.5} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">Inventory Sales Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              A product-wise summary of pharmacy sales and sales returns during the selected reporting period.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="Inventory Sales Report"
+        description="A product-wise summary of pharmacy sales and sales returns during the selected reporting period."
+        icon="/Reports/Cube.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -932,7 +935,7 @@ const InventorySalesReportPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

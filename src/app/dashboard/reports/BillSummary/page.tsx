@@ -123,7 +123,7 @@ export default function BillSummaryPage() {
     toParams: (f) => ({
       patientSearch: f.patientSearch.trim(),
       doctorIds: f.doctorIds,
-      patientNo: f.patientNo.trim(),
+      patientNo: f.patientNo.trim(), 
       ipNo: f.ipNo.trim(),
       opNo: f.opNo.trim(),
       billNo: f.billNo.trim(),

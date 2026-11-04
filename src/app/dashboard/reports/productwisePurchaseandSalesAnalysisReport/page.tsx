@@ -14,14 +14,13 @@ import {
   ChevronsDown,
   CircleAlert,
   CircleCheck,
-  Download,
   Funnel,
-  Printer,
-  RefreshCw,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
-import { getProductWiseReport } from "@/services/AuditReports/ProductWiseService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import { downloadProductWiseExport, getProductWiseReport } from "@/services/AuditReports/ProductWiseService";
 import { ProductMasterService } from "@/services/ProductMasterService";
 import { ProductService } from "@/services/ProductService";
 import { getSuppliersForLocation } from "@/services/SupplierService";
@@ -508,12 +507,35 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
     };
   }, [requestKey]);
 
-  const summary = report?.summary;
-  const rows = report?.productDetails?.data ?? [];
-  const totalRecords = report?.productDetails?.totalRecords ?? 0;
+  // Print / PDF and the CSV / Excel download, over every product batch matching
+  // the report on screen (the last search, in the current sort), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<ProductWiseReportResponse>({
+    report,
+    hasMoreRows: (r) => (r.productDetails?.totalRecords ?? 0) > (r.productDetails?.data.length ?? 0),
+    fetchAll: () => getProductWiseReport({ ...activeFilter, sortBy, sortDir, unpaged: true }),
+    exportReport: (format) => downloadProductWiseExport(format, { ...activeFilter, sortBy, sortDir }),
+    // product-wise_2026-10-08, product-wise_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `product-wise_${
+      !activeFilter.fromDate
+        ? toIsoDate(new Date())
+        : !activeFilter.toDate || activeFilter.toDate === activeFilter.fromDate
+          ? activeFilter.fromDate
+          : `${activeFilter.fromDate}_to_${activeFilter.toDate}`
+    }`,
+  });
+
+  // Every batch is swapped in only while the print copy is taken; it all sits
+  // on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const summary = shownReport?.summary;
+  const rows = shownReport?.productDetails?.data ?? [];
+  const totalRecords = shownReport?.productDetails?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.productDetails?.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   // The response doesn't echo the period, so it is read off the last search the
   // way the backend does: a missing from date is today, a missing to date the from date.
@@ -708,9 +730,9 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
     </p>
   );
 
-  // Phones get each batch as a card instead of a wide table.
+  // Phones get each batch as a card instead of a wide table; paper always gets the table.
   const mobileCards = (columns: Column[], total: { label: string; value: string }[]) => (
-    <div className="flex flex-col gap-sm md:hidden">
+    <div className="flex flex-col gap-sm md:hidden print:hidden">
       {!showRows && emptyCard}
       {showRows &&
         rows.map((row, index) => (
@@ -746,42 +768,18 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
   );
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <RefreshCw className="size-7 text-secondary-700" strokeWidth={1.5} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">Product-wise Purchase and Sales Analysis Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              A consolidated view of products purchased from suppliers and sold through pharmacy billing during a
-              selected reporting period.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="Product-wise Purchase and Sales Analysis Report"
+        description="A consolidated view of products purchased from suppliers and sold through pharmacy billing during a selected reporting period."
+        icon="/Reports/ArrowPathPurple.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -1079,7 +1077,7 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
             { label: "Net Purchase Qty", value: qty(summary?.totalNetPurchaseQuantity) },
             { label: "Net Sales Qty", value: qty(summary?.totalNetSaleQuantity) },
           ])}
-          <div className="hidden md:block">
+          <div className="hidden md:block print:block!">
             <ReportTable
               columns={quantityColumns}
               rows={rows}
@@ -1100,7 +1098,7 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
             { label: "Net Purchase Amount", value: `₹${money(summary?.totalNetPurchaseAmount)}` },
             { label: "Net Sales Amount", value: `₹${money(summary?.totalNetSaleAmount)}` },
           ])}
-          <div className="hidden md:block">
+          <div className="hidden md:block print:block!">
             <ReportTable
               columns={valueColumns}
               rows={rows}
@@ -1115,7 +1113,7 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
         </div>
 
         {/* Pagination: the backend pages product batches, and both tables show the same page. */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

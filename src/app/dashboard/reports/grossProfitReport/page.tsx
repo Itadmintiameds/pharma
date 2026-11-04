@@ -14,14 +14,14 @@ import {
   ChevronDown,
   ChevronsDown,
   CircleCheck,
-  Download,
   Funnel,
-  Printer,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
-import { getGrossProfitReport } from "@/services/AuditReports/GrossProfitService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import { downloadGrossProfitExport, getGrossProfitReport } from "@/services/AuditReports/GrossProfitService";
 import { ProductService } from "@/services/ProductService";
 import type {
   GrossProfitReportFilter,
@@ -379,12 +379,36 @@ const GrossProfitReportPage = () => {
     };
   }, [requestKey]);
 
-  const rows = report?.productProfitability?.data ?? [];
-  const summary = report?.summary;
-  const totalRecords = report?.productProfitability?.totalRecords ?? 0;
+  // Print / PDF and the CSV / Excel download, over every row matching the
+  // report on screen (the last search, in the current sort), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<GrossProfitReportResponse>({
+    report,
+    hasMoreRows: (r) =>
+      (r.productProfitability?.totalRecords ?? 0) > (r.productProfitability?.data.length ?? 0),
+    fetchAll: () => getGrossProfitReport({ ...appliedFilter, sortBy, sortDir, unpaged: true }),
+    exportReport: (format) => downloadGrossProfitExport(format, { ...appliedFilter, sortBy, sortDir }),
+    // gross-profit_2026-10-08, gross-profit_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `gross-profit_${
+      !appliedFilter.fromDate
+        ? toIsoDate(new Date())
+        : !appliedFilter.toDate || appliedFilter.toDate === appliedFilter.fromDate
+          ? appliedFilter.fromDate
+          : `${appliedFilter.fromDate}_to_${appliedFilter.toDate}`
+    }`,
+  });
+
+  // Every row is swapped in only while the print copy is taken; it all sits
+  // on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const rows = shownReport?.productProfitability?.data ?? [];
+  const summary = shownReport?.summary;
+  const totalRecords = shownReport?.productProfitability?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.productProfitability?.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   // The backend's own reading of the period (a missing date means today), already formatted.
   const reportPeriodLabel = report ? `${report.fromDate} to ${report.toDate}` : "---";
@@ -520,42 +544,18 @@ const GrossProfitReportPage = () => {
   const showRows = !reportLoading && !reportError && rows.length > 0;
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <ChartNoAxesColumnIncreasing className="size-7 text-secondary-700" strokeWidth={1.5} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">Gross Profit / Margin Analysis Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              Gross profit from pharmacy sales, comparing Net Sales Revenue with the purchase cost of the products
-              sold.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="Gross Profit / Margin Analysis Report"
+        description="Gross profit from pharmacy sales, comparing Net Sales Revenue with the purchase cost of the products sold."
+        icon="/Reports/ChartBar.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -849,8 +849,9 @@ const GrossProfitReportPage = () => {
           )}
         </div>
 
-        {/* Nine columns are cramped on phones, so rows stack as cards below md. */}
-        <div className="flex flex-col gap-sm md:hidden">
+        {/* Nine columns are cramped on phones, so rows stack as cards below md.
+            Paper always gets the table. */}
+        <div className="flex flex-col gap-sm md:hidden print:hidden">
           {!showRows && (
             <p
               className={`rounded-lg border border-pneutral-200 px-sm py-md text-center text-p3 ${
@@ -904,7 +905,7 @@ const GrossProfitReportPage = () => {
 
         {/* The columns fit the card at full width and scroll sideways once they no
             longer do, with the styled track sitting 16px below. */}
-        <div className={`hidden w-full overflow-x-auto pb-md md:block ${scrollbarClass}`}>
+        <div className={`hidden w-full overflow-x-auto pb-md md:block print:block! print:pb-0 ${scrollbarClass}`}>
           <div className="min-w-[1108px] overflow-hidden rounded-lg border border-pneutral-200">
             <table className="w-full table-fixed border-collapse">
               <thead>
@@ -989,7 +990,7 @@ const GrossProfitReportPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

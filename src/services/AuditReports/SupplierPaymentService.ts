@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   SupplierPaymentReportFilter,
   SupplierPaymentReportResponse,
 } from '@/types/AuditReports/SupplierPaymentData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -36,4 +38,15 @@ export const getSupplierPaymentReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the supplier payment report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadSupplierPaymentExport = (
+  format: ReportExportFormat,
+  filter: SupplierPaymentReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/supplier-payment/export', params, `supplier-payment.${format}`);
 };

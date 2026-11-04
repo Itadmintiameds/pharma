@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   SupplierPurchaseReturnReportFilter,
   SupplierPurchaseReturnReportResponse,
 } from '@/types/AuditReports/SupplierPurchaseReturnData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,19 @@ export const getSupplierPurchaseReturnReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the supplier purchase return report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadSupplierPurchaseReturnExport = (
+  format: ReportExportFormat,
+  filter: SupplierPurchaseReturnReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile(
+    '/auditReports/supplier-purchase-return/export',
+    params,
+    `supplier-purchase-return.${format}`
+  );
 };

@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   UserWiseCollectionReportFilter,
   UserWiseCollectionReportResponse,
 } from '@/types/AuditReports/UserWiseCollectionData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,15 @@ export const getUserWiseCollectionReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the user-wise collection report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sorts as the
+// screen: every matching receipt, not just the page.
+export const downloadUserWiseCollectionExport = (
+  format: ReportExportFormat,
+  filter: UserWiseCollectionReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/user-wise-collection/export', params, `user-wise-collection.${format}`);
 };

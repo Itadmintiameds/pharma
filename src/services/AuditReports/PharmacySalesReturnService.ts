@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   PharmacySalesReturnReportFilter,
   PharmacySalesReturnReportResponse,
 } from '@/types/AuditReports/PharmacySalesReturnData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,15 @@ export const getPharmacySalesReturnReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the pharmacy sales return report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching line, not just the page.
+export const downloadPharmacySalesReturnExport = (
+  format: ReportExportFormat,
+  filter: PharmacySalesReturnReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/pharmacy-sales-return/export', params, `pharmacy-sales-return.${format}`);
 };

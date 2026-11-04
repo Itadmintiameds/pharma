@@ -13,15 +13,18 @@ import {
   ChevronDown,
   ChevronsDown,
   CircleCheck,
-  Download,
   Funnel,
-  Printer,
   Scale,
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
-import { getPharmacySalesReturnReport } from "@/services/AuditReports/PharmacySalesReturnService";
+import ReportHeader from "../components/ReportHeader";
+import { useReportActions } from "../components/useReportActions";
+import {
+  downloadPharmacySalesReturnExport,
+  getPharmacySalesReturnReport,
+} from "@/services/AuditReports/PharmacySalesReturnService";
 import { ProductMasterService } from "@/services/ProductMasterService";
 import type { CustomerType } from "@/types/BillingData";
 import type {
@@ -410,13 +413,37 @@ const PharmacySalesReturnReportPage = () => {
     };
   }, [requestKey]);
 
-  const rows = report?.salesReturnTransactions?.data ?? [];
-  const settlements = report?.settlementSummary ?? [];
-  const summary = report?.summary;
-  const totalRecords = report?.salesReturnTransactions?.totalRecords ?? 0;
+  // Print / PDF and the CSV / Excel download, over every line matching the
+  // report on screen (the last search, in the current sort), not just this page.
+  const { printId, printReport, print, download, busy } = useReportActions<PharmacySalesReturnReportResponse>({
+    report,
+    hasMoreRows: (r) =>
+      (r.salesReturnTransactions?.totalRecords ?? 0) > (r.salesReturnTransactions?.data.length ?? 0),
+    fetchAll: () => getPharmacySalesReturnReport({ ...activeFilter, sortBy, sortDir, unpaged: true }),
+    exportReport: (format) => downloadPharmacySalesReturnExport(format, { ...activeFilter, sortBy, sortDir }),
+    // pharmacy-sales-return_2026-10-08, pharmacy-sales-return_2026-10-01_to_2026-10-08 —
+    // matching the export's file names.
+    fileStem: `pharmacy-sales-return_${
+      !activeFilter.fromDate
+        ? toIsoDate(new Date())
+        : !activeFilter.toDate || activeFilter.toDate === activeFilter.fromDate
+          ? activeFilter.fromDate
+          : `${activeFilter.fromDate}_to_${activeFilter.toDate}`
+    }`,
+  });
+
+  // Every row is swapped in only while the print copy is taken; it all sits
+  // on one page then, so row numbers start at 1.
+  const shownReport = printReport ?? report;
+  const shownPageIndex = printReport ? 0 : pageIndex;
+
+  const rows = shownReport?.salesReturnTransactions?.data ?? [];
+  const settlements = shownReport?.settlementSummary ?? [];
+  const summary = shownReport?.summary;
+  const totalRecords = shownReport?.salesReturnTransactions?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.salesReturnTransactions?.totalPages ?? 1);
-  const firstRecord = totalRecords ? pageIndex * pageSize + 1 : 0;
-  const lastRecord = Math.min(pageIndex * pageSize + rows.length, totalRecords);
+  const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
+  const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
   // The backend echoes the period it reported on, already as dd-MMM-yyyy.
   const reportPeriodLabel = report
@@ -620,42 +647,18 @@ const PharmacySalesReturnReportPage = () => {
   ];
 
   return (
-    <div className="flex w-full flex-col gap-md">
-      {/* Page header */}
-      <div className="flex flex-col gap-md md:flex-row md:items-center">
-        <div className="flex flex-1 items-center gap-md">
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-            <Image src="/StockReturn/receipt-refund-outline.svg" alt="" width={28} height={28} />
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
-            <h1 className="text-h5 font-semibold text-pneutral-900">Pharmacy Sales Return Report</h1>
-            <p className="text-p3 text-pneutral-500">
-              Completed Sales Returns processed against previously generated Pharmacy Bills, with return value,
-              settlement and refund.
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 gap-sm">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg border-2 border-pneutral-900 px-md text-label-l4 font-medium text-pneutral-900 md:w-[118px] md:flex-none"
-          >
-            <Printer className="size-5" />
-            Print
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-12 min-w-[108px] flex-1 cursor-pointer items-center justify-center gap-xsm rounded-lg bg-pneutral-900 px-md text-label-l4 font-medium text-pneutral-50 md:w-[187px] md:flex-none"
-          >
-            <Download className="size-5" />
-            Download
-          </button>
-        </div>
-      </div>
+    <div id={printId} className="flex w-full flex-col gap-md">
+      <ReportHeader
+        title="Pharmacy Sales Return Report"
+        description="Completed Sales Returns processed against previously generated Pharmacy Bills, with return value, settlement and refund."
+        icon="/StockReturn/receipt-refund-outline.svg"
+        onPrint={print}
+        onDownload={download}
+        busy={busy}
+      />
 
       {/* Filter toolbar */}
-      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md ${CARD_SHADOW}`}>
+      <div className={`flex w-full flex-col gap-md rounded-2xl bg-white p-md print:hidden ${CARD_SHADOW}`}>
         <div className="flex flex-col gap-md border-b border-pneutral-200 lg:flex-row lg:items-center">
           <div className="flex flex-1 overflow-x-auto" role="tablist">
             {PERIODS.map((p) => {
@@ -966,8 +969,9 @@ const PharmacySalesReturnReportPage = () => {
           )}
         </div>
 
-        {/* Fifteen columns are cramped on phones, so rows stack as cards below md. */}
-        <div className="flex flex-col gap-sm md:hidden">
+        {/* Fifteen columns are cramped on phones, so rows stack as cards below md.
+            Paper always gets the table. */}
+        <div className="flex flex-col gap-sm md:hidden print:hidden">
           {!showRows && (
             <p className={`rounded-lg border border-pneutral-200 px-sm py-md text-center text-p3 ${emptyClass}`}>
               {emptyMessage}
@@ -1012,7 +1016,7 @@ const PharmacySalesReturnReportPage = () => {
 
         {/* The design's columns are wider than the card, so the table scrolls sideways
             with the styled track sitting 16px below it. */}
-        <div className={`hidden w-full overflow-x-auto pb-md md:block ${scrollbarClass}`}>
+        <div className={`hidden w-full overflow-x-auto pb-md md:block print:block! print:pb-0 ${scrollbarClass}`}>
           <div className="min-w-[1503px] overflow-hidden rounded-lg border border-pneutral-200">
             <table className="w-full table-fixed border-collapse">
               <thead>
@@ -1093,7 +1097,7 @@ const PharmacySalesReturnReportPage = () => {
         </div>
 
         {/* Pagination */}
-        <div className="flex flex-col gap-md sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-md sm:flex-row sm:items-center print:hidden">
           <p className="flex-1 text-p3 text-pneutral-500">
             Showing {firstRecord} to {lastRecord} of {totalRecords} records
           </p>

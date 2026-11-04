@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { StockDamageReportFilter, StockDamageReportResponse } from '@/types/AuditReports/StockDamageData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -32,4 +34,15 @@ export const getStockDamageReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the stock damage report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadStockDamageExport = (
+  format: ReportExportFormat,
+  filter: StockDamageReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/stock-damage/export', params, `stock-damage.${format}`);
 };

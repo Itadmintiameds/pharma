@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   GrossProfitReportFilter,
   GrossProfitReportResponse,
 } from '@/types/AuditReports/GrossProfitData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,15 @@ export const getGrossProfitReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the gross profit report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadGrossProfitExport = (
+  format: ReportExportFormat,
+  filter: GrossProfitReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/gross-profit/export', params, `gross-profit.${format}`);
 };

@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   SupplierOutstandingReportFilter,
   SupplierOutstandingReportResponse,
 } from '@/types/AuditReports/SupplierOutstandingData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,15 @@ export const getSupplierOutstandingReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the supplier outstanding report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadSupplierOutstandingExport = (
+  format: ReportExportFormat,
+  filter: SupplierOutstandingReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/supplier-outstanding/export', params, `supplier-outstanding.${format}`);
 };

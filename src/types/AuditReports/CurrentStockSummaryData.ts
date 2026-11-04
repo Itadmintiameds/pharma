@@ -47,6 +47,9 @@ export interface CurrentStockSummaryFilter {
   // 0-based; offset = page * size. Backend default 0 / 10.
   page?: number;
   size?: number;
+  // Print / PDF: every matching row on one page, ignoring page and size.
+  // Refused by the backend above 2,000 rows.
+  unpaged?: boolean;
   // Backend default availableStock desc.
   sortBy?: CurrentStockSummarySortBy;
   sortDir?: "asc" | "desc";

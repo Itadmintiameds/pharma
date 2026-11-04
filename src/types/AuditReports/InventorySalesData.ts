@@ -29,6 +29,9 @@ export interface InventorySalesReportFilter {
   page?: number;
   // Backend default 10.
   size?: number;
+  // Print / PDF: every matching row on one page, ignoring page and size.
+  // Refused by the backend above 2,000 rows.
+  unpaged?: boolean;
   // Backend default netSales.
   sortBy?: InventorySalesReportSortBy;
   // Backend default desc.

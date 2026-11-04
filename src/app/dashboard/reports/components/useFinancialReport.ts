@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import { showToast } from "@/app/components/common/Toast";
 import { downloadReportExport } from "@/services/FinancialReportService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
-import type {
-  FinancialReportParams,
-  ReportExportFormat,
-  ReportExportKey,
-} from "@/types/FinancialReportData";
-import { printElement } from "@/utils/printElement";
+import type { FinancialReportParams, ReportExportKey } from "@/types/FinancialReportData";
 import type { AppliedFilterChip } from "./ReportFilterToolbar";
 import { PAGE_SIZE_OPTIONS } from "./ReportTable";
-import { REPORT_PRINT_CSS } from "./reportPrintStyles";
 import { periodChipLabel, periodToParams, toDateInputValue } from "./reportUtils";
 import { usePharmacyOptions, useReportFilters } from "./useReportFilters";
+import { useReportActions } from "./useReportActions";
+
+export type { ReportAction } from "./useReportActions";
 
 interface UseFinancialReportOptions<F, R> {
   /** The page's filter fields with nothing set; `pharmacyIds` is defaulted here. */
@@ -27,9 +23,6 @@ interface UseFinancialReportOptions<F, R> {
   /** The report's key for the CSV / Excel export, and the stem of the print's file name. */
   exportKey: ReportExportKey;
 }
-
-/** What the header's Print / Download buttons are busy with, if anything. */
-export type ReportAction = "print" | ReportExportFormat;
 
 /** The part of every report response that printing needs. */
 export interface PagedReport {
@@ -141,56 +134,19 @@ export function useFinancialReport<F extends { pharmacyIds: string[] }, R extend
     if (e.key === "Enter") search();
   };
 
-  // Print / PDF and the CSV / Excel download cover every matching row, not
-  // just the page on screen. The page's root carries `printId`: it is found by
-  // id rather than a ref so the returned object stays a plain value in render.
-  const printId = useId();
-  // Every row, swapped in for the page only while the print copy is taken.
-  const [printReport, setPrintReport] = useState<R | null>(null);
-  const [busy, setBusy] = useState<ReportAction | null>(null);
-
-  // bill-summary_2026-11-03, bill-summary_2026-10-01_to_2026-10-31 — matching
-  // the export's file names. The print dialog offers it as the PDF's name.
-  const fileStem = `${exportKey}_${
-    params.date ??
-    (params.fromDate && params.toDate ? `${params.fromDate}_to_${params.toDate}` : toDateInputValue(new Date()))
-  }`;
-
-  const print = async () => {
-    if (!report || busy) return;
-    setBusy("print");
-    try {
-      // A single-page report already has every row on screen.
-      if (report.billDetails.totalElements > report.billDetails.content.length) {
-        const all = await fetchReport({ ...params, unpaged: true });
-        // Committed now, so the copy below picks up every row.
-        flushSync(() => setPrintReport(all));
-      }
-      const root = document.getElementById(printId);
-      if (!root) throw new Error("Nothing to print.");
-      // The element is copied synchronously, so the page can go straight back.
-      printElement(root, fileStem, REPORT_PRINT_CSS);
-    } catch (err) {
-      console.error("Failed to print the report:", err);
-      showToast.error((err as Error)?.message || "Could not open the print dialog.");
-    } finally {
-      setPrintReport(null);
-      setBusy(null);
-    }
-  };
-
-  const download = async (format: ReportExportFormat) => {
-    if (busy) return;
-    setBusy(format);
-    try {
-      await downloadReportExport(exportKey, format, params);
-    } catch (err) {
-      console.error("Failed to download the report:", err);
-      showToast.error((err as Error)?.message || "Failed to download the report.");
-    } finally {
-      setBusy(null);
-    }
-  };
+  // Print / PDF and the CSV / Excel download, over every matching row.
+  const { printId, printReport, print, download, busy } = useReportActions<R>({
+    report,
+    hasMoreRows: (r) => r.billDetails.totalElements > r.billDetails.content.length,
+    fetchAll: () => fetchReport({ ...params, unpaged: true }),
+    exportReport: (format) => downloadReportExport(exportKey, format, params),
+    // bill-summary_2026-11-03, bill-summary_2026-10-01_to_2026-10-31 — matching
+    // the export's file names.
+    fileStem: `${exportKey}_${
+      params.date ??
+      (params.fromDate && params.toDate ? `${params.fromDate}_to_${params.toDate}` : toDateInputValue(new Date()))
+    }`,
+  });
 
   const pharmacyNames = applied.pharmacyIds.map(pharmacy.labelOf).filter(Boolean).join(", ");
   const isDefaultPharmacy =

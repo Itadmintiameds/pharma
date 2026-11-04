@@ -1,7 +1,9 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import {
   ProductWiseReportFilter,
   ProductWiseReportResponse,
 } from '@/types/AuditReports/ProductWiseData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -35,4 +37,15 @@ export const getProductWiseReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the product-wise purchase and sales analysis report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching product batch, not just the page.
+export const downloadProductWiseExport = (
+  format: ReportExportFormat,
+  filter: ProductWiseReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/product-wise/export', params, `product-wise.${format}`);
 };

@@ -1,4 +1,6 @@
+import { downloadReportFile } from '@/services/FinancialReportService';
 import { StockReturnReportFilter, StockReturnReportResponse } from '@/types/AuditReports/StockReturnData';
+import type { ReportExportFormat } from '@/types/FinancialReportData';
 import api from '@/utils/api';
 import { handleApiError } from '@/utils/errorHandler';
 
@@ -32,4 +34,15 @@ export const getStockReturnReport = async (
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the stock return report.');
   }
+};
+
+// CSV / Excel download of the report with the same filters and sort as the
+// screen: every matching row, not just the page.
+export const downloadStockReturnExport = (
+  format: ReportExportFormat,
+  filter: StockReturnReportFilter
+): Promise<void> => {
+  const params = toSearchParams({ ...filter, page: undefined, size: undefined, unpaged: undefined });
+  params.append('format', format);
+  return downloadReportFile('/auditReports/stock-return/export', params, `stock-return.${format}`);
 };

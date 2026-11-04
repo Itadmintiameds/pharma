@@ -204,18 +204,32 @@ const fileNameFrom = (disposition: string | undefined, fallback: string) => {
 };
 
 /**
- * CSV / Excel download of any report with the same filters as the screen —
- * every matching row, not just the page. The file streams from the backend and
- * is handed to the browser to save.
+ * CSV / Excel download of any financial report with the same filters as the
+ * screen — every matching row, not just the page.
  */
-export const downloadReportExport = async (
+export const downloadReportExport = (
   report: ReportExportKey,
   format: ReportExportFormat,
   params: FinancialReportParams
+): Promise<void> =>
+  downloadReportFile(
+    '/financial-report/export',
+    toQuery({ ...params, page: undefined, size: undefined, unpaged: undefined, report, format } as FinancialReportParams),
+    `${report}.${format}`
+  );
+
+/**
+ * GETs a report file (CSV / Excel) and hands it to the browser to save, under
+ * the server's file name. Lists in `params` go out as repeated keys.
+ */
+export const downloadReportFile = async (
+  endpoint: string,
+  params: Record<string, unknown> | URLSearchParams,
+  fallbackName: string
 ): Promise<void> => {
   try {
-    const response = await api.get<Blob>('/financial-report/export', {
-      params: toQuery({ ...params, page: undefined, size: undefined, unpaged: undefined, report, format } as FinancialReportParams),
+    const response = await api.get<Blob>(endpoint, {
+      params,
       paramsSerializer: { indexes: null },
       responseType: 'blob',
     });
@@ -223,7 +237,7 @@ export const downloadReportExport = async (
     const url = URL.createObjectURL(response.data);
     const link = document.createElement('a');
     link.href = url;
-    link.download = fileNameFrom(response.headers['content-disposition'], `${report}.${format}`);
+    link.download = fileNameFrom(response.headers['content-disposition'], fallbackName);
     document.body.appendChild(link);
     link.click();
     link.remove();
