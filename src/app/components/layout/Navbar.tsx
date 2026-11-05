@@ -1,11 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
+import {
+  Briefcase,
+  CalendarDays,
+  Clock,
+  IdCard,
+  Mail,
+  Phone,
+  User,
+} from "lucide-react";
+import { formatDate, formatDateTime } from "@/utils/formatDate";
 import { getById, getUserById } from "@/services/UserManagementService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
-import { warehouseLabel } from "@/types/UserData";
+import { UserData, warehouseLabel } from "@/types/UserData";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 import ConfirmDialog from "../common/ConfirmDialog";
@@ -22,6 +32,32 @@ const Navbar = ({ userRole }: NavbarProps) => {
   // A Warehouse Manager operates on warehouses, not pharmacies — the top-right
   // control switches warehouse for them instead of pharmacy.
   const [isWarehouseUser, setIsWarehouseUser] = useState(false);
+
+  // The logged-in user's details, shown in the popover under the avatar.
+  const [user, setUser] = useState<UserData | null>(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Clicking anywhere else, or pressing Escape, closes the profile popover.
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!profileRef.current?.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [profileOpen]);
 
   const { pharmacies, selectedPharmacy, selectPharmacy, loading } =
     usePharmacyStore();
@@ -107,6 +143,7 @@ const Navbar = ({ userRole }: NavbarProps) => {
         // The warehouses themselves come from the store (useInitializeWarehouse),
         // so this only has to settle which control belongs here.
         const details = await getUserById(userId).catch(() => null);
+        setUser({ ...user, ...details });
         const normalize = (r?: string) =>
           (r || "").toLowerCase().replace(/[^a-z]/g, "");
         if (
@@ -266,14 +303,33 @@ const Navbar = ({ userRole }: NavbarProps) => {
             delete DevTestIds.tsx when notifications are implemented. */}
         <DevTestIds />
 
-        <div className="w-[40px] h-[40px] rounded-full overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-100 transition-all select-none shrink-0">
-          <Image
-            src="/dashboard/icons/Avatar Base.svg"
-            alt="User Avatar"
-            width={40}
-            height={40}
-            className="w-full h-full object-cover"
-          />
+        <div ref={profileRef} className="relative shrink-0">
+          <button
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={profileOpen}
+            aria-label="Show user details"
+            onClick={() => setProfileOpen((value) => !value)}
+            className={`block w-[40px] h-[40px] rounded-full overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary-100 transition-all select-none ${
+              profileOpen ? "ring-2 ring-primary-100" : ""
+            }`}
+          >
+            <Image
+              src="/dashboard/icons/Avatar Base.svg"
+              alt="User Avatar"
+              width={40}
+              height={40}
+              className="w-full h-full object-cover"
+            />
+          </button>
+
+          {profileOpen && (
+            <UserDetailsPopover
+              user={user}
+              fullName={fullName}
+              role={userRole || role}
+            />
+          )}
         </div>
       </div>
     </header>
@@ -292,6 +348,93 @@ const Navbar = ({ userRole }: NavbarProps) => {
       onCancel={cancelSwitch}
     />
     </>
+  );
+};
+
+interface UserDetailsPopoverProps {
+  user: UserData | null;
+  fullName: string;
+  role: string;
+}
+
+const DetailRow = ({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value?: string;
+}) => (
+  <div className="flex items-start gap-2.5 px-2 py-1.5">
+    <Icon size={16} className="mt-0.5 shrink-0 text-pneutral-500" />
+    <div className="flex min-w-0 flex-col">
+      <span className="text-label-l2 text-pneutral-500">{label}</span>
+      <span className="truncate text-p3 text-pneutral-900" title={value}>
+        {value || "—"}
+      </span>
+    </div>
+  </div>
+);
+
+const UserDetailsPopover = ({ user, fullName, role }: UserDetailsPopoverProps) => {
+  const name = user?.fullName || fullName;
+  const initials = name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  // The API sends these as strings; a Date only turns up if one was set locally.
+  const toIso = (value?: string | Date) =>
+    value instanceof Date ? value.toISOString() : value;
+
+  // `MALE` / `male` → `Male`.
+  const gender = user?.gender
+    ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1).toLowerCase()
+    : undefined;
+
+  return (
+    <div className="absolute right-0 top-full z-50 mt-2 w-75 rounded-lg border border-pneutral-200 bg-white p-3 shadow-[0px_8px_32px_0px_#00000026]">
+      <div className="flex items-center gap-3 border-b border-pneutral-100 px-2 pb-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-100 text-p3 font-semibold text-primary-700">
+          {initials || "?"}
+        </div>
+        <div className="flex min-w-0 flex-col">
+          <p className="truncate text-p3 font-semibold text-pneutral-900" title={name}>
+            {name || "—"}
+          </p>
+          <p className="truncate text-label-l2 text-pneutral-500">{role || "—"}</p>
+        </div>
+      </div>
+
+      {user ? (
+        <div className="flex flex-col pt-2">
+          <DetailRow icon={Mail} label="Email" value={user.userEmail} />
+          <DetailRow icon={Phone} label="Phone" value={user.userPhone} />
+          {user.employeeId && (
+            <DetailRow icon={IdCard} label="Employee ID" value={user.employeeId} />
+          )}
+          {user.department && (
+            <DetailRow icon={Briefcase} label="Department" value={user.department} />
+          )}
+          <DetailRow
+            icon={CalendarDays}
+            label="Date of Joining"
+            value={formatDate(toIso(user.createdAt))}
+          />
+          <DetailRow icon={User} label="Gender" value={gender} />
+          <DetailRow
+            icon={Clock}
+            label="Last Login"
+            value={formatDateTime(toIso(user.lastLogin))}
+          />
+        </div>
+      ) : (
+        <p className="px-2 pt-3 text-p3 text-pneutral-500">Loading...</p>
+      )}
+    </div>
   );
 };
 

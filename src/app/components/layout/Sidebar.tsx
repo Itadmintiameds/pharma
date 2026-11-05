@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -23,7 +23,6 @@ import {
   PackageOpen,
   Scale,
   Wallet,
-  ChevronDown,
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
@@ -60,14 +59,6 @@ const Sidebar = () => {
   } = useAccess();
 
   const { hasApprovedPharmacy } = useBusinessRegistration();
-
-  // Items with sub-items (Reports) expand downwards in place. Starts open when
-  // the current page is one of the sub-items, so the active link stays visible.
-  const [openItems, setOpenItems] = useState<Record<string, boolean>>(() => ({
-    Reports: pathname.startsWith("/dashboard/reports/"),
-  }));
-  const toggleItem = (name: string) =>
-    setOpenItems((prev) => ({ ...prev, [name]: !prev[name] }));
 
   // Whether Suppliers / Supplier Payment are listed at all is decided by the
   // access rules (warehouse side only under centralized inventory). Where they
@@ -106,10 +97,7 @@ const Sidebar = () => {
       icon: typeof LayoutDashboard;
       path: string;
       isLocked: boolean;
-      children?: {
-        name: string;
-        path: string;
-      }[];
+      activeOnSubpaths?: boolean;
     }[];
   }[] = [
     {
@@ -273,132 +261,9 @@ const Sidebar = () => {
           icon: BarChart3,
           path: "/dashboard/reports",
           isLocked: !hasApprovedPharmacy,
-          children: [
-            {
-              name: "Inventory Sales Report",
-              path: "/dashboard/reports/inventorySalesReport",
-            },
-            {
-              name: "Current Stock Summary Report",
-              path: "/dashboard/reports/currentStockSummaryReport",
-            },
-            {
-              name: "Stock Movement Report",
-              path: "/dashboard/reports/stockMovementReport",
-            },
-            {
-              name: "Stock Expiry Report",
-              path: "/dashboard/reports/stockExpiryReport",
-            },
-            {
-              name: "Stock Damage Report",
-              path: "/dashboard/reports/stockDamageReport",
-            },
-            {
-              name: "Stock Return Report",
-              path: "/dashboard/reports/stockReturnReport",
-            },
-            {
-              name: "Stock Adjustment Report",
-              path: "/dashboard/reports/stockAdjustmentReport",
-            },
-            {
-              name: "Purchase Register Report",
-              path: "/dashboard/reports/purchaseRegisterReport",
-            },
-            {
-              name: "Supplier Purchase Return Report",
-              path: "/dashboard/reports/supplierPurchaseReturnReport",
-            },
-            {
-              name: "Supplier Outstanding Report",
-              path: "/dashboard/reports/supplierOutstandingReport",
-            },
-            {
-              name: "Supplier Payment Report",
-              path: "/dashboard/reports/supplierPaymentReport",
-            },
-            {
-              name: "Pharmacy Sales Return Report",
-              path: "/dashboard/reports/pharmacySalesReturnReport",
-            },
-            {
-              name: "Gross Profit Report",
-              path: "/dashboard/reports/grossProfitReport",
-            },
-            {
-              name: "User-wise Collection Report",
-              path: "/dashboard/reports/userwiseCollectionReport",
-            },
-            {
-              name: "Product-wise Purchase and Sales Analysis Report",
-              path: "/dashboard/reports/productwisePurchaseandSalesAnalysisReport",
-            },
-            {
-              name: "Bill Summary",
-              path: "/dashboard/reports/BillSummary",
-            },
-            {
-              name: "Detailed Sale Report",
-              path: "/dashboard/reports/DetailedSaleReport",
-            },
-            {
-              name: "Doctor-wise Sale Report",
-              path: "/dashboard/reports/DoctorWiseSaleReport",
-            },
-            {
-              name: "Bill Due Summary",
-              path: "/dashboard/reports/BillDueSummary",
-            },
-            {
-              name: "Sales Summary",
-              path: "/dashboard/reports/SalesSummary",
-            },
-            {
-              name: "Payment Mode Summary",
-              path: "/dashboard/reports/PaymentModeSummary",
-            },
-            {
-              name: "Receipt Details",
-              path: "/dashboard/reports/ReceiptDetails",
-            },
-            {
-              name: "Day Close Bill Count Summary",
-              path: "/dashboard/reports/DayCloseBillCountSummary",
-            },
-            {
-              name: "Day Close Sales Summary",
-              path: "/dashboard/reports/DayCloseSalesSummary",
-            },
-            {
-              name: "Day Close Payment Mode Summary",
-              path: "/dashboard/reports/DayClosePaymentModeSummary",
-            },
-            {
-              name: "Day Close Receipt Details",
-              path: "/dashboard/reports/DayCloseReceiptDetails",
-            },
-            {
-              name: "Day Close Billing by Patient Type",
-              path: "/dashboard/reports/DayCloseBillingByPatientType",
-            },
-            {
-              name: "Day Close Billing by User",
-              path: "/dashboard/reports/DayCloseBillingByUser",
-            },
-            {
-              name: "Day Close Receipt by User",
-              path: "/dashboard/reports/DayCloseReceiptByUser",
-            },
-            {
-              name: "Day Close Current Bill Details",
-              path: "/dashboard/reports/DayCloseCurrentBillDetails",
-            },
-            {
-              name: "Day Close Sales Return Details",
-              path: "/dashboard/reports/DayCloseSalesReturnDetails",
-            },
-          ],
+          // Each report opens from a card on the Reports page, so the item stays
+          // highlighted on every report under it.
+          activeOnSubpaths: true,
         },
       ],
     },
@@ -481,7 +346,9 @@ const Sidebar = () => {
               )}
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.path;
+                const isActive =
+                  pathname === item.path ||
+                  (!!item.activeOnSubpaths && pathname.startsWith(`${item.path}/`));
                 // Two reasons an item can be locked: the module is ruled out by
                 // the organization or role (Super Admin only — everyone else has
                 // it hidden), or business setup is not yet done. The access
@@ -492,70 +359,6 @@ const Sidebar = () => {
                   : item.isLocked
                     ? "Complete business setup to unlock this module"
                     : undefined;
-
-                if (item.children) {
-                  const isOpen = !isLocked && !!openItems[item.name];
-                  const isChildActive = item.children.some(
-                    (child) => pathname === child.path
-                  );
-                  return (
-                    <div key={item.name} className="flex flex-col gap-[2px]">
-                      <button
-                        type="button"
-                        title={lockedMessage}
-                        aria-expanded={isOpen}
-                        onClick={() => {
-                          if (!isLocked) toggleItem(item.name);
-                        }}
-                        className={`w-full flex items-center gap-3 px-4 h-[36px] rounded-[10px] text-[14px] font-medium transition-all duration-200 select-none ${
-                          isLocked
-                            ? "text-pneutral-50 cursor-not-allowed"
-                            : `text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer ${
-                                isChildActive ? "font-semibold" : ""
-                              }`
-                        }`}
-                      >
-                        <Icon size={18} className="shrink-0" />
-                        <span className="truncate">{item.name}</span>
-                        {isLocked ? (
-                          <Image
-                            src="/sidebar/lock-icon.svg"
-                            alt="Locked"
-                            width={14}
-                            height={14}
-                            className="ml-auto shrink-0"
-                            style={{ width: "auto", height: "auto" }}
-                          />
-                        ) : (
-                          <ChevronDown
-                            size={16}
-                            className={`ml-auto shrink-0 transition-transform duration-200 ${
-                              isOpen ? "rotate-180" : ""
-                            }`}
-                          />
-                        )}
-                      </button>
-                      {isOpen &&
-                        item.children.map((child) => {
-                          const isSubActive = pathname === child.path;
-                          return (
-                            <Link
-                              key={child.name}
-                              href={child.path}
-                              title={child.name}
-                              className={`flex items-center gap-3 pl-9 pr-4 h-[36px] rounded-[10px] text-[13px] font-medium transition-all duration-200 select-none ${
-                                isSubActive
-                                  ? "bg-secondary-50 text-pneutral-800 shadow-sm font-semibold"
-                                  : "text-pneutral-50 hover:bg-secondary-50 hover:text-pneutral-800 cursor-pointer"
-                              }`}
-                            >
-                              <span className="truncate">{child.name}</span>
-                            </Link>
-                          );
-                        })}
-                    </div>
-                  );
-                }
 
                 return (
                   <Link

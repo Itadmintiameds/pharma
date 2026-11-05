@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import type { ReportExportFormat } from "@/types/FinancialReportData";
 import type { ReportAction } from "./useFinancialReport";
 
@@ -24,7 +26,7 @@ const DOWNLOAD_OPTIONS: { key: ReportExportFormat | "pdf"; label: string; hint: 
   { key: "pdf", label: "PDF", hint: 'Choose "Save as PDF" in the print dialog' },
 ];
 
-/** Title row of a report page: icon tile, title and description, Print / Download. */
+/** Title row of a report page: icon tile, title and description, Back / Print / Download. */
 export default function ReportHeader({
   title,
   description,
@@ -72,6 +74,15 @@ export default function ReportHeader({
       </div>
 
       <div className="flex gap-3">
+        {/* Back to the Reports page, where every report is opened from. */}
+        <Link
+          href="/dashboard/reports"
+          className="flex h-12 min-w-27 items-center justify-center gap-2 rounded-lg border-2 border-pneutral-900 px-4 text-label-l4 font-medium text-pneutral-900"
+        >
+          <ArrowLeft className="size-5" strokeWidth={1.5} />
+          Back
+        </Link>
+
         <button
           type="button"
           onClick={onPrint}
