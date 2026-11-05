@@ -46,6 +46,22 @@ export const editPurchaseReturn = async (
   }
 };
 
+// Cancel a saved return with the reason given. The pharmacy / warehouse
+// header is added by the api client. Returns the return as CANCELLED.
+export const cancelPurchaseReturn = async (
+  purchaseReturnId: number | string,
+  cancelReason: string
+): Promise<PurchaseReturnData> => {
+  try {
+    const response = await api.put(`/purchase-return/${purchaseReturnId}/cancel`, {
+      cancelReason,
+    });
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to cancel the purchase return.');
+  }
+};
+
 // Raise a purchase return — as a DRAFT, or CONFIRMED to post it
 export const createPurchaseReturn = async (
   payload: PurchaseReturnCreatePayload
