@@ -117,6 +117,10 @@ export interface DetailedSaleKpi {
   /** CGST + SGST */
   totalGstAmount: number;
   totalNetAmount: number;
+  /** Round-off of the bills the matching lines belong to, each bill once. */
+  totalRoundOffAmount: number;
+  /** totalNetAmount + totalRoundOffAmount */
+  totalNetAmountAfterRoundOff: number;
 }
 
 /** One product line of a bill — a bill with two products is two rows. */
@@ -150,6 +154,10 @@ export interface DetailedSaleRow {
   cgstAmount: number;
   sgstAmount: number;
   netAmount: number;
+  /** The bill's round-off, repeated on every line of the bill; null on older bills. */
+  billRoundOffAmount: number | null;
+  /** The bill's net total after round-off, repeated on every line of the bill. */
+  billNetAmountAfterRoundOff: number | null;
 }
 
 export type DetailedSaleResponse = FinancialReportResponse<DetailedSaleKpi, DetailedSaleRow>;

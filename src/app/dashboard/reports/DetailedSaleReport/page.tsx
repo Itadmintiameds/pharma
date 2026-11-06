@@ -170,6 +170,26 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
       <span className="font-semibold whitespace-nowrap">{formatRupees(row.netAmount)}</span>
     ),
   },
+  // Bill-level: the same on every line of a bill.
+  {
+    key: "billRoundOff",
+    header: "Bill Round Off",
+    align: "right",
+    className: "min-w-[95px]",
+    cell: (row) => <span className="whitespace-nowrap">{formatRupees(row.billRoundOffAmount ?? 0)}</span>,
+  },
+  {
+    key: "billNetAfterRoundOff",
+    header: "Bill Net (Rounded)",
+    align: "right",
+    className: "min-w-[120px]",
+    sortValue: (row) => row.billNetAmountAfterRoundOff ?? row.netAmount,
+    cell: (row) => (
+      <span className="font-semibold whitespace-nowrap">
+        {formatRupees(row.billNetAmountAfterRoundOff ?? row.netAmount)}
+      </span>
+    ),
+  },
 ];
 
 export default function DetailedSaleReportPage() {
@@ -207,6 +227,8 @@ export default function DetailedSaleReportPage() {
   const totalItems = data?.billDetails.totalElements ?? 0;
   const gross = kpi?.totalGrossAmount ?? 0;
   const discount = kpi?.totalDiscountAmount ?? 0;
+  // Older backends send no round-off total; fall back to the plain net amount.
+  const netAfterRoundOff = kpi?.totalNetAmountAfterRoundOff ?? kpi?.totalNetAmount ?? 0;
 
   return (
     <div id={report.printId} className="@container flex flex-col gap-4">
@@ -318,11 +340,11 @@ export default function DetailedSaleReportPage() {
             />
             <ReportKpiCard
               label="Net Amount"
-              value={formatRupees(kpi?.totalNetAmount ?? 0)}
+              value={formatRupees(netAfterRoundOff)}
               icon="/Reports/CheckCircleSolid.svg"
               tone="success"
-              highlight={formatPercent(kpi?.totalNetAmount ?? 0, gross)}
-              caption="of gross amount"
+              highlight={formatPercent(netAfterRoundOff, gross)}
+              caption={`of gross amount · round off ${formatRupees(kpi?.totalRoundOffAmount ?? 0)}`}
             />
           </div>
 
