@@ -23,7 +23,7 @@ const CARD_SHADOW =
 
 const ALL_FORMATS = "Print · PDF · Excel · CSV";
 
-type Category = "sales" | "inventory" | "purchase";
+type Category = "sales" | "inventory" | "purchase" | "gst";
 
 type Report = {
   title: string;
@@ -271,6 +271,23 @@ const REPORT_SECTIONS: ReportSection[] = [
             description: "Purchased vs sold quantities and values by product.",
             href: "/dashboard/reports/productwisePurchaseandSalesAnalysisReport",
             icon: RefreshCw,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    category: "gst",
+    title: "GST & Finance",
+    groups: [
+      {
+        title: "GST & Finance",
+        reports: [
+          {
+            title: "GST Sales & Purchase Summary Report",
+            description: "Sales and purchase ledgers with GST, returns and Net GST by month.",
+            href: "/dashboard/reports/GSTSalesAndPurchaseSummaryReport",
+            icon: Scale,
           },
         ],
       },

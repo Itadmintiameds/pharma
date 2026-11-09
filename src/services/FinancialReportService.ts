@@ -11,6 +11,8 @@ import {
   DetailedSaleResponse,
   DoctorWiseResponse,
   FinancialReportParams,
+  GstRegistration,
+  GstSalesPurchaseSummaryResponse,
   PaymentModeResponse,
   ReceiptByUserResponse,
   ReceiptDetailsResponse,
@@ -193,6 +195,30 @@ export const getSalesReturnDetails = async (
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to fetch the sales return details report.');
+  }
+};
+
+// GST Sales & Purchase Summary: both ledgers and the monthly Net GST (not paged).
+export const getGstSalesPurchaseSummary = async (
+  params: FinancialReportParams
+): Promise<GstSalesPurchaseSummaryResponse> => {
+  try {
+    const response = await getReport('/financial-report/gst-sales-purchase-summary', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the GST sales & purchase summary.');
+  }
+};
+
+// The GSTINs of the given pharmacies / warehouses, for the GSTIN filter.
+export const getGstRegistrations = async (
+  params: Pick<FinancialReportParams, 'pharmacyIds' | 'warehouseIds'>
+): Promise<GstRegistration[]> => {
+  try {
+    const response = await getReport('/financial-report/gst-sales-purchase-summary/gstins', params);
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the GSTINs.');
   }
 };
 

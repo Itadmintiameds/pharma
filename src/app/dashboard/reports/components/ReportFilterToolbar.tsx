@@ -20,9 +20,23 @@ export interface AppliedFilterChip {
   onRemove?: () => void;
 }
 
-interface ReportFilterToolbarProps {
-  period: ReportPeriod;
-  onPeriodChange: (period: ReportPeriod) => void;
+type PeriodProps =
+  | {
+      period: ReportPeriod;
+      onPeriodChange: (period: ReportPeriod) => void;
+      dateFields?: never;
+    }
+  | {
+      period?: never;
+      onPeriodChange?: never;
+      /**
+       * Replaces the period tabs and the date field, for a report that takes its
+       * own dates (e.g. separate From / To fields). One grid cell per field.
+       */
+      dateFields: React.ReactNode;
+    };
+
+type ReportFilterToolbarProps = PeriodProps & {
   /** The period tabs to offer, in PERIOD_TABS order. Default: all four. */
   periodModes?: ReportPeriodMode[];
   /** Fields per row on a wide card, the date field included: 4 (default) or 5. */
@@ -40,7 +54,7 @@ interface ReportFilterToolbarProps {
   onReset: () => void;
   onSearch: () => void;
   searching?: boolean;
-}
+};
 
 const OUTLINE_BUTTON =
   "flex h-12 min-w-27 items-center justify-center gap-2 rounded-lg border-2 border-secondary-700 px-4 text-label-l4 font-medium text-secondary-700";
@@ -180,6 +194,51 @@ function PeriodField({
   );
 }
 
+/** A labelled single-date field ("From Date"), shown as "01-Apr-2026" with a calendar button. */
+export function DateField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  max?: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="w-full">
+      <label className="mb-1 block px-1 text-label-l4 font-medium text-pneutral-900">{label}</label>
+      <div className="flex h-12 w-full items-center gap-3 rounded-md border border-pneutral-300 bg-white px-3 focus-within:border-secondary-300 focus-within:ring-1 focus-within:ring-secondary-300">
+        <div className="flex min-w-0 flex-1 items-center">
+          <PickerInput
+            ref={inputRef}
+            type="date"
+            label={label}
+            value={value}
+            display={formatReportDate(value)}
+            min={min}
+            max={max}
+            onChange={onChange}
+          />
+        </div>
+        <button
+          type="button"
+          aria-label={`Open ${label} calendar`}
+          onClick={() => openPicker(inputRef.current)}
+          className="shrink-0"
+        >
+          <Image src="/Reports/Calendar.svg" alt="" width={20} height={20} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The filter card at the top of a report: reporting-period tabs and the
  * More Filters / Reset / Search actions, the filter fields, and a chip per
@@ -192,6 +251,7 @@ export default function ReportFilterToolbar({
   period,
   onPeriodChange,
   periodModes,
+  dateFields,
   columns = 4,
   children,
   moreFilters,
@@ -207,7 +267,7 @@ export default function ReportFilterToolbar({
     <div className="@container flex w-full flex-col gap-4 rounded-2xl bg-white p-4 print:hidden shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]">
       <div className="flex flex-wrap items-center gap-4 border-b border-pneutral-200">
         <div role="tablist" aria-label="Reporting period" className="flex flex-1 flex-wrap items-start">
-          {PERIOD_TABS.filter(({ mode }) => !periodModes || periodModes.includes(mode)).map(({ mode, label }) => {
+          {period && PERIOD_TABS.filter(({ mode }) => !periodModes || periodModes.includes(mode)).map(({ mode, label }) => {
             const active = period.mode === mode;
             return (
               <button
@@ -215,7 +275,7 @@ export default function ReportFilterToolbar({
                 type="button"
                 role="tab"
                 aria-selected={active}
-                onClick={() => onPeriodChange({ ...period, mode })}
+                onClick={() => onPeriodChange?.({ ...period, mode })}
                 className="flex flex-col items-center gap-2 pt-2"
               >
                 <span
@@ -268,7 +328,7 @@ export default function ReportFilterToolbar({
           columns === 5 ? "@3xl:grid-cols-3 @4xl:grid-cols-5" : "@4xl:grid-cols-4",
         )}
       >
-        <PeriodField period={period} onChange={onPeriodChange} />
+        {period && onPeriodChange ? <PeriodField period={period} onChange={onPeriodChange} /> : dateFields}
         {children}
         {showMore && moreFilters}
       </div>

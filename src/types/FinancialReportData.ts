@@ -34,6 +34,14 @@ export interface FinancialReportParams {
   pendingStatus?: string;
   /** User ids from /user/names, e.g. "USR-2026-00003": who raised the bill (Day Close reports). */
   userIds?: string[];
+  /** GST report: warehouses to include beside `pharmacyIds`. */
+  warehouseIds?: string[];
+  /** GST report: only the locations filing under this GSTIN. */
+  gstin?: string;
+  /** GST report: ALL (default), SALES or PURCHASES. */
+  transactionType?: GstTransactionType;
+  /** GST report: ALL (default), LOCAL or CENTRAL. */
+  gstClassification?: GstClassification;
   /** Zero-based. */
   page?: number;
   size?: number;
@@ -58,9 +66,130 @@ export type ReportExportKey =
   | 'billing-by-user'
   | 'receipt-by-user'
   | 'current-bill-details'
-  | 'sales-return-details';
+  | 'sales-return-details'
+  | 'gst-sales-purchase-summary';
 
 export type ReportExportFormat = 'xlsx' | 'csv';
+
+// ---------------------------------------------------------------- GST report
+
+export type GstTransactionType = 'ALL' | 'SALES' | 'PURCHASES';
+export type GstClassification = 'ALL' | 'LOCAL' | 'CENTRAL';
+
+/**
+ * One line of the sales or purchase ledger: a month, a GST rate's subtotal or
+ * the ledger total. Amounts exclude GST except the tax columns.
+ */
+export interface GstLedgerRow {
+  rowType: 'MONTH' | 'SUBTOTAL' | 'TOTAL';
+  /** "2026-09" on MONTH rows; null otherwise. */
+  month: string | null;
+  /** "September 2026", "GST LOCAL SALES 5% - Subtotal", "TOTAL SALES". */
+  label: string;
+  /** Net Sale / Net Purchase: amount − crDrNote. */
+  netAmount: number;
+  /** taxAmount − taxReturn */
+  netTax: number;
+  /** Sale / Purchase Amount: taxable value before returns. */
+  amount: number;
+  taxAmount: number;
+  /** Taxable value of the returns: credit note on sales, debit note on purchases. */
+  crDrNote: number;
+  /** GST on the returns. */
+  taxReturn: number;
+  /** Not recorded yet: always zero. */
+  taxRefund: number;
+}
+
+/** "GST LOCAL SALES 5%": a row per month with transactions, then the subtotal. */
+export interface GstRateGroup {
+  gstRate: number;
+  title: string;
+  months: GstLedgerRow[];
+  subtotal: GstLedgerRow;
+}
+
+/** "SALES LOCAL", "PURCHASE CENTRAL", …; no rate groups when nothing happened. */
+export interface GstLedgerSection {
+  classification: 'LOCAL' | 'CENTRAL';
+  title: string;
+  rateGroups: GstRateGroup[];
+}
+
+export interface GstLedger {
+  sections: GstLedgerSection[];
+  /** TOTAL SALES / TOTAL PURCHASES */
+  total: GstLedgerRow;
+}
+
+export interface GstSummaryRow {
+  rowType: 'MONTH' | 'TOTAL';
+  /** "2026-09" on MONTH rows; null on the total. */
+  month: string | null;
+  /** "September 2026" or "Grand Total". */
+  label: string;
+  outputGst: number;
+  inputGst: number;
+  /** outputGst − inputGst; negative when more GST was paid than collected. */
+  netGst: number;
+}
+
+/** Every month of the period, then the Grand Total. */
+export interface GstSummary {
+  months: GstSummaryRow[];
+  grandTotal: GstSummaryRow;
+}
+
+export interface GstLocation {
+  locationType: 'PHARMACY' | 'WAREHOUSE';
+  locationId: string;
+  locationName: string;
+  address: string | null;
+}
+
+/** A GSTIN among the selected locations, with the locations filing under it. */
+export interface GstRegistration {
+  gstin: string | null;
+  dealerName: string | null;
+  address: string | null;
+  locations: GstLocation[];
+}
+
+export interface GstReportHeader {
+  reportName: string;
+  /** yyyy-mm-dd, inclusive. */
+  fromDate: string;
+  toDate: string;
+  transactionType: GstTransactionType;
+  gstClassification: GstClassification;
+  /** Empty: every rate. */
+  gstRates: string[];
+  registrations: GstRegistration[];
+}
+
+/** Sales figures are null when only purchases were asked for, and vice versa; netGst unless both. */
+export interface GstSalesPurchaseKpi {
+  netSale: number | null;
+  outputGst: number | null;
+  netPurchase: number | null;
+  inputGst: number | null;
+  netGst: number | null;
+}
+
+/**
+ * Not paged. salesLedger is null when only purchases were asked for,
+ * purchaseLedger when only sales were, and gstSummary unless both were.
+ */
+export interface GstSalesPurchaseSummaryResponse {
+  generatedBy: string;
+  /** Server time, ISO local date-time. */
+  generatedOn: string;
+  header: GstReportHeader;
+  kpi: GstSalesPurchaseKpi;
+  salesLedger: GstLedger | null;
+  purchaseLedger: GstLedger | null;
+  gstSummary: GstSummary | null;
+}
 
 /** One page of report rows. `page` is zero-based, matching the request. */
 export interface ReportPage<T> {
