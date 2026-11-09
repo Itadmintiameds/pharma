@@ -227,6 +227,17 @@ export interface PaymentDetails {
   /** Still owed after this payment — non-zero only for an in-patient, who may
    *  pay in part through any mode or bill the whole amount to credit. */
   pendingAmount: number;
+  /** Every payment taken against a saved bill, oldest first — set only when
+   *  viewing one. The invoice falls back to the bill date and amountReceived
+   *  when it is absent (a bill still being rung up). */
+  history?: PaymentHistoryEntry[];
+}
+
+/** One payment made against a bill, as the invoice lists it. */
+export interface PaymentHistoryEntry {
+  date: string;
+  amount: number;
+  paymentMode: PaymentMode;
 }
 
 /** One line of a bill as the billing API returns it. */
@@ -268,6 +279,10 @@ export interface BillingPaymentRecord {
   receivedAmount: number;
   pendingAmount: number;
   transactionId: string | null;
+  /** When the payment was taken, if the API sends it; the bill's createdAt
+   *  stands in otherwise. */
+  paymentDate?: string | null;
+  createdAt?: string | null;
 }
 
 /** A saved bill, from /billing/allBilling and /billing/{id}. */

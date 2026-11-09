@@ -423,6 +423,12 @@ const SalesBillingContent = () => {
           remarks: "",
           changeDue: 0,
           pendingAmount: pendingOf(bill),
+          // Each payment taken against the bill, for the invoice's payment card.
+          history: (bill.billingPayments ?? []).map((p) => ({
+            date: p.paymentDate || p.createdAt || bill.createdAt || "",
+            amount: p.receivedAmount || 0,
+            paymentMode: p.paymentMode,
+          })),
         },
         invoiceNo: bill.billNo,
         billDate: bill.createdAt?.split("T")[0] ?? "",

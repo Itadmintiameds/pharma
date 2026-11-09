@@ -9,6 +9,7 @@ import Dropdown from "@/app/components/common/Dropdown";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ProductService } from "@/services/ProductService";
 import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import StepIndicator from "./StepIndicator";
 import {
@@ -166,8 +167,15 @@ interface CreateStockAdjustmentProps {
 
 const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStockAdjustmentProps) => {
   const { selectedPharmacy, pharmacies } = usePharmacyStore();
+  const { selectedWarehouse, warehouses } = useWarehouseStore();
+  const { organization, isWarehouseManager, actingAsWarehouse } = useAccess();
+  // A Super Admin switched to a warehouse (or a Warehouse Manager) is adjusting
+  // warehouse stock, so the location is the warehouse rather than a pharmacy.
+  const isWarehouseContext = isWarehouseManager || actingAsWarehouse;
   const location =
-    selectedPharmacy?.pharmacyName?.trim() || pharmacies[0]?.pharmacyName?.trim() || "—";
+    (isWarehouseContext
+      ? selectedWarehouse?.warehouseName?.trim() || warehouses[0]?.warehouseName?.trim()
+      : selectedPharmacy?.pharmacyName?.trim() || pharmacies[0]?.pharmacyName?.trim()) || "—";
 
   const [isSearching, setIsSearching] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -194,9 +202,8 @@ const CreateStockAdjustment = ({ initialDraft, onCancel, onReview }: CreateStock
 
   // A pharmacy under centralized inventory gets its stock through Warehouse
   // Receipt; everywhere else (no warehouse, or the warehouse itself) it is purchased.
-  const { organization, isWarehouseManager, actingAsWarehouse } = useAccess();
   const stockSource: StockSource =
-    organization.centralizedInventory === true && !isWarehouseManager && !actingAsWarehouse
+    organization.centralizedInventory === true && !isWarehouseContext
       ? "receipt"
       : "purchase";
 
