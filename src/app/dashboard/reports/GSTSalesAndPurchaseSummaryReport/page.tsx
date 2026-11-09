@@ -74,13 +74,12 @@ interface GstFilters {
   gstPercentages: string[];
 }
 
-/** 1 April of the financial year today falls in, to today. */
+/** Today only: From and To both default to today's date. */
 const defaultFilters = (): GstFilters => {
-  const today = new Date();
-  const fyStartYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const today = toDateInputValue(new Date());
   return {
-    fromDate: toDateInputValue(new Date(fyStartYear, 3, 1)),
-    toDate: toDateInputValue(today),
+    fromDate: today,
+    toDate: today,
     locations: [],
     transactionType: "ALL",
     gstin: "",

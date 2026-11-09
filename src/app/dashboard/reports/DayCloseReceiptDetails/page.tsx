@@ -6,7 +6,7 @@ import ReportLoadingState from "../components/ReportLoadingState";
 import ReportSummaryTable from "../components/ReportSummaryTable";
 import DayCloseReportToolbar, {
   EMPTY_DAY_CLOSE_FILTERS,
-  dayCloseFiltersToParams,
+  dayClosingViewParams,
 } from "../components/DayCloseReportToolbar";
 import { useFinancialReport } from "../components/useFinancialReport";
 import { describePeriod, formatGeneratedOn, formatRupees } from "../components/reportUtils";
@@ -18,7 +18,7 @@ const TITLE = "Pharmacy Day Closing Summary - Receipt Details";
 export default function DayCloseReceiptDetailsPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
-    toParams: dayCloseFiltersToParams,
+    toParams: dayClosingViewParams,
     fetchReport: getReceiptDetails,
     exportKey: "receipt-details",
     errorMessage: "Failed to fetch the day close receipt details",

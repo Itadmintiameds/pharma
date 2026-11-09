@@ -130,7 +130,7 @@ const COLUMNS: ReportColumn<DetailedSaleRow>[] = [
     header: "GST %",
     align: "right",
     className: "min-w-[55px]",
-    cell: (row) => (row.gstPercentage ? `${row.gstPercentage}%` : "—"),
+    cell: (row) => (row.gstPercentage ? `${row.gstPercentage}` : "—"),
   },
   {
     key: "grossAmount",

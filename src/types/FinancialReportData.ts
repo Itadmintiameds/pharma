@@ -42,6 +42,12 @@ export interface FinancialReportParams {
   transactionType?: GstTransactionType;
   /** GST report: ALL (default), LOCAL or CENTRAL. */
   gstClassification?: GstClassification;
+  /**
+   * Which screen asks: SUMMARY (default) or DAY_CLOSING. Only sales-summary,
+   * payment-mode-summary and receipt-details read it — on DAY_CLOSING they
+   * leave out IP pending and the export carries the day closing title.
+   */
+  view?: ReportView;
   /** Zero-based. */
   page?: number;
   size?: number;
@@ -72,6 +78,8 @@ export type ReportExportKey =
 export type ReportExportFormat = 'xlsx' | 'csv';
 
 // ---------------------------------------------------------------- GST report
+
+export type ReportView = 'SUMMARY' | 'DAY_CLOSING';
 
 export type GstTransactionType = 'ALL' | 'SALES' | 'PURCHASES';
 export type GstClassification = 'ALL' | 'LOCAL' | 'CENTRAL';

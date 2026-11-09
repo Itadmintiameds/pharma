@@ -6,7 +6,7 @@ import ReportLoadingState from "../components/ReportLoadingState";
 import ReportSummaryTable from "../components/ReportSummaryTable";
 import DayCloseReportToolbar, {
   EMPTY_DAY_CLOSE_FILTERS,
-  dayCloseFiltersToParams,
+  dayClosingViewParams,
 } from "../components/DayCloseReportToolbar";
 import { useFinancialReport } from "../components/useFinancialReport";
 import {
@@ -30,7 +30,7 @@ const TITLE = "Pharmacy Day Closing Summary - Payment Mode Summary";
 export default function DayClosePaymentModeSummaryPage() {
   const report = useFinancialReport({
     emptyFilters: EMPTY_DAY_CLOSE_FILTERS,
-    toParams: dayCloseFiltersToParams,
+    toParams: dayClosingViewParams,
     fetchReport: getPaymentModeSummary,
     exportKey: "payment-mode-summary",
     errorMessage: "Failed to fetch the day close payment mode summary",

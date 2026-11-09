@@ -34,6 +34,16 @@ export const dayCloseFiltersToParams = (f: DayCloseFilters): FinancialReportPara
   userIds: f.userIds,
 });
 
+/**
+ * For the Day Close cut of a report shared with the summaries (sales summary,
+ * payment mode summary, receipt details): asks the backend for the day closing
+ * view, so the data and the download match the day closing screen.
+ */
+export const dayClosingViewParams = (f: DayCloseFilters): FinancialReportParams => ({
+  ...dayCloseFiltersToParams(f),
+  view: "DAY_CLOSING",
+});
+
 const DAY_CLOSE_PERIODS: ReportPeriodMode[] = ["today", "day"];
 
 export default function DayCloseReportToolbar<R extends PagedReport>({
