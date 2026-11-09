@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { getPurchaseById } from '@/services/PurchaseServiceNew'
-import { getAllPurchaseReturn } from '@/services/PurchaseReturnService'
+import {
+  cancelPurchaseReturn,
+  getAllPurchaseReturn,
+} from '@/services/PurchaseReturnService'
 import type { PurchaseDetailsData } from '@/types/PurchaseData'
 import {
   buildReturnedAmountByPurchase,
@@ -19,6 +22,10 @@ interface ViewPurchaseReturnProps {
   purchaseReturnId: number
   /** Back to the Purchase Return list. */
   onClose?: () => void
+  /** Export to run once the record has loaded (from the list row's icons). */
+  autoAction?: 'download' | 'print'
+  /** Opens the edit screen — the draft wizard or the revision screen. */
+  onEdit?: (isDraft: boolean) => void
 }
 
 /**
@@ -29,10 +36,17 @@ interface ViewPurchaseReturnProps {
  * this is what was returned, not what could be returned now — so they are not
  * re-validated against current stock.
  */
-const ViewPurchaseReturn = ({ purchaseReturnId, onClose }: ViewPurchaseReturnProps) => {
+const ViewPurchaseReturn = ({
+  purchaseReturnId,
+  onClose,
+  autoAction,
+  onEdit,
+}: ViewPurchaseReturnProps) => {
   const [invoice, setInvoice] = useState<InvoiceRow>()
   const [lines, setLines] = useState<ReturnDraftLine[]>([])
   const [returnNo, setReturnNo] = useState<string>()
+  const [isCancelled, setIsCancelled] = useState(false)
+  const [isDraft, setIsDraft] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -85,6 +99,14 @@ const ViewPurchaseReturn = ({ purchaseReturnId, onClose }: ViewPurchaseReturnPro
       setInvoice(buildInvoiceRow(purchase, consumedByOthers, returnedAmountByOthers))
       setLines(savedLines)
       setReturnNo(saved.returnNo)
+      const savedStatus = (saved.status ?? '').toUpperCase()
+      setIsDraft(savedStatus === 'DRAFT')
+      // Same rule as the list badge: `isCancel` only counts when the
+      // response carries no status of its own.
+      setIsCancelled(
+        savedStatus === 'CANCELLED' ||
+          (!['DRAFT', 'CONFIRMED'].includes(savedStatus) && Boolean(saved.isCancel))
+      )
       setLoadError('')
     }
 
@@ -130,6 +152,14 @@ const ViewPurchaseReturn = ({ purchaseReturnId, onClose }: ViewPurchaseReturnPro
       returnNo={returnNo}
       onBack={onClose}
       onClose={onClose}
+      autoAction={autoAction}
+      isCancelled={isCancelled}
+      onEdit={onEdit ? () => onEdit(isDraft) : undefined}
+      onCancelReturn={async (reason) => {
+        await cancelPurchaseReturn(purchaseReturnId, reason)
+        // Back to the list, which refetches and shows the Cancelled badge.
+        onClose?.()
+      }}
     />
   )
 }

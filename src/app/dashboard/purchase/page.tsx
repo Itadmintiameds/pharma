@@ -51,6 +51,28 @@ const formatInvoiceDate = (value: string | null | undefined): string => {
   return year && month && day ? `${day}-${month}-${year}` : "—";
 };
 
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Credit days left until the due date (invoice date + credit days — the same
+ * due date the invoice summary shows), counted in whole calendar days so it
+ * drops by one each day. 0 on the due date, negative once past it; null when
+ * the invoice date can't be read.
+ */
+const creditDaysRemaining = (
+  invoiceDate: string | null | undefined,
+  creditDays: number
+): number | null => {
+  const [year, month, day] = (invoiceDate?.split("T")[0] ?? "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+
+  // Both dates at UTC midnight, so the time of day and DST don't shift the count.
+  const due = Date.UTC(year, month - 1, day + Number(creditDays));
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((due - today) / MS_PER_DAY);
+};
+
 /**
  * The purchase API returns only ids and amounts per line, so brand / variant /
  * HSN / expiry / price are pulled from each product's details. One call per
@@ -173,8 +195,22 @@ export const buildColumns = (
     header: "Credit Days",
 
     cell: ({ row }) => {
-      const creditDays = row.original.creditDays;
-      return creditDays ? `${creditDays} Days` : "N/A";
+      const { creditDays, invoiceDate, supplierPaymentStatus } = row.original;
+      if (!creditDays) return "N/A";
+
+      const remaining = creditDaysRemaining(invoiceDate, creditDays);
+      // A settled invoice has nothing counting down, and an unparseable
+      // invoice date leaves nothing to count from.
+      if (remaining === null || supplierPaymentStatus?.toUpperCase() === "PAID") {
+        return `${creditDays} Days`;
+      }
+      if (remaining > 0) return `${remaining} ${remaining === 1 ? "Day" : "Days"}`;
+      if (remaining === 0) return <span className="font-medium text-danger-600">Due Today</span>;
+      return (
+        <span className="font-medium text-warning-600">
+          Overdue by {-remaining} {remaining === -1 ? "Day" : "Days"}
+        </span>
+      );
     },
   },
 

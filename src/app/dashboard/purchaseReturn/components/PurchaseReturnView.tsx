@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle2, Download, Info, Printer, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import Image from 'next/image'
+import { ArrowLeft, CheckCircle2, Download, Info, Trash2 } from 'lucide-react'
 import { ColumnDef } from '@tanstack/react-table'
 import Button from '@/app/components/common/Button'
 import ConfirmDialog from '@/app/components/common/ConfirmDialog'
@@ -14,6 +15,7 @@ import { downloadElementAsPdf, printElementAsPdf } from '@/utils/downloadPdf'
 import WizardHeader from './WizardHeader'
 import ConfirmPurchaseReturn from './ConfirmPurchaseReturn'
 import SuccessPurchaseReturnPopUp from './SuccessPurchaseReturnPopUp'
+import CancelPurchaseReturnPopup from './CancelPurchaseReturnPopup'
 import { buildCreatePayload, type ReturnDraftLine } from './returnDraft'
 import type { InvoiceRow } from './AddPurchaseReturn'
 
@@ -36,6 +38,16 @@ interface PurchaseReturnViewProps {
   onBack?: () => void
   /** Out of the wizard entirely, back to the Purchase Return list. */
   onClose?: () => void
+  /** `readOnly` only: run this export as soon as the record has rendered —
+   *  set when the list row's download or print icon opened the record. */
+  autoAction?: 'download' | 'print'
+  /** `readOnly` only: a cancelled return has nothing left to cancel. */
+  isCancelled?: boolean
+  /** `readOnly` only: opens this return for editing. */
+  onEdit?: () => void
+  /** `readOnly` only: cancels this return with the reason entered in the
+   *  popup. Rejects with the error to show under the reason field. */
+  onCancelReturn?: (reason: string) => Promise<void>
 }
 
 const InvoiceField = ({
@@ -213,6 +225,10 @@ const PurchaseReturnView = ({
   returnNo,
   onBack,
   onClose,
+  autoAction,
+  isCancelled = false,
+  onEdit,
+  onCancelReturn,
 }: PurchaseReturnViewProps) => {
   // Wraps everything above the footer, so the buttons stay out of the print
   // and the PDF.
@@ -229,6 +245,13 @@ const PurchaseReturnView = ({
   // Deleting a draft can't be undone from the app, so it is confirmed first.
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  // Cancelling a saved return asks for a reason first (Figma node 4645:3135).
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState('')
+  // Guards the auto export so a re-render (or Strict Mode's double effect)
+  // doesn't run it twice.
+  const autoActionDone = useRef(false)
 
   const lineItems = useMemo(() => lines.map(toLineItem), [lines])
 
@@ -303,6 +326,39 @@ const PurchaseReturnView = ({
       setSubmitError(err?.message || 'Could not prepare the PDF.')
     } finally {
       setExporting(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!readOnly || !autoAction) return
+    // Deferred to after the record has painted; the cleanup cancels the
+    // timer, so Strict Mode's double effect still exports only once.
+    const timer = window.setTimeout(() => {
+      if (autoActionDone.current) return
+      autoActionDone.current = true
+      if (autoAction === 'print') handlePrint()
+      else handleDownloadPdf()
+    }, 0)
+    return () => window.clearTimeout(timer)
+    // Runs once on mount; the handlers only read the document ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly, autoAction])
+
+  const handleCancelReturn = async (reason: string) => {
+    if (!onCancelReturn) return
+
+    setIsCancelling(true)
+    setCancelError('')
+    try {
+      await onCancelReturn(reason)
+      setCancelOpen(false)
+    } catch (err: unknown) {
+      console.error('Failed to cancel the purchase return:', err)
+      setCancelError(
+        (err instanceof Error && err.message) || 'Could not cancel this purchase return.'
+      )
+    } finally {
+      setIsCancelling(false)
     }
   }
 
@@ -637,16 +693,49 @@ const PurchaseReturnView = ({
 
         {readOnly ? (
           <div className="flex w-full flex-col items-stretch gap-sm sm:w-auto sm:flex-row sm:items-center">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={exporting}
-              onClick={handlePrint}
-              className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-secondary-700! bg-transparent! px-4 text-label-l4! font-medium! text-secondary-700! sm:w-37.5!"
-            >
-              <Printer size={20} className="shrink-0" />
-              Print
-            </Button>
+            {/* A cancelled return is closed, so there is nothing left to revise. */}
+            {onEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={exporting || isCancelled}
+                title={isCancelled ? 'A cancelled return cannot be edited' : undefined}
+                onClick={onEdit}
+                className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-secondary-700! bg-transparent! px-4 text-label-l4! font-medium! text-secondary-700! disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto!"
+              >
+                <Image
+                  src="/Supplier/EditIcon.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="shrink-0"
+                />
+                Edit
+              </Button>
+            )}
+
+            {/* Figma node 4630:86773. Printing lives on the list row now. */}
+            {onCancelReturn && !isCancelled && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={exporting}
+                onClick={() => {
+                  setCancelError('')
+                  setCancelOpen(true)
+                }}
+                className="h-12! w-full! min-w-27 gap-2 rounded-lg! border-2! border-warning-500! bg-transparent! px-4 text-label-l4! font-medium! text-warning-500! sm:w-auto!"
+              >
+                Cancel
+                <Image
+                  src="/PurchaseReturns/XCircleMicroRed.svg"
+                  alt=""
+                  width={20}
+                  height={20}
+                  className="shrink-0"
+                />
+              </Button>
+            )}
 
             <Button
               type="button"
@@ -705,6 +794,17 @@ const PurchaseReturnView = ({
         </div>
         )}
       </div>
+
+      {/* Mounted only while open, so each opening starts with an empty reason. */}
+      {readOnly && cancelOpen && (
+        <CancelPurchaseReturnPopup
+          isOpen
+          isCancelling={isCancelling}
+          error={cancelError}
+          onClose={() => setCancelOpen(false)}
+          onConfirm={handleCancelReturn}
+        />
+      )}
     </div>
   )
 }

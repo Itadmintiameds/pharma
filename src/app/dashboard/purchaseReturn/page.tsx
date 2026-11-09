@@ -92,8 +92,7 @@ const ReturnStatusBadge = ({ status }: { status: PurchaseReturnRow["status"] }) 
 );
 
 const buildReturnColumns = (
-  onView: (id: string) => void,
-  onEdit: (id: string) => void
+  onView: (id: string, action?: "download" | "print") => void
 ): ColumnDef<PurchaseReturnRow, any>[] => [
   {
     accessorKey: "returnNo",
@@ -143,28 +142,31 @@ const buildReturnColumns = (
   {
     header: "ACTIONS",
     cell: ({ row }) => (
+      // Figma node 3543:32474 ("Actions Cell"): download, view, print.
       <div className="flex items-center gap-sm">
         <button
           type="button"
-          aria-label={`View ${row.original.returnNo}`}
-          onClick={() => onView(row.original.id)}
+          aria-label={`Download ${row.original.returnNo}`}
+          title="Download as PDF"
+          onClick={() => onView(row.original.id, "download")}
         >
-          <Image src="/Supplier/EyeIcon.svg" alt="" width={24} height={24} />
+          <Image src="/PurchaseReturns/ActionDownload.svg" alt="" width={24} height={24} />
         </button>
-        {/* A cancelled return is closed, so there is nothing left to revise. */}
         <button
           type="button"
-          aria-label={`Edit ${row.original.returnNo}`}
-          disabled={row.original.status === "Cancelled"}
-          title={
-            row.original.status === "Cancelled"
-              ? "A cancelled return cannot be edited"
-              : undefined
-          }
-          onClick={() => onEdit(row.original.id)}
-          className="disabled:cursor-not-allowed disabled:opacity-40"
+          aria-label={`View ${row.original.returnNo}`}
+          title="View"
+          onClick={() => onView(row.original.id)}
         >
-          <Image src="/Supplier/EditIcon.svg" alt="" width={20} height={20} />
+          <Image src="/PurchaseReturns/ActionEye.svg" alt="" width={24} height={24} />
+        </button>
+        <button
+          type="button"
+          aria-label={`Print ${row.original.returnNo}`}
+          title="Print"
+          onClick={() => onView(row.original.id, "print")}
+        >
+          <Image src="/PurchaseReturns/ActionPrinter.svg" alt="" width={24} height={24} />
         </button>
       </div>
     ),
@@ -179,6 +181,7 @@ const PurchaseReturnContent = () => {
   const showAdd = searchParams.get("view") === "add";
   const editView = searchParams.get("view");
   const editId = searchParams.get("id");
+  const autoAction = searchParams.get("action");
   const { canCreate } = useModulePermissions("PURCHASE_RETURN");
 
   const [search, setSearch] = useState("");
@@ -291,7 +294,17 @@ const PurchaseReturnContent = () => {
     return (
       <ViewPurchaseReturn
         purchaseReturnId={Number(editId)}
+        autoAction={
+          autoAction === "download" || autoAction === "print" ? autoAction : undefined
+        }
         onClose={() => router.push("/dashboard/purchaseReturn")}
+        // A draft reopens on the wizard's review step; anything already
+        // posted goes to the revision screen.
+        onEdit={(isDraft) =>
+          router.push(
+            `/dashboard/purchaseReturn?view=${isDraft ? "editDraft" : "edit"}&id=${editId}`
+          )
+        }
       />
     );
   }
@@ -391,17 +404,10 @@ const PurchaseReturnContent = () => {
 
       <div className="flex w-full flex-col gap-md rounded-lg border border-pneutral-200 bg-white p-md shadow-[0px_0px_12px_4px_#c0c1be33,-4px_-4px_12px_0px_#d5d5d433,4px_4px_12px_-2px_#d5d5d433]">
         <DataTable
-          columns={buildReturnColumns(
-            (id) => router.push(`/dashboard/purchaseReturn?view=view&id=${id}`),
-            (id) => {
-              // A draft reopens on the wizard's review step; anything already
-              // posted goes to the revision screen.
-              const isDraft =
-                returns.find((row) => row.id === id)?.status === "Draft";
-              router.push(
-                `/dashboard/purchaseReturn?view=${isDraft ? "editDraft" : "edit"}&id=${id}`
-              );
-            }
+          columns={buildReturnColumns((id, action) =>
+            router.push(
+              `/dashboard/purchaseReturn?view=view&id=${id}${action ? `&action=${action}` : ""}`
+            )
           )}
           data={filteredReturns.slice(
             (currentPage - 1) * PAGE_SIZE,
