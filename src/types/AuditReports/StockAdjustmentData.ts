@@ -1,6 +1,4 @@
 // Types for GET /auditReports/stock-adjustment (StockAdjustmentReportController in pharma-backend).
-// The controller is still a stub, so these follow the Stock Adjustment Report design
-// and the other /auditReports/* endpoints; align them with the DTOs once they exist.
 
 // As stored in adjustment_type; the backend also accepts the labels "Stock Increase" / "Stock Decrease".
 export type StockAdjustmentType = "INCREASE" | "DECREASE";
@@ -92,13 +90,53 @@ export interface StockAdjustmentReportSummary {
   stockDecreaseQuantity: number;
   stockDecreaseCount: number;
   // stockIncreaseQuantity - stockDecreaseQuantity.
+  netAdjustmentQuantity: number;
+  // Every matching adjustment, increases and decreases: "6 adjustments".
+  totalAdjustments: number;
+}
+
+/** One row of the Adjustment Type Summary table (StockAdjustmentReportTypeSummaryRowDto). */
+export interface StockAdjustmentReportTypeSummaryRow {
+  // INCREASE / DECREASE.
+  code: string;
+  // "Stock Increase" / "Stock Decrease".
+  label: string;
+  quantity: number;
+}
+
+/** Adjustment Type Summary table, over every matching row (StockAdjustmentReportTypeSummaryDto). */
+export interface StockAdjustmentReportTypeSummary {
+  rows: StockAdjustmentReportTypeSummaryRow[];
+  // The Net Adjustment row: increase - decrease.
+  netAdjustmentQuantity: number;
+}
+
+/** One row of the Adjustment Reason Summary table (StockAdjustmentReportReasonSummaryRowDto). */
+export interface StockAdjustmentReportReasonSummaryRow {
+  // As entered on the adjustment, e.g. "Stock Correction".
+  adjustmentReason: string;
+  adjustmentIn: number;
+  adjustmentOut: number;
+  // adjustmentIn - adjustmentOut.
   netAdjustment: number;
+}
+
+/** Adjustment Reason Summary table and its Total row, over every matching row (StockAdjustmentReportReasonSummaryDto). */
+export interface StockAdjustmentReportReasonSummary {
+  rows: StockAdjustmentReportReasonSummaryRow[];
+  totalAdjustmentIn: number;
+  totalAdjustmentOut: number;
+  totalNetAdjustment: number;
 }
 
 /** GET /auditReports/stock-adjustment. */
 export interface StockAdjustmentReportResponse {
   summary: StockAdjustmentReportSummary;
   adjustmentTransactions: StockAdjustmentReportPage;
+  // Quantity per adjustment type, with the Net Adjustment row.
+  adjustmentTypeSummary: StockAdjustmentReportTypeSummary;
+  // In / out / net per reason, with the Total row.
+  adjustmentReasonSummary: StockAdjustmentReportReasonSummary;
   generatedBy: string;
   // Already formatted by the backend, e.g. "08-Oct-2026 05:30 PM".
   generatedOn: string;

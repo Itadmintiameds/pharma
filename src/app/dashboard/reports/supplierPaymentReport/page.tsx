@@ -29,6 +29,7 @@ import { getSuppliersForLocation } from "@/services/SupplierService";
 import type {
   SupplierPaymentMode,
   SupplierPaymentReportFilter,
+  SupplierPaymentReportPaymentSummary,
   SupplierPaymentReportResponse,
   SupplierPaymentReportRow,
   SupplierPaymentReportSortBy,
@@ -137,6 +138,57 @@ const FilterChip = ({ label, onRemove }: { label: string; onRemove?: () => void 
       </button>
     )}
   </span>
+);
+
+const summaryCellClass = "h-12 border-pneutral-200 px-sm py-xsm text-p3";
+
+// Supplier Payment Summary: Particulars / Value, count rows from the backend
+// plus the highlighted Total Payment Amount row.
+const PaymentSummaryTable = ({
+  summary,
+  emptyMessage,
+  emptyClass,
+}: {
+  summary?: SupplierPaymentReportPaymentSummary;
+  // Shown instead of the rows while there is no report to summarise.
+  emptyMessage?: string;
+  emptyClass: string;
+}) => (
+  <div className="flex w-full max-w-110.5 min-w-0 flex-col gap-sm">
+    <h3 className="text-label-l4 font-semibold text-pneutral-900">Supplier Payment Summary</h3>
+    <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+      <table className="w-full table-fixed border-collapse">
+        <thead>
+          <tr className="bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
+            <th className="h-12 border-r border-b border-pneutral-200 px-sm py-xsm text-left">PARTICULARS</th>
+            <th className="h-12 w-[32%] border-b border-pneutral-200 px-sm py-xsm text-right">VALUE</th>
+          </tr>
+        </thead>
+        <tbody>
+          {emptyMessage || !summary ? (
+            <tr className="bg-white">
+              <td colSpan={2} className={`${summaryCellClass} text-center ${emptyClass}`}>
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            <>
+              {(summary.rows ?? []).map((row) => (
+                <tr key={row.code} className="bg-white text-pneutral-900">
+                  <td className={`${summaryCellClass} border-r border-b wrap-break-word`}>{row.label}</td>
+                  <td className={`${summaryCellClass} border-b text-right`}>{row.value ?? 0}</td>
+                </tr>
+              ))}
+              <tr className="bg-primary-100 font-semibold text-primary-900">
+                <td className={`${summaryCellClass} border-r wrap-break-word`}>Total Payment Amount</td>
+                <td className={`${summaryCellClass} text-right`}>₹{money(summary.totalPaymentAmount)}</td>
+              </tr>
+            </>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
 );
 
 interface KpiCardProps {
@@ -1132,54 +1184,62 @@ const SupplierPaymentReportPage = () => {
           </div>
         </div>
 
-        {/* Payment Mode-wise Summary: every mode, over the whole period, not just this page. */}
-        <div className="flex flex-col gap-sm">
-          <h3 className="text-label-l4 font-semibold text-pneutral-900">Payment Mode-wise Summary</h3>
-          <div className={`w-full overflow-x-auto ${scrollbarClass}`}>
-            <div className="w-full min-w-[320px] overflow-hidden rounded-lg border border-pneutral-200 sm:w-[481px]">
-              <table className="w-full table-fixed border-collapse">
-                <thead>
-                  <tr className="bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
-                    <th className="h-12 w-[42%] border-r border-b border-pneutral-200 px-sm py-xsm text-left">
-                      PAYMENT MODE
-                    </th>
-                    <th className="h-12 w-[27%] border-r border-b border-pneutral-200 px-sm py-xsm text-left wrap-break-word">
-                      TRANSACTIONS
-                    </th>
-                    <th className="h-12 border-b border-pneutral-200 px-sm py-xsm text-left">TOTAL AMOUNT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {modeSummary.length === 0 && (
-                    <tr className="bg-white">
-                      <td
-                        colSpan={3}
-                        className={`h-12 border-b border-pneutral-200 px-sm py-xsm text-center text-p3 ${
-                          reportError ? "text-warning-600" : "text-pneutral-500"
-                        }`}
-                      >
-                        {emptyMessage}
-                      </td>
+        {/* Summary tables: over the whole period, not just this page. */}
+        <div className="flex flex-col items-start gap-md lg:flex-row print:flex-row">
+          <PaymentSummaryTable
+            summary={shownReport?.paymentSummary}
+            // Shown once a report has loaded, even with no matching payments (all 0).
+            emptyMessage={!reportLoading && !reportError && shownReport ? undefined : emptyMessage}
+            emptyClass={reportError ? "text-warning-600" : "text-pneutral-500"}
+          />
+
+          {/* Payment Mode-wise Summary: every mode is listed. */}
+          <div className="flex w-full min-w-0 flex-col gap-xsm lg:w-auto">
+            <h3 className="text-label-l4 font-semibold text-pneutral-900">Payment Mode-wise Summary</h3>
+            <div className={`w-full overflow-x-auto ${scrollbarClass}`}>
+              <div className="w-full min-w-[320px] overflow-hidden rounded-lg border border-pneutral-200 sm:w-128">
+                <table className="w-full table-fixed border-collapse">
+                  <thead>
+                    <tr className="bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
+                      <th className="h-12 w-[39%] border-r border-b border-pneutral-200 px-sm py-xsm text-left">
+                        PAYMENT MODE
+                      </th>
+                      <th className="h-12 w-[31.5%] border-r border-b border-pneutral-200 px-sm py-xsm text-left wrap-break-word">
+                        TRANSACTIONS
+                      </th>
+                      <th className="h-12 border-b border-pneutral-200 px-sm py-xsm text-left">TOTAL AMOUNT</th>
                     </tr>
-                  )}
-                  {modeSummary.map((m) => (
-                    <tr key={m.paymentMode} className="bg-white text-p3 text-pneutral-900">
-                      <td className="h-12 border-r border-b border-pneutral-200 px-sm py-xsm">{m.paymentMode}</td>
-                      <td className="h-12 border-r border-b border-pneutral-200 px-sm py-xsm">{m.transactionCount}</td>
-                      <td className="h-12 border-b border-pneutral-200 px-sm py-xsm">₹{money(m.totalAmount)}</td>
-                    </tr>
-                  ))}
-                  {modeSummary.length > 0 && (
-                    <tr className="bg-primary-100 text-p3 font-semibold text-primary-900">
-                      <td className="h-12 border-r border-pneutral-200 px-sm py-xsm">Total</td>
-                      <td className="h-12 border-r border-pneutral-200 px-sm py-xsm">
-                        {report?.paymentModeTotalCount ?? 0}
-                      </td>
-                      <td className="h-12 px-sm py-xsm">₹{money(report?.paymentModeTotalAmount)}</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {modeSummary.length === 0 && (
+                      <tr className="bg-white">
+                        <td
+                          colSpan={3}
+                          className={`${summaryCellClass} border-b text-center ${
+                            reportError ? "text-warning-600" : "text-pneutral-500"
+                          }`}
+                        >
+                          {emptyMessage}
+                        </td>
+                      </tr>
+                    )}
+                    {modeSummary.map((m) => (
+                      <tr key={m.paymentMode} className="bg-white text-pneutral-900">
+                        <td className={`${summaryCellClass} border-r border-b`}>{m.paymentMode}</td>
+                        <td className={`${summaryCellClass} border-r border-b`}>{m.transactionCount}</td>
+                        <td className={`${summaryCellClass} border-b`}>₹{money(m.totalAmount)}</td>
+                      </tr>
+                    ))}
+                    {modeSummary.length > 0 && (
+                      <tr className="bg-primary-100 font-semibold text-primary-900">
+                        <td className={`${summaryCellClass} border-r`}>Total</td>
+                        <td className={`${summaryCellClass} border-r`}>{shownReport?.paymentModeTotalCount ?? 0}</td>
+                        <td className={summaryCellClass}>₹{money(shownReport?.paymentModeTotalAmount)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

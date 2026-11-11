@@ -114,10 +114,29 @@ export interface SupplierPaymentModeSummaryRow {
   totalAmount: number;
 }
 
+/** One count line of the Supplier Payment Summary table (SupplierPaymentReportPaymentSummaryRowDto). */
+export interface SupplierPaymentReportPaymentSummaryRow {
+  // TOTAL_PAYMENT_TRANSACTIONS, TOTAL_SUPPLIERS_PAID ...
+  code: string;
+  // "Total Payment Transactions", "Total Suppliers Paid" ...
+  label: string;
+  // Whole number.
+  value: number;
+}
+
+/** Supplier Payment Summary table, over every matching payment (SupplierPaymentReportPaymentSummaryDto). */
+export interface SupplierPaymentReportPaymentSummary {
+  rows: SupplierPaymentReportPaymentSummaryRow[];
+  // The highlighted Total Payment Amount row.
+  totalPaymentAmount: number;
+}
+
 /** GET /auditReports/supplier-payment (SupplierPaymentReportResponse). */
 export interface SupplierPaymentReportResponse {
   summary: SupplierPaymentReportSummary;
   paymentTransactions: SupplierPaymentReportPage;
+  // Particulars / Value table below the transactions.
+  paymentSummary: SupplierPaymentReportPaymentSummary;
   // Payment Mode-wise Summary table and its Total row.
   paymentModeSummary: SupplierPaymentModeSummaryRow[];
   paymentModeTotalCount: number;

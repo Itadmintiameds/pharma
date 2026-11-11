@@ -130,12 +130,38 @@ export interface SupplierPurchaseReturnReportSummary {
   // Return quantity + free return quantity.
   totalPhysicalReturnQuantity: number;
   freeReturnQuantity: number;
+  // Table Total row and the Supplier Purchase Return Summary table:
+  // Return Purchase Qty "65", Gross Return Amount "₹3,160.00", Discount "₹158.00".
+  // grossAmount - discountAmount = taxableAmount.
+  returnQuantity: number;
+  grossAmount: number;
+  discountAmount: number;
+}
+
+/** One metric of the Supplier Purchase Return Summary table (SupplierPurchaseReturnReportReturnSummaryRowDto). */
+export interface SupplierPurchaseReturnReportReturnSummaryRow {
+  // RETURN_PURCHASE_QUANTITY, GST_REVERSAL_AMOUNT ...
+  code: string;
+  // "Return Purchase Quantity", "GST Reversal Amount" ...
+  label: string;
+  // COUNT = whole number; AMOUNT = rupees, shown as "₹332.31".
+  valueType: "COUNT" | "AMOUNT";
+  value: number;
+}
+
+/** Supplier Purchase Return Summary table, over every matching row (SupplierPurchaseReturnReportReturnSummaryDto). */
+export interface SupplierPurchaseReturnReportReturnSummary {
+  rows: SupplierPurchaseReturnReportReturnSummaryRow[];
+  // The highlighted Total Purchase Return Amount row.
+  totalPurchaseReturnAmount: number;
 }
 
 /** GET /auditReports/supplier-purchase-return (SupplierPurchaseReturnReportResponse). */
 export interface SupplierPurchaseReturnReportResponse {
   summary: SupplierPurchaseReturnReportSummary;
   purchaseReturnDetails: SupplierPurchaseReturnReportPage;
+  // Metric / Value table below the details.
+  purchaseReturnSummary: SupplierPurchaseReturnReportReturnSummary;
   generatedBy: string;
   // Already formatted by the backend, e.g. "08-Oct-2026 05:30 PM".
   generatedOn: string;

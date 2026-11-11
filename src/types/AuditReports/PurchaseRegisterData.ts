@@ -113,12 +113,36 @@ export interface PurchaseRegisterReportSummary {
   // Purchased Quantity card: "410", "15 units received free".
   purchasedQuantity: number;
   freeQuantity: number;
+  // Table Total row (Gross Amount, Discount) and the Purchase Summary table:
+  // "₹15,300.00", "₹765.00". grossAmount - discountAmount = taxableAmount.
+  grossAmount: number;
+  discountAmount: number;
+}
+
+/** One metric of the Purchase Summary table (PurchaseRegisterReportPurchaseSummaryRowDto). */
+export interface PurchaseRegisterReportPurchaseSummaryRow {
+  // PURCHASE_INVOICES, GST_AMOUNT ...
+  code: string;
+  // "Purchase Invoices", "GST Amount" ...
+  label: string;
+  // COUNT = whole number; AMOUNT = rupees, shown as "₹1,491.50".
+  valueType: "COUNT" | "AMOUNT";
+  value: number;
+}
+
+/** Purchase Summary table, over every matching row (PurchaseRegisterReportPurchaseSummaryDto). */
+export interface PurchaseRegisterReportPurchaseSummary {
+  rows: PurchaseRegisterReportPurchaseSummaryRow[];
+  // The highlighted Total Purchase Amount row.
+  totalPurchaseAmount: number;
 }
 
 /** GET /auditReports/purchase-register (PurchaseRegisterReportResponse). */
 export interface PurchaseRegisterReportResponse {
   summary: PurchaseRegisterReportSummary;
   purchaseDetails: PurchaseRegisterReportPage;
+  // Metric / Value table below the details.
+  purchaseSummary: PurchaseRegisterReportPurchaseSummary;
   generatedBy: string;
   // Already formatted by the backend, e.g. "08-Oct-2026 05:30 PM".
   generatedOn: string;
