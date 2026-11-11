@@ -307,6 +307,9 @@ export interface DoctorWiseKpi {
   totalReturnValue: number;
   /** totalSaleValue − totalReturnValue */
   netSaleValue: number;
+  totalRoundOffAmount?: number;
+  /** netSaleValue + totalRoundOffAmount */
+  netSaleValueAfterRoundOff?: number;
 }
 
 /** One product sold on bills referred by one doctor, in one pharmacy. */
@@ -323,6 +326,9 @@ export interface DoctorWiseRow {
   saleValue: number;
   returnValue: number;
   netSaleValue: number;
+  roundOffAmount?: number | null;
+  /** netSaleValue + roundOffAmount */
+  netSaleValueAfterRoundOff?: number | null;
 }
 
 export type DoctorWiseResponse = FinancialReportResponse<DoctorWiseKpi, DoctorWiseRow>;

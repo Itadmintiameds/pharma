@@ -100,12 +100,14 @@ const COLUMNS: ReportColumn<DoctorWiseRow>[] = [
   },
   {
     key: "netSaleValue",
-    header: "Net Sale Value",
+    header: "Net Sale Value (Rounded)",
     align: "right",
-    className: "min-w-[154px]",
-    sortValue: (row) => row.netSaleValue,
+    className: "min-w-[200px]",
+    sortValue: (row) => row.netSaleValueAfterRoundOff ?? row.netSaleValue,
     cell: (row) => (
-      <span className="font-semibold whitespace-nowrap">{formatRupees(row.netSaleValue)}</span>
+      <span className="font-semibold whitespace-nowrap">
+        {formatRupees(row.netSaleValueAfterRoundOff ?? row.netSaleValue)}
+      </span>
     ),
   },
 ];
@@ -141,6 +143,8 @@ export default function DoctorWiseSaleReportPage() {
   const rows = data?.billDetails.content ?? [];
   const totalRows = data?.billDetails.totalElements ?? 0;
   const saleValue = kpi?.totalSaleValue ?? 0;
+  const roundOff = kpi?.totalRoundOffAmount ?? 0;
+  const netAfterRoundOff = kpi?.netSaleValueAfterRoundOff ?? kpi?.netSaleValue ?? 0;
 
   // The KPIs carry value totals for the whole report, but not quantities —
   // those can only be summed when every row is on this page.
@@ -251,11 +255,11 @@ export default function DoctorWiseSaleReportPage() {
             />
             <ReportKpiCard
               label="Net Sale Value"
-              value={formatRupees(kpi?.netSaleValue ?? 0)}
+              value={formatRupees(netAfterRoundOff)}
               icon="/Reports/CheckCircleSolid.svg"
               tone="success"
-              highlight={formatPercent(kpi?.netSaleValue ?? 0, saleValue)}
-              caption="retained after returns"
+              highlight={formatPercent(netAfterRoundOff, saleValue)}
+              caption={`retained after returns · round off ${formatRupees(roundOff)}`}
             />
           </div>
 
@@ -277,7 +281,7 @@ export default function DoctorWiseSaleReportPage() {
               returnQuantity: allRowsShown ? sum((r) => r.returnQuantity) : undefined,
               saleValue: formatRupees(saleValue),
               returnValue: formatRupees(kpi?.totalReturnValue ?? 0),
-              netSaleValue: formatRupees(kpi?.netSaleValue ?? 0),
+              netSaleValue: formatRupees(netAfterRoundOff),
             }}
             emptyState={
               <ReportEmptyState title="No sales match your filters" onClearFilters={report.reset} />
