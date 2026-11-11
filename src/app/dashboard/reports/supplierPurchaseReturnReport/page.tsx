@@ -31,6 +31,7 @@ import type {
   PurchaseReturnStatus,
   SupplierPurchaseReturnReportFilter,
   SupplierPurchaseReturnReportResponse,
+  SupplierPurchaseReturnReportReturnSummary,
   SupplierPurchaseReturnReportRow,
   SupplierPurchaseReturnReportSortBy,
 } from "@/types/AuditReports/SupplierPurchaseReturnData";
@@ -141,6 +142,67 @@ const money = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const percentOf = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
+
+const summaryCellClass = "h-13 border-pneutral-200 px-sm py-xsm text-p3";
+
+// Supplier Purchase Return Summary: Metric / Value over every row matching the
+// filters, with the highlighted Total Purchase Return Amount row.
+const ReturnSummaryTable = ({
+  summary,
+  emptyMessage,
+}: {
+  summary?: SupplierPurchaseReturnReportReturnSummary;
+  // Shown instead of the rows while there is no report to summarise.
+  emptyMessage?: string;
+}) => (
+  <div className="flex w-full max-w-180.5 min-w-0 flex-col gap-sm">
+    <h3 className="text-label-l4 font-semibold text-pneutral-900">Supplier Purchase Return Summary</h3>
+    <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+      <table className="w-full table-fixed border-collapse">
+        <thead>
+          <tr className="bg-secondary-600">
+            <th className="h-14 border-r border-b border-pneutral-200 px-sm py-xsm text-left text-label-l3 font-semibold text-pneutral-50">
+              METRIC
+            </th>
+            <th className="h-14 w-[36%] border-b border-pneutral-200 px-sm py-xsm text-right text-label-l3 font-semibold text-pneutral-50">
+              VALUE
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {emptyMessage || !summary ? (
+            <tr className="bg-white">
+              <td colSpan={2} className={`${summaryCellClass} text-center text-pneutral-500`}>
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            <>
+              {(summary.rows ?? []).map((row) => (
+                <tr key={row.code} className="bg-white">
+                  <td className={`${summaryCellClass} border-r border-b text-pneutral-900 wrap-break-word`}>
+                    {row.label}
+                  </td>
+                  <td className={`${summaryCellClass} border-b text-right text-pneutral-900`}>
+                    {row.valueType === "AMOUNT" ? `₹${money(row.value)}` : (row.value ?? 0)}
+                  </td>
+                </tr>
+              ))}
+              <tr className="bg-primary-100">
+                <td className={`${summaryCellClass} border-r font-semibold text-primary-900 wrap-break-word`}>
+                  Total Purchase Return Amount
+                </td>
+                <td className={`${summaryCellClass} text-right font-semibold text-primary-900`}>
+                  ₹{money(summary.totalPurchaseReturnAmount)}
+                </td>
+              </tr>
+            </>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
 const FilterChip = ({ label, onRemove }: { label: string; onRemove?: () => void }) => (
   <span className="inline-flex items-center justify-center gap-xsm rounded-sm bg-primary-100 px-xsm py-xxsm text-p2 font-medium text-primary-800">
@@ -572,7 +634,7 @@ const SupplierPurchaseReturnReportPage = () => {
   const physicalReturnQuantity = summary?.totalPhysicalReturnQuantity ?? 0;
   const returnFreeQuantity = summary?.freeReturnQuantity ?? 0;
   // The physical quantity counts free units too; the Return Purchase Qty total does not.
-  const returnPurchaseQuantity = physicalReturnQuantity - returnFreeQuantity;
+  const returnPurchaseQuantity = summary?.returnQuantity ?? physicalReturnQuantity - returnFreeQuantity;
   const totalRecords = shownReport?.purchaseReturnDetails?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.purchaseReturnDetails?.totalPages ?? 1);
   const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
@@ -677,9 +739,8 @@ const SupplierPurchaseReturnReportPage = () => {
       align: "right",
       width: "w-[89px]",
       render: (r) => money(r.grossAmount),
-      // The summary carries no gross / discount totals, and a page's sum would
-      // understate them once there is more than one page.
-      total: "---",
+      // From the summary: a page's sum would understate it once there is more than one page.
+      total: summary?.grossAmount != null ? money(summary.grossAmount) : "---",
     },
     {
       key: "discount",
@@ -687,7 +748,7 @@ const SupplierPurchaseReturnReportPage = () => {
       align: "right",
       width: "w-[100px]",
       render: (r) => money(r.discount),
-      total: "---",
+      total: summary?.discountAmount != null ? money(summary.discountAmount) : "---",
     },
     {
       key: "taxable",
@@ -1380,6 +1441,13 @@ const SupplierPurchaseReturnReportPage = () => {
             </div>
           </div>
         </div>
+
+        {/* Totals over every matching row, not just this page. */}
+        <ReturnSummaryTable
+          summary={shownReport?.purchaseReturnSummary}
+          // Shown once a report has loaded, even with no matching rows (all 0).
+          emptyMessage={!reportLoading && !reportError && shownReport ? undefined : emptyMessage}
+        />
       </div>
     </div>
   );

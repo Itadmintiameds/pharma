@@ -111,10 +111,23 @@ export interface ProductWiseReportSummary {
   totalNetSaleAmount: number;
 }
 
+/** One line of the Report Summary table (ProductWiseReportSummaryRowDto). */
+export interface ProductWiseReportSummaryRow {
+  // NET_PURCHASE_QTY, NET_SALES_AMOUNT ...
+  code: string;
+  // "Net Purchase Qty", "Net Sales Amount" ...
+  label: string;
+  // COUNT = whole number ("2,405"); AMOUNT = rupees ("₹99,500.00").
+  valueType: "COUNT" | "AMOUNT";
+  value: number;
+}
+
 /** GET /auditReports/product-wise (ProductWiseReportResponse). */
 export interface ProductWiseReportResponse {
   summary: ProductWiseReportSummary;
   productDetails: ProductWiseReportPage;
+  // Report Summary: Particulars / Value table below the two analysis tables, in display order.
+  reportSummary: ProductWiseReportSummaryRow[];
   generatedBy: string;
   // Already formatted by the backend, e.g. "12-Oct-2026 05:30 PM".
   generatedOn: string;

@@ -564,18 +564,15 @@ const PharmacySalesReturnReportPage = () => {
     },
   ];
 
-  const summaryRows: { label: string; value: string; highlight?: boolean }[] = [
-    { label: "Total Sales Return Transactions", value: String(summary?.totalSalesReturnTransactions ?? 0) },
-    { label: "Total Returned Product/Batch Lines", value: String(summary?.totalReturnLines ?? 0) },
-    { label: "Total Return Qty", value: String(summary?.totalReturnQuantity ?? 0) },
-    { label: "Total Historical Amount", value: `₹${money(summary?.totalHistoricalAmount)}` },
-    { label: "Total Discount Reversed", value: `₹${money(summary?.totalDiscountReversed)}` },
-    { label: "Total Taxable Amount Reversed", value: `₹${money(summary?.totalTaxableAmountReversed)}` },
-    { label: "Total GST Reversed", value: `₹${money(summary?.totalGstReversed)}` },
-    { label: "Total Return Amount", value: `₹${money(summary?.totalReturnAmount)}`, highlight: true },
-    { label: "Total Outstanding Adjustment", value: `₹${money(summary?.totalOutstandingAdjustment)}` },
-    { label: "Total Refund Amount", value: `₹${money(summary?.totalRefundAmount)}` },
-  ];
+  // Report Summary rows, labels, order and the highlighted row all come from the backend.
+  const summaryRows: { key: string; label: string; value: string; highlight?: boolean }[] = (
+    shownReport?.reportSummary ?? []
+  ).map((row) => ({
+    key: row.code,
+    label: row.label,
+    value: row.valueType === "AMOUNT" ? `₹${money(row.value)}` : String(row.value ?? 0),
+    highlight: row.highlighted,
+  }));
 
   const sortIcon = (key: PharmacySalesReturnReportSortBy) => {
     if (key !== sortBy) return <ArrowUpDown className="size-4 shrink-0" />;
@@ -1222,18 +1219,25 @@ const PharmacySalesReturnReportPage = () => {
             </tr>
           </thead>
           <tbody className="text-p3">
-            {summaryRows.map((row, i) => {
+            {(reportLoading || reportError || summaryRows.length === 0) && (
+              <tr className="bg-white">
+                <td colSpan={2} className={`h-13 px-sm py-xsm text-center ${emptyClass}`}>
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
+            {!reportLoading && !reportError && summaryRows.map((row, i) => {
               const last = i === summaryRows.length - 1;
               return (
                 <tr
-                  key={row.label}
+                  key={row.key}
                   className={row.highlight ? "bg-primary-100 font-semibold text-primary-900" : "bg-white text-pneutral-900"}
                 >
                   <td className={`h-13 border-r border-pneutral-200 px-sm py-xsm ${last ? "" : "border-b"}`}>
                     {row.label}
                   </td>
                   <td className={`h-13 border-pneutral-200 px-sm py-xsm text-right ${last ? "" : "border-b"}`}>
-                    {reportLoading ? "…" : row.value}
+                    {row.value}
                   </td>
                 </tr>
               );

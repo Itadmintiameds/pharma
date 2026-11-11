@@ -29,6 +29,7 @@ import { getSuppliersForLocation } from "@/services/SupplierService";
 import type {
   SupplierCreditFilter,
   SupplierOutstandingReportFilter,
+  SupplierOutstandingReportOutstandingSummary,
   SupplierOutstandingReportResponse,
   SupplierOutstandingReportRow,
   SupplierOutstandingReportSortBy,
@@ -143,6 +144,66 @@ const plural = (n: number, word: string, suffix = "s") => `${n} ${word}${n === 1
 // Indian grouping with paise: 145000 → "1,45,000.00".
 const money = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const summaryCellClass = "h-13 border-pneutral-200 px-sm py-xsm text-p3";
+
+// Supplier Outstanding Summary: Particulars / Amount, rows and labels from the
+// backend. The highlighted row (Total Supplier Payable) sits mid-table.
+const OutstandingSummaryTable = ({
+  summary,
+  emptyMessage,
+}: {
+  summary?: SupplierOutstandingReportOutstandingSummary;
+  // Shown instead of the rows while there is no report to summarise.
+  emptyMessage?: string;
+}) => {
+  const rows = summary?.rows ?? [];
+  return (
+    <div className="flex w-full max-w-180.5 min-w-0 flex-col gap-sm">
+      <h3 className="text-label-l4 font-semibold text-pneutral-900">Supplier Outstanding Summary</h3>
+      <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="bg-secondary-600">
+              <th className="h-14 border-r border-b border-pneutral-200 px-sm py-xsm text-left text-label-l3 font-semibold text-pneutral-50">
+                PARTICULARS
+              </th>
+              <th className="h-14 w-[36%] border-b border-pneutral-200 px-sm py-xsm text-right text-label-l3 font-semibold text-pneutral-50">
+                AMOUNT
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {emptyMessage || rows.length === 0 ? (
+              <tr className="bg-white">
+                <td colSpan={2} className={`${summaryCellClass} text-center text-pneutral-500`}>
+                  {emptyMessage ?? "No records found for the selected filters."}
+                </td>
+              </tr>
+            ) : (
+              rows.map((row, i) => {
+                const last = i === rows.length - 1;
+                const tone = row.highlighted
+                  ? "bg-primary-100 font-semibold text-primary-900"
+                  : "bg-white text-pneutral-900";
+                return (
+                  <tr key={row.code} className={tone}>
+                    <td className={`${summaryCellClass} border-r ${last ? "" : "border-b"} wrap-break-word`}>
+                      {row.label}
+                    </td>
+                    <td className={`${summaryCellClass} ${last ? "" : "border-b"} text-right font-semibold`}>
+                      ₹{money(row.amount)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
 
 const FilterChip = ({ label, onRemove }: { label: string; onRemove?: () => void }) => (
   <span className="inline-flex items-center justify-center gap-xsm rounded-sm bg-primary-100 px-xsm py-xxsm text-p2 font-medium text-primary-800">
@@ -1231,6 +1292,12 @@ const SupplierOutstandingReportPage = () => {
             </div>
           </div>
         </div>
+
+        <OutstandingSummaryTable
+          summary={shownReport?.outstandingSummary}
+          // Shown once a report has loaded, even with no matching rows (all 0).
+          emptyMessage={!reportLoading && !reportError && shownReport ? undefined : emptyMessage}
+        />
       </div>
     </div>
   );

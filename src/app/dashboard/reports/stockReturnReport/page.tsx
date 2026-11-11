@@ -24,6 +24,7 @@ import { ProductMasterService } from "@/services/ProductMasterService";
 import { ProductService } from "@/services/ProductService";
 import { getAllSupplier } from "@/services/SupplierService";
 import type {
+  StockReturnReportBreakdown,
   StockReturnReason,
   StockReturnReportFilter,
   StockReturnReportResponse,
@@ -143,6 +144,10 @@ const plural = (n: number, word: string, suffix = "s") => `${n} ${word}${n === 1
 
 const percentOf = (part: number, whole: number) => (whole ? Math.round((part / whole) * 100) : 0);
 
+// The backend's percentage when it sent one, else worked out from the quantities.
+const formatPercent = (percentage: number | null | undefined, part: number, whole: number) =>
+  `${percentage != null ? Number(Number(percentage).toFixed(2)) : percentOf(part, whole)}%`;
+
 const FilterChip = ({ label, onRemove }: { label: string; onRemove?: () => void }) => (
   <span className="inline-flex items-center justify-center gap-xsm rounded-sm bg-primary-100 px-xsm py-xxsm text-p2 font-medium text-primary-800">
     {label}
@@ -179,6 +184,72 @@ const KpiCard = ({ title, value, highlight, caption, icon, bgClass, highlightCla
     </div>
   </div>
 );
+
+interface SummaryTableProps {
+  title: string;
+  labelHeader: string;
+  totalLabel: string;
+  breakdown?: StockReturnReportBreakdown;
+  // Shown while there is no report to summarise.
+  emptyMessage: string;
+}
+
+const summaryCellClass = "h-12 border-pneutral-200 px-sm py-xsm text-p3";
+
+// Return Summary / Return Reason Summary: one quantity per return type or reason,
+// over every row matching the filters, with a Total row.
+const SummaryTable = ({ title, labelHeader, totalLabel, breakdown, emptyMessage }: SummaryTableProps) => {
+  const rows = breakdown?.rows ?? [];
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-sm lg:w-115.5">
+      <h3 className="text-label-l4 font-semibold text-pneutral-900">{title}</h3>
+      <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="bg-secondary-600">
+              <th className="h-14 border-r border-b border-pneutral-200 px-sm py-xsm text-left text-label-l3 font-semibold text-pneutral-50">
+                {labelHeader}
+              </th>
+              <th className="h-14 w-40 border-b border-pneutral-200 px-sm py-xsm text-right text-label-l3 font-semibold text-pneutral-50">
+                RETURNED QUANTITY
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {!breakdown ? (
+              <tr className="bg-white">
+                <td colSpan={2} className={`${summaryCellClass} text-center text-pneutral-500`}>
+                  {emptyMessage}
+                </td>
+              </tr>
+            ) : (
+              <>
+                {rows.map((row) => (
+                  <tr key={row.code} className="bg-white">
+                    <td className={`${summaryCellClass} border-r border-b text-pneutral-900 wrap-break-word`}>
+                      {row.label}
+                    </td>
+                    <td className={`${summaryCellClass} border-b text-right text-pneutral-900`}>
+                      {row.returnedQuantity ?? 0}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-primary-100">
+                  <td className={`${summaryCellClass} border-r font-semibold text-primary-900 wrap-break-word`}>
+                    {totalLabel}
+                  </td>
+                  <td className={`${summaryCellClass} text-right font-semibold text-primary-900`}>
+                    {breakdown.totalReturnedQuantity ?? 0}
+                  </td>
+                </tr>
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
 
 interface Column {
   key: string;
@@ -514,6 +585,7 @@ const StockReturnReportPage = () => {
   const totalReturned = summary?.totalReturnedQuantity ?? 0;
   const damageQuantity = summary?.damageQuantity ?? 0;
   const expiryQuantity = summary?.expiryQuantity ?? 0;
+  const totalReturns = summary?.totalReturns;
   const totalRecords = shownReport?.returnTransactions?.totalRecords ?? 0;
   const pageCount = Math.max(1, report?.returnTransactions?.totalPages ?? 1);
   const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
@@ -649,6 +721,9 @@ const StockReturnReportPage = () => {
 
   const emptyMessage = reportLoading ? "Loading..." : reportError || "No records found for the selected filters.";
   const showRows = !reportLoading && !reportError && rows.length > 0;
+  // The backend sends every return type (with 0s) even when no row matches, so the
+  // summaries show whenever a report has loaded.
+  const showSummaryTables = !reportLoading && !reportError && !!shownReport;
 
   return (
     <div id={printId} className="flex w-full flex-col gap-md">
@@ -961,7 +1036,7 @@ const StockReturnReportPage = () => {
         <KpiCard
           title="Total Returned Quantity"
           value={String(totalReturned)}
-          highlight={plural(totalRecords, "return")}
+          highlight={plural(totalReturns ?? totalRecords, "return")}
           caption="in this period"
           icon={<Image src="/StockReturn/receipt-refund-outline-kpi.svg" alt="" width={24} height={24} />}
           bgClass="bg-primary-100"
@@ -970,7 +1045,7 @@ const StockReturnReportPage = () => {
         <KpiCard
           title="Damage"
           value={String(damageQuantity)}
-          highlight={`${percentOf(damageQuantity, totalReturned)}%`}
+          highlight={formatPercent(summary?.damagePercentage, damageQuantity, totalReturned)}
           caption="of returned quantity"
           icon={<TriangleAlert className="size-6 text-warning-600" strokeWidth={1.5} />}
           bgClass="bg-warning-50"
@@ -979,7 +1054,7 @@ const StockReturnReportPage = () => {
         <KpiCard
           title="Expiry"
           value={String(expiryQuantity)}
-          highlight={`${percentOf(expiryQuantity, totalReturned)}%`}
+          highlight={formatPercent(summary?.expiryPercentage, expiryQuantity, totalReturned)}
           caption="of returned quantity"
           icon={<Clock className="size-6 text-info-500" strokeWidth={1.5} />}
           bgClass="bg-info-50"
@@ -1185,6 +1260,24 @@ const StockReturnReportPage = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Summary tables: totals over every matching row, not just this page. */}
+        <div className="flex flex-col gap-md lg:flex-row lg:items-start print:flex-row print:items-start">
+          <SummaryTable
+            title="Return Summary"
+            labelHeader="RETURN TYPE"
+            totalLabel="Total Return Movement Quantity"
+            breakdown={showSummaryTables ? shownReport?.returnSummary : undefined}
+            emptyMessage={emptyMessage}
+          />
+          <SummaryTable
+            title="Return Reason Summary"
+            labelHeader="RETURN REASON"
+            totalLabel="Total"
+            breakdown={showSummaryTables ? shownReport?.returnReasonSummary : undefined}
+            emptyMessage={emptyMessage}
+          />
         </div>
       </div>
     </div>

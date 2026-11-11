@@ -127,10 +127,29 @@ export interface SupplierOutstandingReportSummary {
   totalPurchaseReturnAdjusted: number;
 }
 
+/** One line of the Supplier Outstanding Summary table (SupplierOutstandingReportOutstandingSummaryRowDto). */
+export interface SupplierOutstandingReportOutstandingSummaryRow {
+  // TOTAL_SUPPLIER_PAYABLE, OVERDUE_PAYABLE ...
+  code: string;
+  // "Total Supplier Payable", "Overdue Payable" ...
+  label: string;
+  // Rupees, shown as "₹72,000.00".
+  amount: number;
+  // Shaded result row (Total Supplier Payable); it sits mid-table, not last.
+  highlighted: boolean;
+}
+
+/** Supplier Outstanding Summary table, in display order, over every matching invoice (SupplierOutstandingReportOutstandingSummaryDto). */
+export interface SupplierOutstandingReportOutstandingSummary {
+  rows: SupplierOutstandingReportOutstandingSummaryRow[];
+}
+
 /** GET /auditReports/supplier-outstanding (SupplierOutstandingReportResponse). */
 export interface SupplierOutstandingReportResponse {
   summary: SupplierOutstandingReportSummary;
   outstandingInvoices: SupplierOutstandingReportPage;
+  // Particulars / Amount table below the invoices.
+  outstandingSummary: SupplierOutstandingReportOutstandingSummary;
   // Report header, already formatted by the backend, e.g. "01-Oct-2026".
   fromDate: string;
   toDate: string;

@@ -97,6 +97,12 @@ const REPORT_SECTIONS: ReportSection[] = [
             icon: ChartColumn,
           },
           {
+            title: "Gross Profit (GP) on Consolidated Sales Book",
+            description: "Date-wise bill amount, cost, gross profit and G.P. %.",
+            href: "/dashboard/reports/grossProfitSalesBook",
+            icon: ChartColumn,
+          },
+          {
             title: "User-wise Collection Report",
             description: "Payments collected by each user and payment mode.",
             href: "/dashboard/reports/userwiseCollectionReport",
@@ -288,12 +294,6 @@ const REPORT_SECTIONS: ReportSection[] = [
             description: "Sales and purchase ledgers with GST, returns and Net GST by month.",
             href: "/dashboard/reports/GSTSalesAndPurchaseSummaryReport",
             icon: Scale,
-          },
-          {
-            title: "Gross Profit (GP) on Consolidated Sales Book",
-            description: "Date-wise bill amount, cost, gross profit and G.P. %.",
-            href: "/dashboard/reports/grossProfitSalesBook",
-            icon: ChartColumn,
           },
         ],
       },

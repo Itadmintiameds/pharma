@@ -541,6 +541,14 @@ const GrossProfitReportPage = () => {
   };
 
   const emptyMessage = reportLoading ? "Loading..." : reportError || "No records found for the selected filters.";
+
+  // Report Summary table: same figures as the KPI cards; Gross Profit is the shaded row.
+  const reportSummaryRows: { label: string; value: string; highlight?: boolean }[] = [
+    { label: "Net Sales Amount", value: `₹${money(summary?.netSalesAmount)}` },
+    { label: "Net Cost of Goods Sold", value: `₹${money(summary?.netCostOfGoodsSold)}` },
+    { label: "Gross Profit", value: `₹${money(summary?.grossProfit)}`, highlight: true },
+    { label: "Gross Margin", value: percent(summary?.grossMargin) },
+  ];
   const showRows = !reportLoading && !reportError && rows.length > 0;
 
   return (
@@ -1038,6 +1046,52 @@ const GrossProfitReportPage = () => {
                 <ArrowRight className="size-6" />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Report Summary: the KPI totals, over every product matching the filters. */}
+        <div className="flex w-full max-w-180.5 min-w-0 flex-col gap-md">
+          <h3 className="text-label-l4 font-semibold text-pneutral-900">Report Summary</h3>
+          <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+            <table className="w-full table-fixed border-collapse">
+              <thead>
+                <tr className="bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
+                  <th className="h-14 border-r border-b border-pneutral-200 px-sm py-xsm text-left">PARTICULARS</th>
+                  <th className="h-14 w-[36%] border-b border-pneutral-200 px-sm py-xsm text-right">VALUE</th>
+                </tr>
+              </thead>
+              <tbody className="text-p3">
+                {reportLoading || reportError || !shownReport ? (
+                  <tr className="bg-white">
+                    <td
+                      colSpan={2}
+                      className={`h-13 px-sm py-xsm text-center ${reportError ? "text-warning-600" : "text-pneutral-500"}`}
+                    >
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                ) : (
+                  reportSummaryRows.map((row, i) => {
+                    const last = i === reportSummaryRows.length - 1;
+                    return (
+                      <tr
+                        key={row.label}
+                        className={
+                          row.highlight ? "bg-primary-100 font-semibold text-primary-900" : "bg-white text-pneutral-900"
+                        }
+                      >
+                        <td className={`h-13 border-r border-pneutral-200 px-sm py-xsm wrap-break-word ${last ? "" : "border-b"}`}>
+                          {row.label}
+                        </td>
+                        <td className={`h-13 border-pneutral-200 px-sm py-xsm text-right ${last ? "" : "border-b"}`}>
+                          {row.value}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
