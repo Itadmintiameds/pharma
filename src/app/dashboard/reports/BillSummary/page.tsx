@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import clsx from "clsx";
 import Input from "@/app/components/common/Input";
 import Dropdown from "@/app/components/common/Dropdown";
 import { getBillSummary } from "@/services/FinancialReportService";
-import { BillSummaryRow } from "@/types/FinancialReportData";
+import { BillSummaryKpi, BillSummaryRow } from "@/types/FinancialReportData";
 import ReportHeader from "../components/ReportHeader";
 import ReportFilterToolbar from "../components/ReportFilterToolbar";
 import ReportKpiCard from "../components/ReportKpiCard";
@@ -115,6 +116,47 @@ const COLUMNS: ReportColumn<BillSummaryRow>[] = [
     ),
   },
 ];
+
+/** The "Summary" block under the bill table: totals over every matching bill. */
+function BillSummaryBlock({ summary }: { summary: BillSummaryKpi }) {
+  const lines = [
+    { key: "sales", label: "Total Sales", amount: summary.totalSalesAmount },
+    { key: "returns", label: "Total Sales Return", amount: summary.totalSalesReturnAmount },
+    { key: "net", label: "Net Sales", amount: summary.netSalesAmount, highlight: true },
+  ];
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-label-l4 font-semibold text-pneutral-900">Summary</p>
+      <div className="w-full max-w-180 overflow-x-auto rounded-lg border border-pneutral-200">
+        <table className="w-full min-w-[420px] border-collapse">
+          <thead>
+            <tr className="h-14 bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
+              <th className="w-[64%] border-r border-pneutral-200 px-3 text-left">PARTICULAR</th>
+              <th className="px-3 text-right">AMOUNT</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map(({ key, label, amount, highlight }) => (
+              <tr
+                key={key}
+                className={clsx(
+                  "h-13 text-p3 last:[&>td]:border-b-0",
+                  highlight ? "bg-primary-100 font-semibold text-primary-900" : "bg-white text-pneutral-900",
+                )}
+              >
+                <td className="border-r border-b border-pneutral-200 px-3">{label}</td>
+                <td className="border-b border-pneutral-200 px-3 text-right whitespace-nowrap">
+                  {formatRupees(amount ?? 0)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export default function BillSummaryPage() {
   const doctors = useDoctorOptions();
@@ -258,6 +300,7 @@ export default function BillSummaryPage() {
             emptyState={
               <ReportEmptyState title="No bills match your filters" onClearFilters={report.reset} />
             }
+            footer={<BillSummaryBlock summary={data.summary ?? data.kpi} />}
           />
         </>
       )}

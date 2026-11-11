@@ -245,7 +245,10 @@ export interface BillSummaryRow {
   totalAmount: number;
 }
 
-export type BillSummaryResponse = FinancialReportResponse<BillSummaryKpi, BillSummaryRow>;
+export type BillSummaryResponse = FinancialReportResponse<BillSummaryKpi, BillSummaryRow> & {
+  /** Totals over every matching bill, for the Summary block under the table. */
+  summary?: BillSummaryKpi | null;
+};
 
 /** Totals of every line matching the filters. */
 export interface DetailedSaleKpi {

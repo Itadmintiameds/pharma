@@ -39,6 +39,8 @@ interface ReportTableProps<T> {
   serverPagination?: ServerPagination;
   /** Drawn in place of the table and paging row when there are no rows. */
   emptyState?: React.ReactNode;
+  /** Drawn under the paging row, e.g. a summary of the whole report. */
+  footer?: React.ReactNode;
 }
 
 export interface ServerPagination {
@@ -75,6 +77,7 @@ export default function ReportTable<T>({
   totalRow,
   serverPagination,
   emptyState,
+  footer,
 }: ReportTableProps<T>) {
   const [sort, setSort] = useState<SortState>(null);
   const [localPage, setLocalPage] = useState(1);
@@ -282,6 +285,8 @@ export default function ReportTable<T>({
           onPageChange={changePage}
         />
       </div>
+
+      {footer}
       </>
       )}
     </div>
