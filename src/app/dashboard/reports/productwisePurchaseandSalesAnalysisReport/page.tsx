@@ -718,6 +718,7 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
   };
 
   const emptyMessage = reportLoading ? "Loading..." : reportError || "No records found for the selected filters.";
+  const reportSummaryRows = shownReport?.reportSummary ?? [];
   const showRows = !reportLoading && !reportError && rows.length > 0;
 
   const emptyCard = (
@@ -1178,6 +1179,47 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
                 <ArrowRight className="size-6" />
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Report Summary: rows, labels and order from the backend, over every matching row. */}
+        <div className="flex w-full max-w-180.5 min-w-0 flex-col gap-md">
+          <h3 className="text-label-l4 font-semibold text-pneutral-900">Report Summary</h3>
+          <div className="w-full overflow-hidden rounded-lg border border-pneutral-200">
+            <table className="w-full table-fixed border-collapse">
+              <thead>
+                <tr className="bg-secondary-600 text-label-l3 font-semibold text-pneutral-50">
+                  <th className="h-14 border-r border-b border-pneutral-200 px-sm py-xsm text-left">PARTICULARS</th>
+                  <th className="h-14 w-[36%] border-b border-pneutral-200 px-sm py-xsm text-right">VALUE</th>
+                </tr>
+              </thead>
+              <tbody className="text-p3">
+                {reportLoading || reportError || reportSummaryRows.length === 0 ? (
+                  <tr className="bg-white">
+                    <td
+                      colSpan={2}
+                      className={`h-13 px-sm py-xsm text-center ${reportError ? "text-warning-600" : "text-pneutral-500"}`}
+                    >
+                      {emptyMessage}
+                    </td>
+                  </tr>
+                ) : (
+                  reportSummaryRows.map((row, i) => {
+                    const border = i === reportSummaryRows.length - 1 ? "" : "border-b";
+                    return (
+                      <tr key={row.code} className="bg-white text-pneutral-900">
+                        <td className={`h-13 border-r border-pneutral-200 px-sm py-xsm wrap-break-word ${border}`}>
+                          {row.label}
+                        </td>
+                        <td className={`h-13 border-pneutral-200 px-sm py-xsm text-right ${border}`}>
+                          {row.valueType === "AMOUNT" ? `₹${money(row.value)}` : qty(row.value)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

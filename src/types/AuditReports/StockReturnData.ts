@@ -99,14 +99,41 @@ export interface StockReturnReportPage {
 /** KPI cards and the table's Total row, over every row matching the filters (StockReturnReportSummaryDto). */
 export interface StockReturnReportSummary {
   totalReturnedQuantity: number;
+  // "6 returns in this period": distinct return documents.
+  totalReturns: number;
   damageQuantity: number;
+  // "55% of returned quantity".
+  damagePercentage: number;
   expiryQuantity: number;
+  expiryPercentage: number;
+}
+
+/** One row of the Return Summary or Return Reason Summary table (StockReturnReportBreakdownRowDto). */
+export interface StockReturnReportBreakdownRow {
+  // PHARMACY_TO_WAREHOUSE etc., or DAMAGE / EXPIRY / OTHER.
+  code: string;
+  // "Pharmacy → Warehouse", "Damage".
+  label: string;
+  returnedQuantity: number;
+}
+
+/** Return Summary / Return Reason Summary table, over every matching row (StockReturnReportBreakdownDto). */
+export interface StockReturnReportBreakdown {
+  // Return Summary: every return type, 0 when it has no rows.
+  // Return Reason Summary: Damage and Expiry always, Other only when non-zero.
+  rows: StockReturnReportBreakdownRow[];
+  // The Total row ("Total Return Movement Quantity" on the Return Summary).
+  totalReturnedQuantity: number;
 }
 
 /** GET /auditReports/stock-return (StockReturnReportResponse). */
 export interface StockReturnReportResponse {
   summary: StockReturnReportSummary;
   returnTransactions: StockReturnReportPage;
+  // Quantity per return type.
+  returnSummary: StockReturnReportBreakdown;
+  // Quantity per return reason.
+  returnReasonSummary: StockReturnReportBreakdown;
   generatedBy: string;
   // Already formatted by the backend, e.g. "08-Oct-2026 05:30 PM".
   generatedOn: string;

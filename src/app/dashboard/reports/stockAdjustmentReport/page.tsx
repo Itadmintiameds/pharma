@@ -28,7 +28,9 @@ import { ProductService } from "@/services/ProductService";
 import { getAllSupplier } from "@/services/SupplierService";
 import type {
   StockAdjustmentReportFilter,
+  StockAdjustmentReportReasonSummaryRow,
   StockAdjustmentReportResponse,
+  StockAdjustmentReportTypeSummaryRow,
   StockAdjustmentReportRow,
   StockAdjustmentReportSortBy,
   StockAdjustmentType,
@@ -134,6 +136,109 @@ const plural = (n: number, word: string, suffix = "s") => `${n} ${word}${n === 1
 
 // Net adjustments carry their direction: +5, -8, 0.
 const signed = (n: number) => (n > 0 ? `+${n}` : String(n));
+
+// Summary tables colour a net value by its direction; 0 keeps the cell's own colour.
+const netClass = (n: number) => (n < 0 ? "text-warning-600!" : n > 0 ? "text-success-800!" : "");
+
+interface SummaryColumn<T> {
+  key: string;
+  header: string;
+  align: "left" | "right";
+  // Fixed width for the number columns; the label column takes the rest.
+  width?: string;
+  render: (row: T) => React.ReactNode;
+  // Extra classes per cell, e.g. the net column's colour.
+  cellClass?: (row: T) => string;
+  total: React.ReactNode;
+  totalClass?: string;
+}
+
+interface SummaryTableProps<T> {
+  title: string;
+  columns: SummaryColumn<T>[];
+  rows?: T[];
+  rowKey: (row: T) => string;
+  // Design width on wide screens; the block narrows to fit below that.
+  maxWidthClass: string;
+  // Below this the table scrolls sideways rather than squeezing its columns.
+  minWidthClass?: string;
+  // Shown instead of the rows while there is no report to summarise.
+  emptyMessage?: string;
+}
+
+const summaryCellClass = "h-12 border-pneutral-200 px-sm py-xsm text-p3";
+
+// Adjustment Type / Adjustment Reason Summary: totals over every row matching
+// the filters, with a highlighted Total row.
+const SummaryTable = <T,>({
+  title,
+  columns,
+  rows,
+  rowKey,
+  maxWidthClass,
+  minWidthClass = "",
+  emptyMessage,
+}: SummaryTableProps<T>) => (
+  <div className={`flex w-full min-w-0 flex-col gap-sm ${maxWidthClass}`}>
+    <h3 className="text-label-l4 font-semibold text-pneutral-900">{title}</h3>
+    <div className="w-full overflow-x-auto rounded-lg border border-pneutral-200">
+      <table className={`w-full table-fixed border-collapse ${minWidthClass}`}>
+        <thead>
+          <tr className="bg-secondary-600">
+            {columns.map((col, i) => (
+              <th
+                key={col.key}
+                className={`h-14 border-b border-pneutral-200 px-sm py-xsm text-label-l3 font-semibold text-pneutral-50 wrap-break-word ${
+                  col.align === "right" ? "text-right" : "text-left"
+                } ${col.width ?? ""} ${i < columns.length - 1 ? "border-r" : ""}`}
+              >
+                {col.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {emptyMessage || !rows ? (
+            <tr className="bg-white">
+              <td colSpan={columns.length} className={`${summaryCellClass} text-center text-pneutral-500`}>
+                {emptyMessage}
+              </td>
+            </tr>
+          ) : (
+            <>
+              {rows.map((row) => (
+                <tr key={rowKey(row)} className="bg-white">
+                  {columns.map((col, i) => (
+                    <td
+                      key={col.key}
+                      className={`${summaryCellClass} border-b text-pneutral-900 wrap-break-word ${
+                        col.align === "right" ? "text-right" : "text-left"
+                      } ${i < columns.length - 1 ? "border-r" : ""} ${col.cellClass?.(row) ?? ""}`}
+                    >
+                      {col.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr className="bg-primary-100">
+                {columns.map((col, i) => (
+                  <td
+                    key={col.key}
+                    className={`${summaryCellClass} font-semibold text-primary-900 wrap-break-word ${
+                      col.align === "right" ? "text-right" : "text-left"
+                    } ${i < columns.length - 1 ? "border-r" : ""} ${col.totalClass ?? ""}`}
+                  >
+                    {col.total}
+                  </td>
+                ))}
+              </tr>
+            </>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
 
 const FilterChip = ({ label, onRemove }: { label: string; onRemove?: () => void }) => (
   <span className="inline-flex items-center justify-center gap-xsm rounded-sm bg-primary-100 px-xsm py-xxsm text-p2 font-medium text-primary-800">
@@ -496,8 +601,11 @@ const StockAdjustmentReportPage = () => {
   const summary = shownReport?.summary;
   const increaseQuantity = summary?.stockIncreaseQuantity ?? 0;
   const decreaseQuantity = summary?.stockDecreaseQuantity ?? 0;
-  const netAdjustment = summary?.netAdjustment ?? increaseQuantity - decreaseQuantity;
+  const netAdjustment = summary?.netAdjustmentQuantity ?? increaseQuantity - decreaseQuantity;
   const totalRecords = shownReport?.adjustmentTransactions?.totalRecords ?? 0;
+  const totalAdjustments = summary?.totalAdjustments ?? totalRecords;
+  const typeSummary = shownReport?.adjustmentTypeSummary;
+  const reasonSummary = shownReport?.adjustmentReasonSummary;
   const pageCount = Math.max(1, report?.adjustmentTransactions?.totalPages ?? 1);
   const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
   const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
@@ -655,6 +763,65 @@ const StockAdjustmentReportPage = () => {
 
   const emptyMessage = reportLoading ? "Loading..." : reportError || "No records found for the selected filters.";
   const showRows = !reportLoading && !reportError && rows.length > 0;
+  // The summaries show once a report has loaded, even with no matching rows (all 0).
+  const summaryEmptyMessage = !reportLoading && !reportError && shownReport ? undefined : emptyMessage;
+
+  const typeSummaryNet = typeSummary?.netAdjustmentQuantity ?? netAdjustment;
+  const typeSummaryColumns: SummaryColumn<StockAdjustmentReportTypeSummaryRow>[] = [
+    {
+      key: "type",
+      header: "ADJUSTMENT TYPE",
+      align: "left",
+      render: (r) => r.label,
+      total: "Net Adjustment",
+    },
+    {
+      key: "quantity",
+      header: "QUANTITY",
+      align: "right",
+      width: "w-35",
+      render: (r) => r.quantity ?? 0,
+      total: signed(typeSummaryNet),
+      totalClass: netClass(typeSummaryNet),
+    },
+  ];
+
+  const reasonSummaryNet = reasonSummary?.totalNetAdjustment ?? 0;
+  const reasonSummaryColumns: SummaryColumn<StockAdjustmentReportReasonSummaryRow>[] = [
+    {
+      key: "reason",
+      header: "ADJUSTMENT REASON",
+      align: "left",
+      render: (r) => r.adjustmentReason || "---",
+      total: "Total",
+    },
+    {
+      key: "in",
+      header: "ADJUSTMENT IN",
+      align: "right",
+      width: "w-35",
+      render: (r) => r.adjustmentIn ?? 0,
+      total: reasonSummary?.totalAdjustmentIn ?? 0,
+    },
+    {
+      key: "out",
+      header: "ADJUSTMENT OUT",
+      align: "right",
+      width: "w-35",
+      render: (r) => r.adjustmentOut ?? 0,
+      total: reasonSummary?.totalAdjustmentOut ?? 0,
+    },
+    {
+      key: "net",
+      header: "NET ADJUSTMENT",
+      align: "right",
+      width: "w-35",
+      render: (r) => signed(r.netAdjustment ?? 0),
+      cellClass: (r) => netClass(r.netAdjustment ?? 0),
+      total: signed(reasonSummaryNet),
+      totalClass: netClass(reasonSummaryNet),
+    },
+  ];
 
   return (
     <div id={printId} className="flex w-full flex-col gap-md">
@@ -984,7 +1151,7 @@ const StockAdjustmentReportPage = () => {
         <KpiCard
           title="Net Adjustment"
           value={signed(netAdjustment)}
-          highlight={plural(totalRecords, "adjustment")}
+          highlight={plural(totalAdjustments, "adjustment")}
           caption="in this period"
           icon={<Scale className="size-6 text-primary-800" strokeWidth={1.5} />}
           bgClass="bg-primary-100"
@@ -1201,6 +1368,28 @@ const StockAdjustmentReportPage = () => {
               </button>
             </div>
           </div>
+        </div>
+
+        {/* Summary tables: totals over every matching row, not just this page.
+            Side by side when both fit, otherwise stacked. */}
+        <div className="flex flex-wrap items-start gap-md">
+          <SummaryTable
+            title="Adjustment Type Summary"
+            columns={typeSummaryColumns}
+            rows={typeSummary?.rows}
+            rowKey={(r) => r.code}
+            maxWidthClass="max-w-105.5"
+            emptyMessage={summaryEmptyMessage}
+          />
+          <SummaryTable
+            title="Adjustment Reason Summary"
+            columns={reasonSummaryColumns}
+            rows={reasonSummary?.rows}
+            rowKey={(r) => r.adjustmentReason}
+            maxWidthClass="max-w-160.5"
+            minWidthClass="min-w-130"
+            emptyMessage={summaryEmptyMessage}
+          />
         </div>
       </div>
     </div>

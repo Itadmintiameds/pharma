@@ -141,12 +141,27 @@ export interface PharmacySalesReturnReportSummary {
   refundPercentage: number;
 }
 
+/** One line of the Report Summary table (PharmacySalesReturnReportSummaryRowDto). */
+export interface PharmacySalesReturnReportSummaryRow {
+  // TOTAL_RETURN_QTY, TOTAL_GST_REVERSED ...
+  code: string;
+  // "Total Return Qty", "Total GST Reversed" ...
+  label: string;
+  // COUNT = whole number; AMOUNT = rupees, shown as "₹39.90".
+  valueType: "COUNT" | "AMOUNT";
+  value: number;
+  // Shaded result row (Total Return Amount); it sits mid-table, not last.
+  highlighted: boolean;
+}
+
 /** GET /auditReports/pharmacy-sales-return (PharmacySalesReturnReportResponse). */
 export interface PharmacySalesReturnReportResponse {
   summary: PharmacySalesReturnReportSummary;
   salesReturnTransactions: PharmacySalesReturnReportPage;
   // Every matching return, not paged.
   settlementSummary: PharmacySalesReturnSettlementRow[];
+  // Report Summary: Particulars / Value table, in display order.
+  reportSummary: PharmacySalesReturnReportSummaryRow[];
   // Report header, e.g. "Completed".
   status: string;
   // Already formatted by the backend, e.g. "01-Oct-2026".
