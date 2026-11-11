@@ -289,6 +289,12 @@ const REPORT_SECTIONS: ReportSection[] = [
             href: "/dashboard/reports/GSTSalesAndPurchaseSummaryReport",
             icon: Scale,
           },
+          {
+            title: "Gross Profit (GP) on Consolidated Sales Book",
+            description: "Date-wise bill amount, cost, gross profit and G.P. %.",
+            href: "/dashboard/reports/grossProfitSalesBook",
+            icon: ChartColumn,
+          },
         ],
       },
     ],

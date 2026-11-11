@@ -483,7 +483,7 @@ const Billing: React.FC<BillingProps> = ({
     };
 
     setFieldErrors(nextErrors);
-    if (Object.values(nextErrors).some(Boolean)) {
+    if (Object.values(nextErrors).some(Boolean) || billDiscountError) {
       showToast.error("Please correct the highlighted fields.");
       return;
     }
@@ -568,6 +568,17 @@ const Billing: React.FC<BillingProps> = ({
     Number(billDiscountInput) || 0,
     discountType
   );
+
+  // The additional discount comes off what is left after the per-row
+  // discounts, so it can't exceed that amount (the Net Amount on screen
+  // already has it taken off, hence not compared against that).
+  const netBeforeBillDiscount = totals.grossAmount - totals.itemDiscount;
+  const billDiscountError =
+    billDiscount.amount > netBeforeBillDiscount + 0.005
+      ? `Additional discount cannot be higher than the net amount (₹ ${formatAmount(
+          netBeforeBillDiscount
+        )}).`
+      : "";
 
   /**
    * Refreshes stock and pricing for the batch the grid just selected. This is
@@ -996,19 +1007,29 @@ const Billing: React.FC<BillingProps> = ({
                       : sanitizeNumber(e.target.value)
                   )
                 }
-                className="h-[48px] w-full rounded-[8px] border border-[#C0C1BE] bg-white pl-4 pr-10 text-sm text-pneutral-900 outline-none focus:border-[#7D32FC] transition-all shadow-2xs"
+                aria-invalid={!!billDiscountError}
+                className={`h-[48px] w-full rounded-[8px] border bg-white pl-4 pr-10 text-sm text-pneutral-900 outline-none transition-all shadow-2xs ${
+                  billDiscountError
+                    ? "border-warning-500 focus:border-warning-500 focus:ring-1 focus:ring-warning-500"
+                    : "border-[#C0C1BE] focus:border-[#7D32FC]"
+                }`}
               />
               <span className="absolute right-3.5 font-medium text-[#3C3D3A] text-base select-none">
                 {discountType === "AMOUNT" ? "₹" : "%"}
               </span>
             </div>
 
-            {/* Typed in one unit, echoed back in the other */}
-            <div className="text-[15px] font-medium text-[#378200]">
-              {discountType === "AMOUNT"
-                ? `Discount Percentage : ${billDiscount.percentage.toFixed(2)}%`
-                : `Discount Amount : ₹ ${formatAmount(billDiscount.amount)}`}
-            </div>
+            {/* Typed in one unit, echoed back in the other — or, when the
+                discount is too large, the inline error in its place. */}
+            {billDiscountError ? (
+              <div className="text-p2 text-warning-500">{billDiscountError}</div>
+            ) : (
+              <div className="text-[15px] font-medium text-[#378200]">
+                {discountType === "AMOUNT"
+                  ? `Discount Percentage : ${billDiscount.percentage.toFixed(2)}%`
+                  : `Discount Amount : ₹ ${formatAmount(billDiscount.amount)}`}
+              </div>
+            )}
           </div>
 
         </div>

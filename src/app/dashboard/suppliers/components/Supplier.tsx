@@ -25,6 +25,7 @@ import {
 } from "@/services/SupplierService";
 import { supplierSchema } from "@/app/schema/SupplierSchema";
 import { SupplierStatus } from "@/types/SupplierData";
+import { getCurrentBillTo } from "@/services/PharmacyService";
 
 interface PostOffice {
   Name: string;
@@ -125,6 +126,28 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
   const [isLoading, setIsLoading] = useState(isEditMode);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // The GSTIN of the pharmacy the user is operating under — a supplier can't be
+  // registered with the pharmacy's own GST number. Empty for a warehouse (it
+  // carries no GSTIN) or if the fetch fails, which simply skips the check.
+  const [ownGstin, setOwnGstin] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    getCurrentBillTo()
+      .then((entity) => {
+        if (active) setOwnGstin((entity?.gstNumber || "").trim().toUpperCase());
+      })
+      .catch((err) => console.error("Failed to load the pharmacy GSTIN:", err));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /** The supplier GSTIN matches the pharmacy's own. */
+  const isOwnGstin = (value: string) =>
+    !!ownGstin && value.trim().toUpperCase() === ownGstin;
+  const OWN_GSTIN_ERROR = "Supplier GST number cannot be the same as the pharmacy's GST number.";
 
   const dlExpiryRef = useRef<HTMLInputElement>(null);
 
@@ -239,6 +262,8 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
     const trimmed = value.trim();
     // Empty or badly formatted values already show their own validation error.
     if (!trimmed || !supplierSchema.shape[field].safeParse(value).success) return;
+    // The pharmacy's own GSTIN already shows its error; keep it.
+    if (field === "gstinNo" && isOwnGstin(trimmed)) return;
 
     try {
       const result = await checkDuplicateSupplier({
@@ -360,7 +385,12 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
   };
 
   const handleSave = async (afterSave: "close" | "addNew") => {
-    const isBasicIdentificationValid = validateBasicIdentificationFields();
+    let isBasicIdentificationValid = validateBasicIdentificationFields();
+    // Only on registering — an existing supplier's GSTIN is read-only.
+    if (!isEditMode && isOwnGstin(gstin)) {
+      setErrors((prev) => ({ ...prev, gstinNo: OWN_GSTIN_ERROR }));
+      isBasicIdentificationValid = false;
+    }
     const isDlExpiryValid = validateDlExpiry(dlExpiry);
     const isContactDetailsValid = validateContactDetailsFields();
     const isAddressDetailsValid = validateAddressDetailsFields();
@@ -558,6 +588,14 @@ const Supplier = ({ supplierId, returnTo, onClose }: SupplierProps) => {
               const value = e.target.value.toUpperCase().slice(0, 15);
               setGstin(value);
               validateField("gstinNo", value);
+              // Format first; once the number is well formed, it also must not
+              // be the pharmacy's own.
+              if (
+                supplierSchema.shape.gstinNo.safeParse(value).success &&
+                isOwnGstin(value)
+              ) {
+                setErrors((prev) => ({ ...prev, gstinNo: OWN_GSTIN_ERROR }));
+              }
             }}
             onBlur={(e) => checkDuplicateOnBlur("gstinNo", e.target.value)}
             error={errors.gstinNo}

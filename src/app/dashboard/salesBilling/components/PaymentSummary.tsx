@@ -10,7 +10,7 @@ import OffscreenPortal from "@/app/components/common/OffscreenPortal";
 import BillingSuccessModal from "./BillingSuccessModal";
 import PrescriptionModal from "./PrescriptionModal";
 import { downloadElementAsPdf } from "@/utils/downloadPdf";
-import { formatDateTime, formatMonthYear } from "@/utils/formatDate";
+import { formatDate, formatDateTime, formatMonthYear } from "@/utils/formatDate";
 import { printElement } from "@/utils/printElement";
 import { useModulePermissions } from "@/hooks/useModulePermissions";
 import { BACK_BUTTON, PRIMARY_BUTTON } from "./billingButtons";
@@ -20,6 +20,7 @@ import {
   BillTotals,
   CustomerInfo,
   PaymentDetails,
+  PaymentHistoryEntry,
 } from "@/types/BillingData";
 import {
   amountInWords,
@@ -62,6 +63,13 @@ interface PaymentSummaryProps {
    */
   prescriptionUrl?: string | null;
 }
+
+const PAYMENT_MODE_LABELS: Record<string, string> = {
+  CASH: "Cash",
+  CARD: "Card",
+  UPI: "UPI",
+  CREDIT: "Credit",
+};
 
 /** Label for the licence line, picked from the document type the pharmacy
  *  actually holds. */
@@ -557,6 +565,21 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
     },
   ];
 
+  /** The payments listed in the payment card — the saved bill's own, or the one
+   *  being taken now while the bill is still being rung up. */
+  const paymentHistory: PaymentHistoryEntry[] = payment.history?.length
+    ? payment.history
+    : [
+        {
+          date: billDate,
+          amount: payment.amountReceived || 0,
+          paymentMode: payment.paymentMode || "CASH",
+        },
+      ];
+
+  /** Still owed on the bill — the latest payment's balance. */
+  const pendingAmount = Math.max(0, payment.pendingAmount || 0);
+
   /** The two customer facts on the right. */
   const CUSTOMER_FACTS = [
     { label: "Customer", value: customer?.customerName || "Walk-in Customer" },
@@ -644,11 +667,61 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                 <DataTable columns={columns} data={lines} />
               </div>
 
-              {/* Amount in words beside the totals — 216px tall, 16px apart */}
+              {/* Payment details, amount in words and the totals — 216px tall,
+                  16px apart. The two text cards share the space left of the
+                  totals equally, which puts the words card in the middle. */}
               <div
                 data-print="summary"
                 className="w-full flex flex-col lg:flex-row items-stretch gap-4"
               >
+                {/* Same card as Amount in words: when each payment was taken and
+                    how much. */}
+                <div
+                  data-print="words"
+                  className="flex-1 lg:min-h-[216px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"
+                >
+                  <span className="font-body text-p4 font-normal text-pneutral-800">
+                    Payment details
+                  </span>
+                  <div className="flex flex-col gap-2">
+                    {paymentHistory.map((entry, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="font-body text-p4 font-normal text-pneutral-800">
+                          {formatDate(entry.date)}
+                          <span className="text-pneutral-500">
+                            {" "}· {PAYMENT_MODE_LABELS[entry.paymentMode] ?? entry.paymentMode}
+                          </span>
+                        </span>
+                        <span className="font-body text-p4 font-semibold text-pneutral-900">
+                          ₹ {formatAmount(entry.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* What is still owed after the payments above — orange while
+                      anything is left, so it stands apart from what was paid. */}
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-pneutral-200 pt-2">
+                    <span
+                      className={`font-body text-p4 font-semibold ${
+                        pendingAmount > 0 ? "text-warning-600" : "text-pneutral-800"
+                      }`}
+                    >
+                      Pending Amount
+                    </span>
+                    <span
+                      className={`font-body text-p4 font-bold ${
+                        pendingAmount > 0 ? "text-warning-600" : "text-pneutral-900"
+                      }`}
+                    >
+                      ₹ {formatAmount(pendingAmount)}
+                    </span>
+                  </div>
+                </div>
+
                 <div
                   data-print="words"
                   className="flex-1 lg:min-h-[216px] rounded-lg border border-pneutral-200 bg-white p-4 flex flex-col gap-4"

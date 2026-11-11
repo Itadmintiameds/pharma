@@ -13,6 +13,7 @@ import { createSalesReturn } from "@/services/SalesReturnService";
 import { BillingRecord } from "@/types/BillingData";
 import { SalesReturnData } from "@/types/SalesReturnData";
 import { pendingAfterReturns } from "@/utils/salesReturnAmounts";
+import { roundToRupee } from "@/utils/billingTotals";
 import {
   clearSalesReturnDraft,
   loadSalesReturnDraft,
@@ -95,6 +96,10 @@ const PAYMENT_TYPE_LABEL: Record<string, string> = {
 };
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/** Round off with its sign — "+ ₹0.40" / "− ₹0.30" — as the bill prints it. */
+const formatRoundOff = (amount: number) =>
+  `${amount < 0 ? "− " : amount > 0 ? "+ " : ""}${formatRupees(Math.abs(amount))}`;
 
 const toReviewBill = (bill: BillingRecord): ReviewBill => {
   // A bill can be paid across several modes, so list each one once.
@@ -362,10 +367,13 @@ const ReviewSalesReturn = () => {
         billStatus: "—",
       };
 
-  const returnAmount = items.reduce(
-    (sum, item) => sum + item.lineReturnAmount,
-    0,
+  // The lines add up to paise; the return settles in whole rupees, the same
+  // way the bill did (roundToRupee), and the difference is shown as Round Off.
+  const exactReturnAmount = round2(
+    items.reduce((sum, item) => sum + item.lineReturnAmount, 0)
   );
+  const returnAmount = roundToRupee(exactReturnAmount);
+  const roundOff = round2(returnAmount - exactReturnAmount);
 
   // IP Account Settlement — for IP patients the return first clears what they
   // owe on their IP account and only the remainder is refunded. Everyone else
@@ -400,7 +408,8 @@ const ReviewSalesReturn = () => {
         billingId: billing.billingId,
         totalGrossAmount: round2(items.reduce((sum, item) => sum + item.taxable, 0)),
         totalGstAmount: round2(items.reduce((sum, item) => sum + item.gst, 0)),
-        totalNetAmount: round2(returnAmount),
+        // The rounded figure — what is actually refunded / adjusted.
+        totalNetAmount: returnAmount,
         salesReturnDetails: items.map((item) => ({
           productId: item.productId,
           batchId: item.batchId,
@@ -429,6 +438,11 @@ const ReviewSalesReturn = () => {
     {
       label: "Total Return Qty",
       value: String(items.reduce((sum, item) => sum + item.returnQty, 0)),
+      accent: false,
+    },
+    {
+      label: "Round Off",
+      value: formatRoundOff(roundOff),
       accent: false,
     },
     {
@@ -586,6 +600,10 @@ const ReviewSalesReturn = () => {
             this review.
           </p>
 
+          <SettlementRow
+            label="Round Off"
+            value={formatRoundOff(roundOff)}
+          />
           <SettlementRow
             label="Return Amount"
             value={formatRupees(returnAmount)}

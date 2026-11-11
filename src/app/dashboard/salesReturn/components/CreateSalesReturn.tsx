@@ -10,7 +10,7 @@ import DataTable from "@/app/components/common/table/DataTable";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
 import { getBillingById } from "@/services/BillingService";
 import { BillingRecord } from "@/types/BillingData";
-import { formatAmount } from "@/utils/billingTotals";
+import { formatAmount, roundToRupee } from "@/utils/billingTotals";
 import { loadSalesReturnDraft, saveSalesReturnDraft } from "./salesReturnDraft";
 
 // Figma "boxShadowCard" — same three-layer shadow as the Find Original Bill cards
@@ -418,9 +418,9 @@ const CreateSalesReturn = () => {
     })
     .filter(({ qty }) => qty > 0);
   const totalReturnQty = returningItems.reduce((sum, { qty }) => sum + qty, 0);
-  const totalReturnAmount = returningItems.reduce(
-    (sum, { product, qty }) => sum + product.unitPrice * qty,
-    0
+  // Settled in whole rupees, like the bill — Review shows the round off.
+  const totalReturnAmount = roundToRupee(
+    returningItems.reduce((sum, { product, qty }) => sum + product.unitPrice * qty, 0)
   );
   // Review needs at least one line, and every ticked line needs a quantity, a
   // reason, and remarks when the reason is "Other".
