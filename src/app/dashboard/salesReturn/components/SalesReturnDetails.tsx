@@ -13,6 +13,7 @@ import { getUserById } from "@/services/UserManagementService";
 import { BillingRecord } from "@/types/BillingData";
 import { SalesReturnData } from "@/types/SalesReturnData";
 import { printElement } from "@/utils/printElement";
+import { roundToRupee } from "@/utils/billingTotals";
 import { SALES_RETURN_PRINT_CSS } from "./salesReturnPrintStyles";
 
 // Figma "boxShadowCard" — same three-layer shadow as the other sales return cards
@@ -315,7 +316,13 @@ const SalesReturnDetails = () => {
   // Return Value Summary — totals of the returned products above
   const sumOf = (pick: (product: ReturnedProduct) => number) =>
     products.reduce((sum, product) => sum + pick(product), 0);
-  const totalReturnAmount = sumOf((p) => p.returnAmount);
+  // The lines add up to paise; the return was settled in whole rupees. Older
+  // returns were stored unrounded, so the stored total is rounded here too.
+  const exactReturnAmount = Math.round(sumOf((p) => p.returnAmount) * 100) / 100;
+  const totalReturnAmount = roundToRupee(
+    Number(salesReturn?.totalNetAmount) || exactReturnAmount
+  );
+  const roundOff = Math.round((totalReturnAmount - exactReturnAmount) * 100) / 100;
 
   // IP Account Settlement — for IP patients the return cleared what they owed
   // on their IP account first and only the remainder was refunded. Everyone
@@ -339,6 +346,11 @@ const SalesReturnDetails = () => {
     {
       label: "Total Taxable Value",
       value: formatRupees(sumOf((p) => p.taxableValue)),
+      accent: false,
+    },
+    {
+      label: "Round Off",
+      value: `${roundOff < 0 ? "− " : roundOff > 0 ? "+ " : ""}${formatRupees(Math.abs(roundOff))}`,
       accent: false,
     },
     {
