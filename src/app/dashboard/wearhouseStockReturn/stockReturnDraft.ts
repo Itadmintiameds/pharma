@@ -73,20 +73,40 @@ export const damagedItemToLine = (
     pUnit = item.purchaseUnit.replace(/\s*\(\d+\)/, "").trim();
   }
 
-  if ((!pId || !bId) && allBatches.length > 0) {
-    const found = allBatches.find(
-      (b: any) =>
-        (b.batchNumber && String(b.batchNumber) === String(item.batchNo)) ||
-        (b.productName && b.productName === item.productName)
+  // The damaged endpoint sends names, not ids, so the ids are looked up in the
+  // pharmacy's batch list. A batch must match on product AND batch number (and
+  // expiry when both have one) — never on either alone, which picked up other
+  // products' batches. A batch comes back once per packaging, so the row whose
+  // pack matches the transfer line's ("Blister (10)") is preferred.
+  if ((!pId || !bId || !pkgId) && allBatches.length > 0) {
+    const sameText = (a: unknown, b: unknown) =>
+      String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+    const sameBatch = allBatches.filter(
+      (b) =>
+        sameText(b.batchNumber, item.batchNo) &&
+        sameText(b.productName, item.productName) &&
+        (!b.expiryDate || !item.expiryDate || String(b.expiryDate).slice(0, 10) === String(item.expiryDate).slice(0, 10))
     );
+    const samePack = sameBatch.find(
+      (b) =>
+        (!pUnit || sameText(b.purchaseUnit, pUnit)) &&
+        (!match || Number(b.purchaseUnitContains) === unitContains)
+    );
+    const found = samePack ?? sameBatch[0];
+
     if (found) {
       if (!pId) pId = String(found.productId || "");
       if (!bId) bId = String(found.batchId || "");
-      if (!pkgId) pkgId = String(found.packagingId || "");
       if (!expDate) expDate = found.expiryDate || expDate;
-      if (found.purchaseUnitContains) unitContains = Number(found.purchaseUnitContains);
-      if (found.purchaseUnit) pUnit = found.purchaseUnit;
       if (found.purchaseSmallestUnitName) sUnit = found.purchaseSmallestUnitName;
+      // Packaging, unit and pack size only from a row of the same pack: the
+      // transfer line's own pack (from the damaged endpoint) is what the
+      // damaged qty was recorded in, so another packaging's must not replace it.
+      if (samePack) {
+        if (!pkgId) pkgId = String(samePack.packagingId || "");
+        if (!match && samePack.purchaseUnitContains) unitContains = Number(samePack.purchaseUnitContains);
+        if (!pUnit && samePack.purchaseUnit) pUnit = samePack.purchaseUnit;
+      }
     }
   }
 
