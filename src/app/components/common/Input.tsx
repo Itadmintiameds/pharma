@@ -1,4 +1,4 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef, useCallback, useEffect, useRef } from "react";
 import clsx from "clsx";
 
 /** Field height/padding preset. `lg` is the standard form field. */
@@ -56,6 +56,32 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     },
     ref
   ) => {
+    // Our own handle on the element, shared with whatever ref the caller passed.
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const setRefs = useCallback(
+      (node: HTMLInputElement | null) => {
+        inputRef.current = node;
+        if (typeof ref === "function") ref(node);
+        else if (ref) ref.current = node;
+      },
+      [ref]
+    );
+
+    /**
+     * A focused number field steps its value on every wheel tick, so scrolling
+     * past a quantity or amount quietly changed it. React's onWheel is passive
+     * and cannot cancel that, hence a native listener.
+     */
+    useEffect(() => {
+      const input = inputRef.current;
+      if (!input || type !== "number") return;
+      const stopWheelStep = (e: WheelEvent) => {
+        if (document.activeElement === input) e.preventDefault();
+      };
+      input.addEventListener("wheel", stopWheelStep, { passive: false });
+      return () => input.removeEventListener("wheel", stopWheelStep);
+    }, [type]);
+
     // State styles applied on the wrapper: disabled > readonly > error > success > enabled/active
     const getStateStyles = () => {
       if (disabled)
@@ -118,7 +144,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           )}
 
           <input
-            ref={ref}
+            ref={setRefs}
             type={type}
             disabled={disabled}
             readOnly={readOnly}
@@ -132,6 +158,9 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             className={clsx(
               "h-full w-full bg-transparent outline-none placeholder:text-pneutral-500",
               textSizeStyles[sizeVariant],
+              // No up/down spinner on number fields (Chrome/Edge/Safari, then Firefox).
+              type === "number" &&
+                "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0",
               disabled
                 ? "text-pneutral-500 cursor-not-allowed"
                 : readOnly

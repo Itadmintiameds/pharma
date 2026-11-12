@@ -26,6 +26,22 @@ interface DataTableProps<TData> {
   rowClassName?: (row: TData) => string;
 }
 
+/**
+ * Draws a body cell by calling its renderer, not mounting it.
+ *
+ * flexRender mounts a function cell as a component of its own, and callers
+ * define `columns` inline, so every render brought a new component type: React
+ * threw the old cell away and mounted a fresh one. An input in a cell lost its
+ * focus after each keystroke — one digit, then click again for the next.
+ * Called as a plain function the cell's elements are reconciled in place.
+ * Cell renderers must therefore not call hooks (none do).
+ */
+const renderCell = <TProps extends object>(
+  renderer: ((props: TProps) => React.ReactNode) | React.ReactNode,
+  props: TProps,
+): React.ReactNode =>
+  typeof renderer === "function" ? renderer(props) : flexRender(renderer, props);
+
 export default function DataTable<TData>({
   columns,
   data,
@@ -94,7 +110,7 @@ export default function DataTable<TData>({
                   key={cell.id}
                   className="px-4 border border-pneutral-200 text-pneutral-900 text-label-l4 align-middle"
                 >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {renderCell(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
             </tr>
