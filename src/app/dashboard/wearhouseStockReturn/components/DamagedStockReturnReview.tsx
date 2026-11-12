@@ -10,7 +10,7 @@ import {
   SOURCE_LABELS,
   StockReturnDraft,
   StockReturnLine,
-  availablePurchaseQty,
+  formatAvailableStock,
   dispatchContent,
   formatDisplayDate,
   formatExpiry,
@@ -100,7 +100,7 @@ const columns: ColumnDef<StockReturnLine>[] = [
     id: "eligible",
     header: "ELIGIBLE QTY",
     cell: ({ row }) => (
-      <span className="font-semibold text-success-600">{availablePurchaseQty(row.original)}</span>
+      <span className="font-semibold whitespace-nowrap text-success-600">{formatAvailableStock(row.original)}</span>
     ),
   },
   {

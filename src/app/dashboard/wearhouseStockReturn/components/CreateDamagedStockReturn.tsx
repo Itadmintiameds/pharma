@@ -14,7 +14,7 @@ import {
   SOURCE_LABELS,
   StockReturnDraft,
   StockReturnLine,
-  availablePurchaseQty,
+  formatAvailableStock,
   damagedItemToLine,
   formatDisplayDate,
   formatExpiry,
@@ -363,7 +363,7 @@ const CreateDamagedStockReturn = ({
       id: "eligible",
       header: "ELIGIBLE QTY (REMAINING)",
       cell: ({ row }) => (
-        <span className="font-semibold">{availablePurchaseQty(row.original)}</span>
+        <span className="font-semibold whitespace-nowrap">{formatAvailableStock(row.original)}</span>
       ),
     },
     {

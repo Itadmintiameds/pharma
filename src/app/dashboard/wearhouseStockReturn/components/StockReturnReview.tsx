@@ -11,7 +11,7 @@ import {
   SOURCE_LABELS,
   StockReturnDraft,
   StockReturnLine,
-  availablePurchaseQty,
+  formatAvailableStock,
   dispatchContent,
   formatExpiry,
 } from "../stockReturnDraft";
@@ -87,14 +87,14 @@ const StockReturnReview = ({
     },
     {
       id: "available",
-      header: "AVAIL. STOCK (PURCHASE UNITS)",
+      header: "AVAIL. STOCK",
       cell: ({ row }) => (
-        <span className="font-semibold">{availablePurchaseQty(row.original)}</span>
+        <span className="font-semibold whitespace-nowrap">{formatAvailableStock(row.original)}</span>
       ),
     },
     {
       accessorKey: "returnQty",
-      header: "RETURN QTY (PURCHASE UNITS)",
+      header: "RETURN QTY (PURCHASE UNIT)",
       cell: ({ row }) => (
         <span className="font-semibold text-primary-800">{Number(row.original.returnQty)}</span>
       ),

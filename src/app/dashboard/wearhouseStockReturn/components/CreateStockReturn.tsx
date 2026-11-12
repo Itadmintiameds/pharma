@@ -14,7 +14,7 @@ import {
   SOURCE_LABELS,
   StockReturnDraft,
   StockReturnLine,
-  availablePurchaseQty,
+  formatAvailableStock,
   formatExpiry,
   isLineValid,
   returnQtyError,
@@ -51,7 +51,9 @@ const isExpired = (expiryDate: string): boolean => {
 const toCandidateLine = (row: BatchApiRow): StockReturnLine | null => {
   if (!row.productId || !row.batchId) return null;
   const availableBase = Number(row.totalStock) || 0;
-  if (availableBase <= 0 || isExpired(row.expiryDate || "")) return null;
+  const unitContains = Number(row.purchaseUnitContains) > 0 ? Number(row.purchaseUnitContains) : 1;
+  // Returns go in whole purchase units, so a batch down to loose units can't be picked.
+  if (availableBase < unitContains || isExpired(row.expiryDate || "")) return null;
 
   return {
     id: lineKey(row.productId, row.batchId, row.packagingId || ""),
@@ -63,7 +65,7 @@ const toCandidateLine = (row: BatchApiRow): StockReturnLine | null => {
     expiryDate: row.expiryDate || "",
     purchaseUnit: row.purchaseUnit || "",
     smallestUnit: row.purchaseSmallestUnitName || "",
-    unitContains: Number(row.purchaseUnitContains) > 0 ? Number(row.purchaseUnitContains) : 1,
+    unitContains,
     availableBase,
     returnQty: "",
     reason: "",
@@ -216,18 +218,27 @@ const CreateStockReturn = ({
       id: "available",
       header: "AVAIL. STOCK",
       cell: ({ row }) => (
-        <span className="font-semibold">{availablePurchaseQty(row.original)}</span>
+        <span className="font-semibold whitespace-nowrap">{formatAvailableStock(row.original)}</span>
       ),
     },
     {
       id: "returnQty",
-      header: "RETURN QTY",
+      header: "RETURN QTY (PURCHASE UNIT)",
       cell: ({ row }) => (
         <Input
           type="number"
           min={0}
+          step={1}
+          inputMode="numeric"
+          placeholder={row.original.purchaseUnit || undefined}
           value={row.original.returnQty}
-          onChange={(e) => updateLine(row.original.id, { returnQty: e.target.value })}
+          // Whole purchase units only: no decimal point, sign or exponent.
+          onKeyDown={(e) => {
+            if ([".", ",", "e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+          }}
+          onChange={(e) =>
+            updateLine(row.original.id, { returnQty: e.target.value.replace(/\D/g, "") })
+          }
           aria-label={`Return quantity for ${row.original.productName}`}
           error={showValidation ? returnQtyError(row.original) : undefined}
           containerClassName="min-w-32 py-sm"
@@ -324,7 +335,7 @@ const CreateStockReturn = ({
                       </p>
                     </div>
                     <p className="shrink-0 text-p3 text-pneutral-500">
-                      Avail. {availablePurchaseQty(candidate)} {candidate.purchaseUnit}
+                      Avail. {formatAvailableStock(candidate)}
                     </p>
                   </button>
                 ))

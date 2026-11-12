@@ -179,7 +179,7 @@ const StockReturnView = ({ id, onClose }: StockReturnViewProps) => {
     },
     {
       accessorKey: "returnQty",
-      header: "RETURN QTY",
+      header: "RETURN QTY (PURCHASE UNIT)",
       cell: ({ row }) => (
         <span className="font-semibold text-primary-800">{row.original.returnQty}</span>
       ),

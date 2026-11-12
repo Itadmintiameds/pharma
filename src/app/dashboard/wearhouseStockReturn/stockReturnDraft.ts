@@ -1,6 +1,7 @@
 import type { StockReturnSource } from "./components/StockReturnType";
 import type { ConfirmDispatchContent } from "./components/ConfirmDispatchModal";
 import type { DamagedStockNotReturnedItem } from "@/services/WarehouseDistributionService";
+import { formatPackQty } from "@/utils/formatPackQty";
 
 /**
  * A stock return being built, carried from CreateStockReturn into
@@ -151,9 +152,15 @@ export const RETURN_REASONS = [
 export const availablePurchaseQty = (line: StockReturnLine): number =>
   toPurchaseQty(line, line.availableBase);
 
+/** The available stock as whole packs plus loose units, short form: "189 Str 7 Tab". */
+export const formatAvailableStock = (line: StockReturnLine): string =>
+  formatPackQty(line.availableBase, line.unitContains, line.purchaseUnit, line.smallestUnit, {
+    short: true,
+  });
+
 /** What the backend will need: the return qty converted to smallest units. */
 export const returnBaseQty = (line: StockReturnLine): number =>
-  (Number(line.returnQty) || 0) * line.unitContains;
+  Math.round((Number(line.returnQty) || 0) * line.unitContains);
 
 export const returnQtyError = (line: StockReturnLine): string | undefined => {
   if (!line.returnQty) return "Enter a quantity";
@@ -165,11 +172,20 @@ export const returnQtyError = (line: StockReturnLine): string | undefined => {
     if (qty !== damagedQty) return `Must equal damaged qty (${damagedQty})`;
     return undefined;
   }
-  if (qty > availablePurchaseQty(line)) {
-    return `Cannot exceed ${availablePurchaseQty(line)} available`;
+  // Returned in whole purchase units only — no loose tablets.
+  if (!Number.isInteger(qty)) return "Enter whole purchase units, no decimals";
+  const maxPacks = wholePacksAvailable(line);
+  if (qty > maxPacks) {
+    return maxPacks === 0
+      ? `Less than one ${line.purchaseUnit || "pack"} in stock`
+      : `Cannot exceed ${maxPacks} ${line.purchaseUnit || ""}`.trim();
   }
   return undefined;
 };
+
+/** Whole purchase units on hand — loose smallest units can't be returned. */
+export const wholePacksAvailable = (line: StockReturnLine): number =>
+  Math.floor(line.availableBase / line.unitContains);
 
 export const isLineValid = (line: StockReturnLine): boolean =>
   !returnQtyError(line) && !!line.reason;
