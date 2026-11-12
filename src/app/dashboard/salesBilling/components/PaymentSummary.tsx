@@ -577,7 +577,10 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
         },
       ];
 
-  /** Still owed on the bill — the latest payment's balance. */
+  /** Sales returns against a saved bill; they come off what is owed. */
+  const returnHistory = payment.returns ?? [];
+
+  /** Still owed on the bill — after payments and, on a saved bill, returns. */
   const pendingAmount = Math.max(0, payment.pendingAmount || 0);
 
   /** The two customer facts on the right. */
@@ -697,6 +700,24 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                         </span>
                         <span className="font-body text-p4 font-semibold text-pneutral-900">
                           ₹ {formatAmount(entry.amount)}
+                        </span>
+                      </div>
+                    ))}
+                    {/* Returns read as deductions, so they are signed and set
+                        apart from the money that came in. */}
+                    {returnHistory.map((entry, index) => (
+                      <div
+                        key={`return-${index}`}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="font-body text-p4 font-normal text-pneutral-800">
+                          {entry.date ? formatDate(entry.date) : "Sales Return"}
+                          <span className="text-pneutral-500">
+                            {" "}· Return{entry.returnNo ? ` ${entry.returnNo}` : ""}
+                          </span>
+                        </span>
+                        <span className="font-body text-p4 font-semibold text-success-700">
+                          − ₹ {formatAmount(entry.amount)}
                         </span>
                       </div>
                     ))}

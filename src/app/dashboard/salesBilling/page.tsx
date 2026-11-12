@@ -30,6 +30,7 @@ import {
   CustomerInfo,
   PaymentDetails,
   PaymentMode,
+  ReturnHistoryEntry,
 } from "@/types/BillingData";
 import {
   calculateBillTotals,
@@ -86,7 +87,8 @@ const toBillRecord = (bill: BillingRecord): BillRecord => {
     status:
       bill.paymentType === "PAID" ||
       bill.salesReturnStatus === "Returned" ||
-      (returnedAmountOf(bill) > 0 && pendingAfterReturns(pendingOf(bill), bill) <= 0)
+      // Same figure the settle screen collects, so the two never disagree.
+      (returnedAmountOf(bill) > 0 && outstandingOf(bill) <= 0)
         ? "Paid"
         : "Pending",
     netAmount: payableOf(bill),
@@ -138,6 +140,41 @@ const pendingOf = (bill: BillingRecord) => {
 
   const received = payments.reduce((sum, p) => sum + (p.receivedAmount || 0), 0);
   return Math.max(0, (bill.totalNetAmount ?? 0) - received);
+};
+
+/**
+ * Still owed once payments and sales returns are both counted, in whole rupees
+ * like the bill itself. billing/{id} works it out as `outstandingAmount`; the
+ * list endpoint does not send it, so the same figure is derived there.
+ */
+const outstandingOf = (bill: BillingRecord) =>
+  Math.max(
+    0,
+    Math.round(
+      typeof bill.outstandingAmount === "number"
+        ? bill.outstandingAmount
+        : pendingAfterReturns(pendingOf(bill), bill)
+    )
+  );
+
+/**
+ * The sales returns against a saved bill, oldest first, for the invoice's
+ * payment card. Bills without the per-return list but with a returned total
+ * show that total as one entry.
+ */
+const returnsOf = (bill: BillingRecord): ReturnHistoryEntry[] => {
+  const returns = (bill.salesReturns ?? [])
+    .filter((r) => !r.status || r.status === "Completed")
+    .map((r) => ({
+      date: r.salesReturnDate,
+      amount: r.returnAmount || 0,
+      returnNo: r.salesReturnNo,
+    }))
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+  if (returns.length) return returns;
+
+  const total = bill.returnedAmount ?? returnedAmountOf(bill);
+  return total > 0 ? [{ date: "", amount: total }] : [];
 };
 
 /**
@@ -350,10 +387,11 @@ const SalesBillingContent = () => {
   const openSettlePayment = async (billingId: number) => {
     try {
       const bill = await getBillingById(billingId);
-      // Sales returns against the bill come off what is still owed
+      // Sales returns against the bill come off what is still owed; the
+      // outstanding is in whole rupees, like the bill itself.
       const pendingBeforeReturns = pendingOf(bill);
-      const returnedAmount = returnedAmountOf(bill);
-      const pending = pendingAfterReturns(pendingBeforeReturns, bill);
+      const returnedAmount = bill.returnedAmount ?? returnedAmountOf(bill);
+      const pending = outstandingOf(bill);
 
       // Nothing to collect — opening the screen would only offer an amount of
       // zero, which no payment can clear.
@@ -422,13 +460,15 @@ const SalesBillingContent = () => {
           referenceNo: payment?.transactionId || "",
           remarks: "",
           changeDue: 0,
-          pendingAmount: pendingOf(bill),
+          pendingAmount: outstandingOf(bill),
           // Each payment taken against the bill, for the invoice's payment card.
           history: (bill.billingPayments ?? []).map((p) => ({
             date: p.paymentDate || p.createdAt || bill.createdAt || "",
             amount: p.receivedAmount || 0,
             paymentMode: p.paymentMode,
           })),
+          // And each sales return, which comes off what is owed.
+          returns: returnsOf(bill),
         },
         invoiceNo: bill.billNo,
         billDate: bill.createdAt?.split("T")[0] ?? "",

@@ -231,6 +231,25 @@ export interface PaymentDetails {
    *  viewing one. The invoice falls back to the bill date and amountReceived
    *  when it is absent (a bill still being rung up). */
   history?: PaymentHistoryEntry[];
+  /** Sales returns against a saved bill, oldest first — set only when viewing one. */
+  returns?: ReturnHistoryEntry[];
+}
+
+/** One sales return against a bill, as the invoice's payment card lists it. */
+export interface ReturnHistoryEntry {
+  date: string;
+  amount: number;
+  /** The return's number; absent when only the bill's total is known. */
+  returnNo?: string;
+}
+
+/** A sales return as billing/{id} summarises it. */
+export interface BillSalesReturnRecord {
+  salesReturnId: number;
+  salesReturnNo: string;
+  salesReturnDate: string;
+  status: string;
+  returnAmount: number;
 }
 
 /** One payment made against a bill, as the invoice lists it. */
@@ -317,6 +336,14 @@ export interface BillingRecord {
   totalNetAmountAfterRoundOff?: number;
   /** How much of the bill has come back through sales returns. */
   salesReturnStatus?: BillReturnStatus;
+  /** billing/{id} only: everything received against the bill. */
+  receivedAmount?: number;
+  /** billing/{id} only: what sales returns have taken off the bill. */
+  returnedAmount?: number;
+  /** billing/{id} only: still owed once payments and returns are counted. */
+  outstandingAmount?: number;
+  /** billing/{id} only: the returns made against the bill. */
+  salesReturns?: BillSalesReturnRecord[];
   billingDetails: BillingDetailRecord[];
   billingPayments: BillingPaymentRecord[];
 }
