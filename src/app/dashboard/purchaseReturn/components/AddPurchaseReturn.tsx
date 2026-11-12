@@ -40,6 +40,9 @@ export interface InvoiceRow {
   paymentType: PaymentType
   amount: number
   outstanding: number
+  /** What the supplier owes back on a posted return — set on the view screen
+   *  from the API's supplierCreditAmount; undefined while creating. */
+  supplierCredit?: number
   returnStatus: ReturnStatus
   /** "Fully Returned" invoices can't be picked for another return. */
   selectable: boolean
@@ -64,13 +67,17 @@ export const buildInvoiceRow = (
   // invoice — a return is credited against what was actually received.
   const amount = Number(purchase.totalNetAmount) || 0
   const paymentType = toPaymentType(purchase.paymentType)
-  // There is no outstanding-amount field on a purchase. A cash purchase was
-  // settled at the counter, so nothing is owed; a credit one is outstanding
-  // for its net value, less whatever has already been returned against it —
-  // those returns have reduced the payable. Floored at zero: a return worth
-  // more than the invoice leaves supplier credit, not a negative payable.
+  // The backend's outstandingAmount: net − supplier payments − confirmed
+  // returns. Only for an older response without it, fall back to the local
+  // estimate — a cash purchase owes nothing, a credit one its net value less
+  // what has been returned (payments unknown), floored at zero.
+  const apiOutstanding = purchase.outstandingAmount
   const outstanding =
-    paymentType === 'Cash' ? 0 : Math.max(amount - returnedAmount, 0)
+    apiOutstanding !== undefined && apiOutstanding !== null
+      ? Number(apiOutstanding) || 0
+      : paymentType === 'Cash'
+        ? 0
+        : Math.max(amount - returnedAmount, 0)
   const returnStatus = deriveReturnStatus(purchase, returnedLines)
 
   return {

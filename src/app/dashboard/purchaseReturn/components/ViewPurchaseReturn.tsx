@@ -5,6 +5,7 @@ import { getPurchaseById } from '@/services/PurchaseServiceNew'
 import {
   cancelPurchaseReturn,
   getAllPurchaseReturn,
+  getPurchaseReturnById,
 } from '@/services/PurchaseReturnService'
 import type { PurchaseDetailsData } from '@/types/PurchaseData'
 import {
@@ -59,7 +60,12 @@ const ViewPurchaseReturn = ({
       const saved = returns.find((item) => item.purchaseReturnId === purchaseReturnId)
       if (!saved) throw new Error('This purchase return could no longer be found.')
 
-      const purchase = await getPurchaseById(saved.purchaseId)
+      // The single-return GET carries the supplier account figures for it
+      // (supplierCreditAmount etc.); the list may not.
+      const [purchase, detail] = await Promise.all([
+        getPurchaseById(saved.purchaseId),
+        getPurchaseReturnById(purchaseReturnId).catch(() => undefined),
+      ])
 
       // The invoice card wants the supplier account as it stands apart from
       // this return, so this one is left out of the totals behind it.
@@ -95,11 +101,35 @@ const ViewPurchaseReturn = ({
         ]
       })
 
+      const savedStatus = (saved.status ?? '').toUpperCase()
+      // Amount Due from Supplier is the purchase return response's own figure
+      // (amountDueFromSupplier, else supplierCreditAmount), falling back to the
+      // purchase's. Only a draft — which hasn't touched the supplier account —
+      // still works it out from the outstanding.
+      const credit =
+        detail?.amountDueFromSupplier ??
+        saved.amountDueFromSupplier ??
+        detail?.supplierCreditAmount ??
+        saved.supplierCreditAmount ??
+        purchase.supplierCreditAmount
+      const isDraftReturn = savedStatus === 'DRAFT'
+
       if (!active) return
-      setInvoice(buildInvoiceRow(purchase, consumedByOthers, returnedAmountByOthers))
+      setInvoice({
+        ...buildInvoiceRow(purchase, consumedByOthers, returnedAmountByOthers),
+        outstanding: Number(
+          detail?.purchaseOutstandingAmount ??
+            saved.purchaseOutstandingAmount ??
+            purchase.outstandingAmount ??
+            0
+        ),
+        supplierCredit:
+          !isDraftReturn && credit !== undefined && credit !== null
+            ? Number(credit) || 0
+            : undefined,
+      })
       setLines(savedLines)
       setReturnNo(saved.returnNo)
-      const savedStatus = (saved.status ?? '').toUpperCase()
       setIsDraft(savedStatus === 'DRAFT')
       // Same rule as the list badge: `isCancel` only counts when the
       // response carries no status of its own.

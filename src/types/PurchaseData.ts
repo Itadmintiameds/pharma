@@ -16,6 +16,15 @@ export interface PurchaseData {
   totalDiscount: number;
   totalGst: number;
   totalNetAmount: number;
+  /**
+   * Computed by the backend on every GET from live supplier payments and
+   * confirmed returns. Credit purchase: outstanding = net − paid − returned,
+   * floored at 0, the excess being supplierCreditAmount. Cash: outstanding 0.
+   */
+  paidAmount?: number;
+  returnedAmount?: number;
+  outstandingAmount?: number | null;
+  supplierCreditAmount?: number | null;
   purchaseDetails: PurchaseDetailsData[];
 }
 

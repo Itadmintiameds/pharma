@@ -270,10 +270,26 @@ const PurchaseReturnView = ({
     const sgst = toMoney(gst - cgst)
     const totalPurchaseReturnAmount = lineAmount
 
-    const currentSupplierPayable = invoice?.outstanding ?? 0
-    const amountAdjustedAgainstPayable = Math.min(totalPurchaseReturnAmount, currentSupplierPayable)
-    const supplierPayableAfterReturn = currentSupplierPayable - amountAdjustedAgainstPayable
-    const amountDueFromSupplier = totalPurchaseReturnAmount - amountAdjustedAgainstPayable
+    let currentSupplierPayable: number
+    let amountAdjustedAgainstPayable: number
+    let supplierPayableAfterReturn: number
+    let amountDueFromSupplier: number
+
+    if (readOnly && invoice?.supplierCredit !== undefined) {
+      // A posted return: the API's figures are already after it. What the
+      // supplier owes back is its supplierCreditAmount; the rest of the return
+      // came off the payable, which puts the payable before it that much higher.
+      amountDueFromSupplier = invoice.supplierCredit
+      supplierPayableAfterReturn = invoice.outstanding
+      amountAdjustedAgainstPayable = Math.max(totalPurchaseReturnAmount - amountDueFromSupplier, 0)
+      currentSupplierPayable = supplierPayableAfterReturn + amountAdjustedAgainstPayable
+    } else {
+      // Creating (or a draft): the outstanding is still the pre-return figure.
+      currentSupplierPayable = invoice?.outstanding ?? 0
+      amountAdjustedAgainstPayable = Math.min(totalPurchaseReturnAmount, currentSupplierPayable)
+      supplierPayableAfterReturn = currentSupplierPayable - amountAdjustedAgainstPayable
+      amountDueFromSupplier = totalPurchaseReturnAmount - amountAdjustedAgainstPayable
+    }
 
     return {
       retQty,
@@ -291,7 +307,7 @@ const PurchaseReturnView = ({
       supplierPayableAfterReturn,
       amountDueFromSupplier,
     }
-  }, [invoice, lines, lineItems])
+  }, [invoice, lines, lineItems, readOnly])
 
   const documentTitle = returnNo ? `Purchase Return ${returnNo}` : 'Purchase Return'
 

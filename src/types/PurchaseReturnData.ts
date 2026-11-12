@@ -29,6 +29,13 @@ export interface PurchaseReturnData {
   totalGstAmount: number;
   totalNetAmount: number;
   purchaseReturnDetails: PurchaseReturnDetailData[];
+  /** Read-only, computed on GET: the parent purchase's current balance after
+   *  all its supplier payments and confirmed returns. */
+  purchaseOutstandingAmount?: number | null;
+  /** What the supplier owes back on the parent purchase. */
+  supplierCreditAmount?: number | null;
+  /** What the supplier owes back on this return — "Amount Due from Supplier". */
+  amountDueFromSupplier?: number | null;
 
   createdBy?: string;
   createdAt?: string;
