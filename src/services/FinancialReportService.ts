@@ -222,6 +222,26 @@ export const getGstRegistrations = async (
   }
 };
 
+/** A referring doctor and the pharmacy it belongs to, for the Referred By filter. */
+export interface PharmacyDoctor {
+  doctorId: number;
+  doctorName: string;
+  pharmacyId: string;
+  pharmacyName: string;
+}
+
+// The referring doctors of the given pharmacies.
+export const getDoctorsByPharmacies = async (
+  pharmacyIds: string[]
+): Promise<PharmacyDoctor[]> => {
+  try {
+    const response = await getReport('/financial-report/get-all-doctors-by-pharmacies', { pharmacyIds });
+    return response.data ?? [];
+  } catch (error) {
+    throw handleApiError(error, 'Failed to fetch the doctors.');
+  }
+};
+
 /** The server's file name from Content-Disposition, e.g. bill-summary_2026-11-03.xlsx. */
 const fileNameFrom = (disposition: string | undefined, fallback: string) => {
   const match = disposition?.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);

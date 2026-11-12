@@ -113,7 +113,6 @@ const COLUMNS: ReportColumn<DoctorWiseRow>[] = [
 ];
 
 export default function DoctorWiseSaleReportPage() {
-  const doctors = useDoctorOptions();
   const report = useFinancialReport({
     emptyFilters: EMPTY_FILTERS,
     toParams: (f) => ({
@@ -129,6 +128,8 @@ export default function DoctorWiseSaleReportPage() {
   });
   const { filters, clearField } = report;
   const { draft, applied, setDraftField } = filters;
+  // The doctors of the pharmacies being picked, so the list follows the Pharmacy field.
+  const doctors = useDoctorOptions(filters);
 
   const chips = [
     ...report.baseChips,

@@ -2,6 +2,7 @@ import clsx from "clsx";
 import { X } from "lucide-react";
 import Image from "next/image";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Tooltip, { isTextTruncated } from "./Tooltip";
 
 export interface DropdownOption {
   label: string;
@@ -351,7 +352,8 @@ const Dropdown: React.FC<DropdownProps> = ({
   };
 
   return (
-    <div className={clsx("w-full relative", className)} ref={dropdownRef}>
+    // text-left: a field reads from the left even inside a centred table cell.
+    <div className={clsx("w-full relative text-left", className)} ref={dropdownRef}>
       {label && (
         <div className="mb-1 flex items-center justify-between gap-2">
           <label
@@ -372,6 +374,8 @@ const Dropdown: React.FC<DropdownProps> = ({
         </div>
       )}
 
+      {/* A long value is cut off at the field's width; the full one shows on hover. */}
+      <Tooltip content={displayValue} disabled={isOpen || isLoading} shouldShow={isTextTruncated}>
       <div
         ref={controlRef}
         // A searchable field has a real input inside it, which is the focus
@@ -399,6 +403,7 @@ const Dropdown: React.FC<DropdownProps> = ({
         {searchable ? (
           <input
             ref={inputRef}
+            data-tooltip-text
             type="text"
             className={clsx(
               "w-full outline-none bg-transparent text-p4 flex-1 placeholder:text-pneutral-500",
@@ -431,7 +436,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           />
         ) : (
           <span
-            title={displayValue || undefined}
+            data-tooltip-text
             className={clsx(
               "text-p4 truncate w-full flex-1",
               !displayValue || isLoading
@@ -487,6 +492,7 @@ const Dropdown: React.FC<DropdownProps> = ({
           )}
         />
       </div>
+      </Tooltip>
 
       {allowOther && isCustomOther && !multiple && (
         <input
@@ -583,9 +589,11 @@ const Dropdown: React.FC<DropdownProps> = ({
                     {/* Truncated labels (long product names, "store - city"
                         pairs) are unreadable at this width, so the full text is
                         available on hover. */}
-                    <span className="truncate" title={option.label}>
-                      {option.label}
-                    </span>
+                    <Tooltip content={option.label} shouldShow={isTextTruncated} className="min-w-0">
+                      <span data-tooltip-text className="block truncate">
+                        {option.label}
+                      </span>
+                    </Tooltip>
                   </div>
                 );
               })

@@ -60,9 +60,10 @@ export default function ReceiptsReportToolbar<R extends PagedReport>({
 }: {
   report: ReturnType<typeof useFinancialReport<ReceiptsFilters, R>>;
 }) {
-  const doctors = useDoctorOptions();
   const { filters, clearField } = report;
   const { draft, applied, setDraftField } = filters;
+  // The doctors of the pharmacies being picked, so the list follows the Pharmacy field.
+  const doctors = useDoctorOptions(filters);
 
   const chips = [
     ...report.baseChips,

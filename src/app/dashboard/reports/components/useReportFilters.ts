@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { usePharmacyStore } from "@/store/pharmacyStore";
-import { getAllDoctors } from "@/services/DoctorService";
+import { getDoctorsByPharmacies } from "@/services/FinancialReportService";
 import { getUserNames } from "@/services/UserManagementService";
 import type { DropdownOption } from "@/app/components/common/Dropdown";
 import { ReportPeriod, defaultReportPeriod } from "./reportUtils";
@@ -84,31 +84,76 @@ export function usePharmacyOptions(onDefault: (pharmacyId: string) => void) {
   return { options, defaultId, labelOf };
 }
 
-/** The referring doctors, for the Referred By filter; their ids go out as `doctorIds`. */
-export function useDoctorOptions() {
+/**
+ * The referring doctors of the pharmacies picked in the filter, for the
+ * Referred By filter; their ids go out as `doctorIds`. Reloads when the
+ * Pharmacy field changes, and drops picked doctors the new pharmacies lack.
+ */
+export function useDoctorOptions<F extends { pharmacyIds: string[]; doctorIds: number[] }>({
+  draft,
+  setDraft,
+}: {
+  draft: F;
+  setDraft: Dispatch<SetStateAction<F>>;
+}) {
+  // No pharmacy picked means the navbar's, as it does for the report itself.
+  const navbarPharmacyId = usePharmacyStore((s) => s.selectedPharmacy?.pharmacyId ?? "");
+  const pharmacyIds = draft.pharmacyIds.length ? draft.pharmacyIds : navbarPharmacyId ? [navbarPharmacyId] : [];
+  const pharmacyKey = pharmacyIds.join(",");
+
   const [options, setOptions] = useState<DropdownOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The selection the options were loaded for; loading until it matches.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!pharmacyKey) return;
     let active = true;
-    getAllDoctors()
+    const ids = pharmacyKey.split(",");
+    getDoctorsByPharmacies(ids)
       .then((doctors) => {
-        if (active) setOptions(doctors.map((d) => ({ label: d.doctorName, value: d.doctorId })));
+        if (!active) return;
+        // With several pharmacies, name the pharmacy so same-named doctors can be told apart.
+        const showPharmacy = ids.length > 1;
+        const seen = new Set<number>();
+        setOptions(
+          doctors.flatMap((d) => {
+            if (seen.has(d.doctorId)) return [];
+            seen.add(d.doctorId);
+            return [{
+              label: showPharmacy ? `${d.doctorName} (${d.pharmacyName})` : d.doctorName,
+              value: d.doctorId,
+            }];
+          }),
+        );
       })
       .catch((err) => {
         // The filter just stays empty; the report itself still loads.
         console.error("Failed to fetch doctors:", err);
+        if (active) setOptions([]);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setLoadedKey(pharmacyKey);
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [pharmacyKey]);
 
+  const loading = !!pharmacyKey && loadedKey !== pharmacyKey;
+
+  useEffect(() => {
+    if (loading) return;
+    const known = new Set(options.map((o) => o.value));
+    setDraft((prev) =>
+      prev.doctorIds.every((id) => known.has(id))
+        ? prev
+        : { ...prev, doctorIds: prev.doctorIds.filter((id) => known.has(id)) },
+    );
+  }, [loading, options, setDraft]);
+
+  // Falls back to the id: the list follows the draft pharmacies, which may no longer hold an applied doctor.
   const labelOf = (doctorId: number) =>
-    options.find((o) => o.value === doctorId)?.label ?? "";
+    options.find((o) => o.value === doctorId)?.label ?? String(doctorId);
 
   return { options, loading, labelOf };
 }
