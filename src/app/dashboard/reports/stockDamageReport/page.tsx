@@ -3,8 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   Calendar,
@@ -17,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
+import { PaginationControl } from "@/app/components/common/table/Pagination";
 import ReportHeader from "../components/ReportHeader";
 import { useReportActions } from "../components/useReportActions";
 import { downloadStockDamageExport, getStockDamageReport } from "@/services/AuditReports/StockDamageService";
@@ -484,7 +483,6 @@ const StockDamageReportPage = () => {
   const rows = shownReport?.damageTransactions?.data ?? [];
   const summary = shownReport?.summary;
   const totalRecords = shownReport?.damageTransactions?.totalRecords ?? 0;
-  const pageCount = Math.max(1, report?.damageTransactions?.totalPages ?? 1);
   const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
   const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
@@ -1121,29 +1119,14 @@ const StockDamageReportPage = () => {
                 <ChevronDown className="pointer-events-none absolute right-sm size-4 text-pneutral-500" />
               </span>
             </div>
-            <div className="flex items-center gap-sm">
-              <button
-                type="button"
-                aria-label="Previous page"
-                disabled={pageIndex === 0}
-                onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                className="flex size-[45px] cursor-pointer items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-300 text-pneutral-900 disabled:cursor-not-allowed"
-              >
-                <ArrowLeft className="size-6" />
-              </button>
-              <span className="flex size-[45px] items-center justify-center rounded-lg border border-secondary-700 bg-secondary-500 text-label-l5 font-semibold text-primary-900">
-                {pageIndex + 1}
-              </span>
-              <button
-                type="button"
-                aria-label="Next page"
-                disabled={pageIndex >= pageCount - 1}
-                onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))}
-                className="flex size-[45px] cursor-pointer items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-300 text-pneutral-900 disabled:cursor-not-allowed"
-              >
-                <ArrowRight className="size-6" />
-              </button>
-            </div>
+            {/* Same page-number control as the other reports (e.g. Bill Summary).
+                PaginationControl is 1-based; pageIndex is 0-based. */}
+            <PaginationControl
+              page={pageIndex + 1}
+              pageSize={pageSize}
+              totalItems={report?.damageTransactions?.totalRecords ?? 0}
+              onPageChange={(page) => setPageIndex(page - 1)}
+            />
           </div>
         </div>
       </div>

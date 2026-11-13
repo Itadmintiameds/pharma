@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import Image from "next/image";
 import { ColumnDef } from "@tanstack/react-table";
 import {
@@ -197,18 +198,82 @@ const DateFilterField = ({
   onChange: (value: string) => void;
 }) => {
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // The native picker has no open/close events, so track it ourselves.
+  const pickerOpenRef = useRef(false);
+  // Whether the picker was open when the field or icon was pressed. Pressing
+  // outside the picker already closes it, so that click must not reopen it.
+  const wasOpenOnPressRef = useRef(false);
+
+  // Switch to type="date" synchronously so the native picker can open in the
+  // same click (showPicker needs a date input and a user gesture).
+  const openPicker = () => {
+    flushSync(() => setFocused(true));
+    const input = inputRef.current;
+    if (!input) return;
+    input.focus();
+    try {
+      input.showPicker();
+      pickerOpenRef.current = true;
+    } catch {
+      // Unsupported browser — the focused date input is still usable.
+    }
+  };
+
+  const togglePicker = () => {
+    const wasOpen = wasOpenOnPressRef.current;
+    // Reset so a keyboard press (no mousedown) starts from "closed".
+    wasOpenOnPressRef.current = false;
+    if (wasOpen) {
+      pickerOpenRef.current = false;
+      inputRef.current?.blur();
+      return;
+    }
+    openPicker();
+  };
 
   return (
     <Input
+      ref={inputRef}
       type={focused || value ? "date" : "text"}
       placeholder={placeholder}
       value={value}
       onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
-      onChange={(e) => onChange(e.target.value)}
-      rightIcon={<CalendarDays size={20} className="text-pneutral-900" />}
-      className="rounded-lg! [&_input]:text-p4 [&_input]:font-regular [&_input]:placeholder:text-pneutral-500"
-      containerClassName="w-full sm:w-42.5 sm:shrink-0"
+      onBlur={() => {
+        pickerOpenRef.current = false;
+        setFocused(false);
+      }}
+      onMouseDown={() => {
+        wasOpenOnPressRef.current = pickerOpenRef.current;
+      }}
+      onClick={togglePicker}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") pickerOpenRef.current = false;
+      }}
+      onChange={(e) => {
+        // Picking a date (or Clear / Today) closes the picker.
+        pickerOpenRef.current = false;
+        onChange(e.target.value);
+      }}
+      rightIcon={
+        <button
+          type="button"
+          aria-label={`Toggle ${placeholder} calendar`}
+          onMouseDown={(e) => {
+            // Keep focus on the input so pressing the icon doesn't blur it first.
+            e.preventDefault();
+            wasOpenOnPressRef.current = pickerOpenRef.current;
+          }}
+          onClick={togglePicker}
+          className="flex cursor-pointer items-center"
+        >
+          <CalendarDays size={20} className="text-pneutral-900" />
+        </button>
+      }
+      // Hide the browser's own small calendar indicator; the icon above opens the picker.
+      className="rounded-lg! [&_input]:text-p4 [&_input]:font-regular [&_input]:placeholder:text-pneutral-500 [&_input::-webkit-calendar-picker-indicator]:hidden"
+      // Wide enough for the native date picker popup (~218px) to sit flush under the field.
+      containerClassName="w-full sm:w-56 sm:shrink-0"
     />
   );
 };
