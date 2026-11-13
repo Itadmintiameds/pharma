@@ -2,20 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  RefreshCw,
-  Banknote,
-  Box,
-  ChartColumn,
-  ChevronRight,
-  Clock,
-  FileChartColumn,
-  ReceiptText,
-  Scale,
-  Search,
-  TriangleAlert,
-  type LucideIcon,
-} from "lucide-react";
+import Image from "next/image";
+import { Search } from "lucide-react";
 import Input from "@/app/components/common/Input";
 
 const CARD_SHADOW =
@@ -25,11 +13,24 @@ const ALL_FORMATS = "Print · PDF · Excel · CSV";
 
 type Category = "sales" | "inventory" | "purchase" | "gst";
 
+// Heroicons outline glyphs exported from the Reports Figma (purple #7D32FC),
+// stored as /public/Reports/ReportCard/<name>.svg.
+type ReportIcon =
+  | "DocumentChartBar"
+  | "ChartBar"
+  | "Clock"
+  | "Cube"
+  | "ReceiptRefund"
+  | "Banknotes"
+  | "ArrowPath"
+  | "ExclamationTriangle"
+  | "Scale";
+
 type Report = {
   title: string;
   description: string;
   href: string;
-  icon: LucideIcon;
+  icon: ReportIcon;
   formats?: string;
 };
 
@@ -56,57 +57,57 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "Pharma Bill Summary",
             description: "A bill-level summary of pharmacy sales for the selected period.",
             href: "/dashboard/reports/BillSummary",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
           },
           {
             title: "Pharma Bill Detailed Sales Report",
             description: "Product-level details of pharmacy sales.",
             href: "/dashboard/reports/DetailedSaleReport",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
             formats: "Excel · CSV · PDF",
           },
           {
             title: "Doctor-wise / Referred By Pharma Sales Report",
             description: "Product-level sales grouped by the Referred By value.",
             href: "/dashboard/reports/DoctorWiseSaleReport",
-            icon: ChartColumn,
+            icon: "ChartBar",
             formats: "Excel · CSV · PDF",
           },
           {
             title: "Bill Due Summary – (In-Patient)",
             description: "Pending amounts against In-Patient pharmacy bills.",
             href: "/dashboard/reports/BillDueSummary",
-            icon: Clock,
+            icon: "Clock",
           },
           {
             title: "Inventory Sales Report",
             description: "Product-wise sales and sales returns.",
             href: "/dashboard/reports/inventorySalesReport",
-            icon: Box,
+            icon: "Cube",
           },
           {
             title: "Pharmacy Sales Return Report",
             description: "Completed sales returns with settlement and refund details.",
             href: "/dashboard/reports/pharmacySalesReturnReport",
-            icon: ReceiptText,
+            icon: "ReceiptRefund",
           },
           {
             title: "Gross Profit / Margin Analysis Report",
             description: "Product-wise profitability from net sales and cost of goods sold.",
             href: "/dashboard/reports/grossProfitReport",
-            icon: ChartColumn,
+            icon: "ChartBar",
           },
           {
             title: "Gross Profit (GP) on Consolidated Sales Book",
             description: "Date-wise bill amount, cost, gross profit and G.P. %.",
             href: "/dashboard/reports/grossProfitSalesBook",
-            icon: ChartColumn,
+            icon: "ChartBar",
           },
           {
             title: "User-wise Collection Report",
             description: "Payments collected by each user and payment mode.",
             href: "/dashboard/reports/userwiseCollectionReport",
-            icon: Banknote,
+            icon: "Banknotes",
           },
         ],
       },
@@ -117,19 +118,19 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "Sales Summary",
             description: "Total sales, discounts, returns, net sales and IP pending.",
             href: "/dashboard/reports/SalesSummary",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Payment Mode Summary",
             description: "Payments received, grouped by payment mode.",
             href: "/dashboard/reports/PaymentModeSummary",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Receipt Details",
             description: "Payments received against current and previous bills.",
             href: "/dashboard/reports/ReceiptDetails",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
           },
         ],
       },
@@ -140,55 +141,55 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "Bill Count Summary",
             description: "Total, fully paid and pending bills for the day.",
             href: "/dashboard/reports/DayCloseBillCountSummary",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
           },
           {
             title: "Sales Summary",
             description: "Sales, discounts, returns and net sales for the day.",
             href: "/dashboard/reports/DayCloseSalesSummary",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Payment Mode Summary",
             description: "Payments collected today, by payment mode.",
             href: "/dashboard/reports/DayClosePaymentModeSummary",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Receipt Details",
             description: "Receipts against current and previous bills.",
             href: "/dashboard/reports/DayCloseReceiptDetails",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
           },
           {
             title: "Billing by Patient Type",
             description: "Bill count and amount by patient type.",
             href: "/dashboard/reports/DayCloseBillingByPatientType",
-            icon: ChartColumn,
+            icon: "ChartBar",
           },
           {
             title: "Billing by User",
             description: "Bill count and total sales by user.",
             href: "/dashboard/reports/DayCloseBillingByUser",
-            icon: ChartColumn,
+            icon: "ChartBar",
           },
           {
             title: "Receipt by User",
             description: "Receipt count and amount by user.",
             href: "/dashboard/reports/DayCloseReceiptByUser",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Current Bill Details",
             description: "Bills generated today with received and pending amounts.",
             href: "/dashboard/reports/DayCloseCurrentBillDetails",
-            icon: FileChartColumn,
+            icon: "DocumentChartBar",
           },
           {
             title: "Sales Return Details",
             description: "Sales returns processed today.",
             href: "/dashboard/reports/DayCloseSalesReturnDetails",
-            icon: ReceiptText,
+            icon: "ReceiptRefund",
           },
         ],
       },
@@ -205,37 +206,37 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "Current Stock Summary Report",
             description: "Product and batch-wise stock as of a selected date.",
             href: "/dashboard/reports/currentStockSummaryReport",
-            icon: Box,
+            icon: "Cube",
           },
           {
             title: "Stock Movement Report",
             description: "Transaction-wise stock in, stock out and balance.",
             href: "/dashboard/reports/stockMovementReport",
-            icon: RefreshCw,
+            icon: "ArrowPath",
           },
           {
             title: "Stock Expiry Report",
             description: "Expired and near-expiry stock by batch and location.",
             href: "/dashboard/reports/stockExpiryReport",
-            icon: Clock,
+            icon: "Clock",
           },
           {
             title: "Stock Damage Report",
             description: "Damaged stock handled through returns and adjustments.",
             href: "/dashboard/reports/stockDamageReport",
-            icon: TriangleAlert,
+            icon: "ExclamationTriangle",
           },
           {
             title: "Stock Return Report",
             description: "Products returned from pharmacies and warehouses.",
             href: "/dashboard/reports/stockReturnReport",
-            icon: ReceiptText,
+            icon: "ReceiptRefund",
           },
           {
             title: "Stock Adjustment Report",
             description: "Inventory increased or decreased through adjustments.",
             href: "/dashboard/reports/stockAdjustmentReport",
-            icon: Scale,
+            icon: "Scale",
           },
         ],
       },
@@ -252,31 +253,31 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "Purchase Register Report",
             description: "Medicines purchased through supplier invoices.",
             href: "/dashboard/reports/purchaseRegisterReport",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Supplier Purchase Return Report",
             description: "Products returned to suppliers.",
             href: "/dashboard/reports/supplierPurchaseReturnReport",
-            icon: ReceiptText,
+            icon: "ReceiptRefund",
           },
           {
             title: "Supplier Outstanding Report",
             description: "Outstanding payables by supplier and invoice.",
             href: "/dashboard/reports/supplierOutstandingReport",
-            icon: Scale,
+            icon: "Scale",
           },
           {
             title: "Supplier Payment Report",
             description: "Payments made to suppliers against credit invoices.",
             href: "/dashboard/reports/supplierPaymentReport",
-            icon: Banknote,
+            icon: "Banknotes",
           },
           {
             title: "Product-wise Purchase and Sales Analysis Report",
             description: "Purchased vs sold quantities and values by product.",
             href: "/dashboard/reports/productwisePurchaseandSalesAnalysisReport",
-            icon: RefreshCw,
+            icon: "ArrowPath",
           },
         ],
       },
@@ -293,7 +294,7 @@ const REPORT_SECTIONS: ReportSection[] = [
             title: "GST Sales & Purchase Summary Report",
             description: "Sales and purchase ledgers with GST, returns and Net GST by month.",
             href: "/dashboard/reports/GSTSalesAndPurchaseSummaryReport",
-            icon: Scale,
+            icon: "Scale",
           },
         ],
       },
@@ -324,7 +325,6 @@ const CountBadge = ({ count }: { count: number }) => (
 );
 
 const ReportCard = ({ report }: { report: Report }) => {
-  const Icon = report.icon;
   return (
     <Link
       href={report.href}
@@ -332,11 +332,14 @@ const ReportCard = ({ report }: { report: Report }) => {
     >
       <div className="flex w-full items-center justify-between">
         <span className="flex size-11 items-center justify-center rounded-2xl bg-secondary-100">
-          <Icon className="size-6 text-secondary-700" strokeWidth={1.5} />
+          <Image src={`/Reports/ReportCard/${report.icon}.svg`} alt="" width={24} height={24} />
         </span>
-        <ChevronRight
-          className="size-6 text-primary-800 transition-transform group-hover:translate-x-0.5"
-          strokeWidth={1.5}
+        <Image
+          src="/Reports/ReportCard/OpenReport.svg"
+          alt=""
+          width={24}
+          height={24}
+          className="transition-transform group-hover:translate-x-0.5"
         />
       </div>
       <p className="text-label-l4 font-semibold text-pneutral-900">{report.title}</p>
@@ -376,7 +379,7 @@ export default function ReportsPage() {
       {/* Page header */}
       <div className="flex w-full items-center gap-md">
         <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-secondary-100">
-          <ChartColumn className="size-7 text-secondary-700" strokeWidth={1.5} />
+          <Image src="/Reports/ReportCard/ReportsHeader.svg" alt="" width={28} height={28} />
         </span>
         <div className="flex min-w-0 flex-1 flex-col gap-xxsm">
           <h1 className="text-h5 font-semibold text-pneutral-900">Reports</h1>

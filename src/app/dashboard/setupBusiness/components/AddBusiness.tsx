@@ -194,7 +194,9 @@ function SetupBusinessContent() {
             ownershipType={ownershipType}
             panNumber={panNumber}
             gstNumber={gstNumber}
-            validateBusinessDetails={() => setupBusinessRef.current?.validate() ?? true}
+            validateBusinessDetails={async () =>
+              setupBusinessRef.current ? setupBusinessRef.current.validate() : true
+            }
             locationType={locationType}
             manageCentrally={manageCentrally}
             setManageCentrally={setManageCentrally}

@@ -3,8 +3,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
-  ArrowLeft,
-  ArrowRight,
   ArrowUp,
   ArrowUpDown,
   Banknote,
@@ -18,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import Dropdown, { type DropdownOption } from "@/app/components/common/Dropdown";
+import { PaginationControl } from "@/app/components/common/table/Pagination";
 import ReportHeader from "../components/ReportHeader";
 import { useReportActions } from "../components/useReportActions";
 import { downloadProductWiseExport, getProductWiseReport } from "@/services/AuditReports/ProductWiseService";
@@ -270,12 +269,6 @@ const ReportTable = ({ columns, rows, sortBy, sortDir, onSort, showRows, emptyMe
       </div>
     </div>
   );
-};
-
-// Up to three page numbers, kept around the current page.
-const visiblePages = (pageIndex: number, pageCount: number) => {
-  const start = Math.max(0, Math.min(pageIndex - 1, pageCount - 3));
-  return Array.from({ length: Math.min(3, pageCount) }, (_, i) => start + i);
 };
 
 const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
@@ -533,7 +526,6 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
   const summary = shownReport?.summary;
   const rows = shownReport?.productDetails?.data ?? [];
   const totalRecords = shownReport?.productDetails?.totalRecords ?? 0;
-  const pageCount = Math.max(1, report?.productDetails?.totalPages ?? 1);
   const firstRecord = totalRecords ? shownPageIndex * pageSize + 1 : 0;
   const lastRecord = Math.min(shownPageIndex * pageSize + rows.length, totalRecords);
 
@@ -1139,46 +1131,14 @@ const ProductWisePurchaseAndSalesAnalysisReportPage = () => {
                 <ChevronDown className="pointer-events-none absolute right-sm size-4 text-pneutral-500" />
               </span>
             </div>
-            <div className="flex items-center gap-sm">
-              <button
-                type="button"
-                aria-label="Previous page"
-                disabled={pageIndex === 0}
-                onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-                className="flex size-[45px] cursor-pointer items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-300 text-pneutral-900 disabled:cursor-not-allowed"
-              >
-                <ArrowLeft className="size-6" />
-              </button>
-              {visiblePages(pageIndex, pageCount).map((p) =>
-                p === pageIndex ? (
-                  <span
-                    key={p}
-                    aria-current="page"
-                    className="flex size-[45px] items-center justify-center rounded-lg border border-secondary-700 bg-secondary-500 text-label-l5 font-semibold text-primary-900"
-                  >
-                    {p + 1}
-                  </span>
-                ) : (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPageIndex(p)}
-                    className="flex size-[45px] cursor-pointer items-center justify-center rounded-lg border border-pneutral-200 bg-white text-label-l5 font-medium text-pneutral-900"
-                  >
-                    {p + 1}
-                  </button>
-                ),
-              )}
-              <button
-                type="button"
-                aria-label="Next page"
-                disabled={pageIndex >= pageCount - 1}
-                onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))}
-                className="flex size-[45px] cursor-pointer items-center justify-center rounded-lg border border-pneutral-200 bg-secondary-300 text-pneutral-900 disabled:cursor-not-allowed"
-              >
-                <ArrowRight className="size-6" />
-              </button>
-            </div>
+            {/* Same page-number control as the other reports (e.g. Bill Summary).
+                PaginationControl is 1-based; pageIndex is 0-based. */}
+            <PaginationControl
+              page={pageIndex + 1}
+              pageSize={pageSize}
+              totalItems={report?.productDetails?.totalRecords ?? 0}
+              onPageChange={(page) => setPageIndex(page - 1)}
+            />
           </div>
         </div>
 

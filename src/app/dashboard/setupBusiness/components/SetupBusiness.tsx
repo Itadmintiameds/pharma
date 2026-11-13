@@ -3,9 +3,11 @@
 import Dropdown from "@/app/components/common/Dropdown";
 import Input from "@/app/components/common/Input";
 import LogoCropModal from "@/app/components/common/LogoCropModal";
+import { showToast } from "@/app/components/common/Toast";
 import { setupBusinessSchema } from "@/app/schema/PharmacyDetailsSchema";
+import { GST_TAKEN_MESSAGE, isGstNumberTaken } from "@/services/SetupBusinessService";
 import Image from "next/image";
-import React, { forwardRef, useImperativeHandle, useState } from "react";
+import React, { forwardRef, useImperativeHandle, useRef, useState } from "react";
 
 const OWNERSHIP_TYPE_OPTIONS = [
   "Private Limited Company",
@@ -39,9 +41,10 @@ interface SetupBusinessViewProps {
 }
 
 export interface SetupBusinessHandle {
-  // Validates all business fields (e.g. GSTIN) and surfaces inline errors.
+  // Validates all business fields (e.g. GSTIN format and that no other
+  // business already holds it) and surfaces inline errors.
   // Called by the parent flow before it proceeds past this step.
-  validate: () => boolean;
+  validate: () => Promise<boolean>;
 }
 
 const SetupBusinessView = forwardRef<SetupBusinessHandle, SetupBusinessViewProps>(
@@ -134,8 +137,31 @@ const SetupBusinessView = forwardRef<SetupBusinessHandle, SetupBusinessViewProps
         }
       };
 
+  // Latest typed GST, so a slow uniqueness check can't flag a value the user
+  // has since changed.
+  const latestGstRef = useRef(gstNumber);
+  latestGstRef.current = gstNumber;
+
+  // GSTIN is unique across all businesses: check it once the format is valid.
+  const handleGstBlur = async () => {
+    const value = gstNumber.trim();
+    if (!value || !setupBusinessSchema.shape.gstNumber.safeParse(value).success) {
+      return;
+    }
+
+    try {
+      const taken = await isGstNumberTaken(value);
+      if (taken && latestGstRef.current.trim() === value) {
+        setErrors((prev) => ({ ...prev, gstNumber: GST_TAKEN_MESSAGE }));
+      }
+    } catch (error) {
+      // Re-checked on submit; don't block typing on a failed lookup
+      console.error("GST number check failed:", error);
+    }
+  };
+
   useImperativeHandle(ref, () => ({
-    validate: () => {
+    validate: async () => {
       const result = setupBusinessSchema.safeParse({
         businessName,
         ownershipType,
@@ -143,20 +169,31 @@ const SetupBusinessView = forwardRef<SetupBusinessHandle, SetupBusinessViewProps
         gstNumber,
       });
 
-      if (result.success) {
-        setErrors({});
-        return true;
+      if (!result.success) {
+        const fieldErrors: Record<string, string> = {};
+        result.error.issues.forEach((issue) => {
+          const field = issue.path[0] as string;
+          if (!fieldErrors[field]) {
+            fieldErrors[field] = issue.message;
+          }
+        });
+        setErrors(fieldErrors);
+        return false;
       }
 
-      const fieldErrors: Record<string, string> = {};
-      result.error.issues.forEach((issue) => {
-        const field = issue.path[0] as string;
-        if (!fieldErrors[field]) {
-          fieldErrors[field] = issue.message;
+      try {
+        if (await isGstNumberTaken(gstNumber)) {
+          setErrors({ gstNumber: GST_TAKEN_MESSAGE });
+          return false;
         }
-      });
-      setErrors(fieldErrors);
-      return false;
+      } catch (error) {
+        console.error("GST number check failed:", error);
+        showToast.error("Unable to verify the GST number. Please try again.");
+        return false;
+      }
+
+      setErrors({});
+      return true;
     },
   }));
 
@@ -308,6 +345,7 @@ const SetupBusinessView = forwardRef<SetupBusinessHandle, SetupBusinessViewProps
             placeholder="46SSDSF123S556"
             value={gstNumber}
             onChange={handleFieldChange("gstNumber", setGstNumber)}
+            onBlur={handleGstBlur}
             maxLength={15}
             error={errors.gstNumber}
             required

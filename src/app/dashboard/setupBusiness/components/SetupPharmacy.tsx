@@ -16,6 +16,8 @@ import {
   resubmitPharmacy,
   uploadOrganizationLogo,
   uploadPharmacyDocument,
+  isGstNumberTaken,
+  GST_TAKEN_MESSAGE,
 } from "@/services/SetupBusinessService";
 import { checkDocumentNumber } from "@/services/UserManagementService";
 import { showToast } from "@/app/components/common/Toast";
@@ -44,7 +46,7 @@ interface SetupPharmacyProps {
   existingOrg?: any;
   prefillData?: any;
   logo?: File | null;
-  validateBusinessDetails?: () => boolean;
+  validateBusinessDetails?: () => Promise<boolean>;
 }
 
 interface PostOffice {
@@ -161,7 +163,7 @@ const SetupPharmacy = ({
   const issueDateRef = useRef<HTMLInputElement>(null);
   const expiryDateRef = useRef<HTMLInputElement>(null);
 
-  // Local (not UTC) date — toISOString() shifts to the previous day for IST
+  // Local (not UTC) date â€” toISOString() shifts to the previous day for IST
   // mornings, which made today unselectable as an issue date.
   const today = (() => {
     const now = new Date();
@@ -182,10 +184,14 @@ const SetupPharmacy = ({
   // Management screen (create org happens on final submit there).
   const isNewMultiple = !hasOrganization && locationType === "multiple";
 
-  const handleNext = () => {
-    if (!validateForm()) return;
+  const handleNext = async () => {
+    // Run the GST uniqueness check alongside the field checks so its error
+    // shows together with the others, not only once everything else is filled.
+    const formValid = validateForm();
+    const gstUnique = await validatePharmacyGstUnique();
+    if (!formValid || !gstUnique) return;
 
-    const businessValid = validateBusinessDetails ? validateBusinessDetails() : true;
+    const businessValid = validateBusinessDetails ? await validateBusinessDetails() : true;
 
     if (!businessValid) {
       showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
@@ -287,7 +293,7 @@ const SetupPharmacy = ({
               : cityList[0] || "",
         });
 
-        // Matched a location — clear any earlier "no location" message
+        // Matched a location â€” clear any earlier "no location" message
         setErrors((prev) => ({ ...prev, pharmacyPincode: "" }));
       } else {
         resetAddress(pincode);
@@ -463,6 +469,50 @@ const SetupPharmacy = ({
     }
   };
 
+  // No two pharmacies may share a GSTIN (even within one business), and a
+  // pharmacy can't use another business's GSTIN.
+  const latestPharmacyGstRef = useRef(pharmacyGst);
+  latestPharmacyGstRef.current = pharmacyGst;
+
+  const handlePharmacyGstBlur = async () => {
+    const value = pharmacyGst.trim();
+    if (!value || !pharmacyDetailsSchema.shape.pharmacyGst.safeParse(value).success) {
+      return;
+    }
+
+    try {
+      const taken = await isGstNumberTaken(value, true, prefillData?.pharmacyRegistrationId);
+      if (taken && latestPharmacyGstRef.current.trim() === value) {
+        setErrors((prev) => ({ ...prev, pharmacyGst: GST_TAKEN_MESSAGE }));
+      }
+    } catch (error) {
+      // Re-checked on submit; don't block typing on a failed lookup
+      console.error("GST number check failed:", error);
+    }
+  };
+
+  // Submit-time uniqueness check for the pharmacy GSTIN (it's optional for
+  // some business types, so an empty value passes).
+  const validatePharmacyGstUnique = async () => {
+    const value = pharmacyGst.trim();
+    // Empty or badly-formatted values are reported by validateForm instead
+    if (!value || !pharmacyDetailsSchema.shape.pharmacyGst.safeParse(value).success) {
+      return true;
+    }
+
+    try {
+      if (await isGstNumberTaken(value, true, prefillData?.pharmacyRegistrationId)) {
+        setErrors((prev) => ({ ...prev, pharmacyGst: GST_TAKEN_MESSAGE }));
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error("GST number check failed:", error);
+      showToast.error("Unable to verify the GST number. Please try again.");
+      return false;
+    }
+  };
+
   const handleFieldChange =
     <K extends keyof typeof pharmacyDetailsSchema.shape>(
       field: K,
@@ -520,7 +570,7 @@ const SetupPharmacy = ({
       }
       const { userId, email, accessToken } = await userResponse.json();
 
-      // Drafts allow partial data — send only the fields that are filled in
+      // Drafts allow partial data â€” send only the fields that are filled in
       const payload: Record<string, any> = { userId: String(userId) };
 
       // Re-saving an existing draft: include the id so the backend updates it
@@ -533,7 +583,7 @@ const SetupPharmacy = ({
       if (selected) payload.pharmacyType = selected.toUpperCase();
       if (email) payload.pharmacyEmail = email;
       if (pharmacyPhone) payload.pharmacyPhone = pharmacyPhone;
-      // No org fallback here — only send PAN/GST the user actually entered
+      // No org fallback here â€” only send PAN/GST the user actually entered
       if (pharmacyPan) payload.panNumber = pharmacyPan;
       if (pharmacyGst) payload.gstNumber = pharmacyGst;
       if (address.city) {
@@ -581,7 +631,7 @@ const SetupPharmacy = ({
         ];
       }
 
-      // Central-inventory choice + warehouse list — only once a "Multiple" org
+      // Central-inventory choice + warehouse list â€” only once a "Multiple" org
       // has made the central-management choice
       if (manageCentrally !== null) {
         payload.centralizedInventory = manageCentrally === true;
@@ -629,7 +679,11 @@ const SetupPharmacy = ({
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) return;
+    // Run the GST uniqueness check alongside the field checks so its error
+    // shows together with the others, not only once everything else is filled.
+    const formValid = validateForm();
+    const gstUnique = await validatePharmacyGstUnique();
+    if (!formValid || !gstUnique) return;
 
     try {
       const isDuplicate = await isDocumentNumberDuplicate(documentNo.trim());
@@ -647,7 +701,7 @@ const SetupPharmacy = ({
     }
 
     if (!hasOrganization) {
-      const businessValid = validateBusinessDetails ? validateBusinessDetails() : true;
+      const businessValid = validateBusinessDetails ? await validateBusinessDetails() : true;
 
       if (!businessValid) {
         showToast.error("Business Details are incomplete or invalid. Please fill them out first.");
@@ -697,7 +751,7 @@ const SetupPharmacy = ({
         console.log("Step 1 Success (Organization):", orgResponse);
 
         // Upload the org logo once the organization exists. It's optional, so a
-        // failure here shouldn't abort the registration — warn and continue.
+        // failure here shouldn't abort the registration â€” warn and continue.
         if (logo) {
           try {
             await uploadOrganizationLogo(logo);
@@ -801,7 +855,7 @@ const SetupPharmacy = ({
         ],
       };
 
-      // Step 3: On Admin Backend — resubmit a correction (PUT /resubmit),
+      // Step 3: On Admin Backend â€” resubmit a correction (PUT /resubmit),
       // submit a draft (PUT /submit), or register a new pharmacy (POST)
       const regResponse = isCorrectionResubmit
         ? await resubmitPharmacy(
@@ -1102,6 +1156,7 @@ const SetupPharmacy = ({
               id="gstNumber"
               value={pharmacyGst}
               onChange={handleFieldChange("pharmacyGst", setPharmacyGst)}
+              onBlur={handlePharmacyGstBlur}
               error={errors.pharmacyGst}
               required={!isGstOptionalForBusinessType(selected)}
             />

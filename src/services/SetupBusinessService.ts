@@ -16,6 +16,38 @@ export const createOrganization = async (data: OrganizationCreateRequest) => {
   }
 };
 
+// GSTINs are unique. True when the GST number is already in use:
+// - business GSTIN (forPharmacy = false): held by another business or one of
+//   its pharmacies.
+// - pharmacy GSTIN (forPharmacy = true): held by ANY other pharmacy (even in
+//   the same business) or by another business.
+// Both cases also check registrations still awaiting admin review (these live
+// only in the admin backend until approved). excludeRegistrationId is the
+// registration being edited, so it doesn't clash with itself.
+export const isGstNumberTaken = async (
+  gstNumber: string,
+  forPharmacy = false,
+  excludeRegistrationId?: string,
+): Promise<boolean> => {
+  const normalized = gstNumber.trim().toUpperCase();
+
+  const [existing, pending] = await Promise.all([
+    api.get<boolean>("/organization/checkGst", {
+      params: { gstNumber: normalized, forPharmacy },
+    }),
+    adminApi.get<{ data: boolean }>("/pharmacy-registration/check-gst", {
+      params: {
+        gstNumber: normalized,
+        ...(excludeRegistrationId ? { excludeRegistrationId } : {}),
+      },
+    }),
+  ]);
+
+  return existing.data === true || pending.data?.data === true;
+};
+
+export const GST_TAKEN_MESSAGE = "This GST number is already registered.";
+
 // Upload the organization logo (multipart/form-data, field name "logo").
 // Auth is via HttpOnly cookies on the shared api client, same as createOrganization.
 export const uploadOrganizationLogo = async (file: File) => {
