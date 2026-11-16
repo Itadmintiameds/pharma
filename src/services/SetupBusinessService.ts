@@ -35,12 +35,20 @@ export const isGstNumberTaken = async (
     api.get<boolean>("/organization/checkGst", {
       params: { gstNumber: normalized, forPharmacy },
     }),
-    adminApi.get<{ data: boolean }>("/pharmacy-registration/check-gst", {
-      params: {
-        gstNumber: normalized,
-        ...(excludeRegistrationId ? { excludeRegistrationId } : {}),
-      },
-    }),
+    adminApi
+      .get<{ data: boolean }>("/pharmacy-registration/check-gst", {
+        params: {
+          gstNumber: normalized,
+          ...(excludeRegistrationId ? { excludeRegistrationId } : {}),
+        },
+      })
+      // If the admin backend can't answer (e.g. an environment where
+      // /check-gst isn't deployed yet), don't block registration — the
+      // pharma-backend check above still runs.
+      .catch((error) => {
+        console.warn("Pending-registration GST check unavailable:", error);
+        return { data: { data: false } };
+      }),
   ]);
 
   return existing.data === true || pending.data?.data === true;
