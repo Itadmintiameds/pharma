@@ -20,6 +20,7 @@ import { calculatePurchaseTotals } from "@/utils/purchaseTotals";
 import { parseGstPercentage, isGstExempted } from "@/utils/gst";
 import { getSupplierById } from "@/services/SupplierService";
 import type { SupplierData } from "@/types/SupplierData";
+import { formatDate } from "@/utils/formatDate";
 
 /**
  * One 24px-tall key : value line. The key column is fixed so every value in a
@@ -82,10 +83,13 @@ interface InvoiceSummaryProps {
 const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onSuccessGoToPurchase, mode = 'create', data, purchase, pharmacy: pharmacyProp, supplier: supplierProp }) => {
   const [currentMode, setCurrentMode] = useState<'create' | 'view' | 'download'>(mode);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  // Shown instead of saving outright when the entered Invoice Amount doesn't
-  // match what the lines actually total to — the mismatch may be a typo on
-  // either side, so it's a confirm rather than a hard block.
+  // Shown instead of saving when the entered Invoice Amount doesn't match what
+  // the lines total to. It's a hard block: the popup only explains, and Save
+  // stays disabled until the two agree.
   const [showAmountMismatch, setShowAmountMismatch] = useState(false);
+  // Set once a save has been refused for a mismatch, so Save reads disabled
+  // from then on until the amounts match.
+  const [mismatchFlagged, setMismatchFlagged] = useState(false);
   const [discount, setDiscount] = useState<number>(0);
   const [discountError, setDiscountError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -336,21 +340,19 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       return;
     }
 
-    // The entered Invoice Amount is only a cross-check against what the
-    // supplier printed — a mismatch may just be a typo on either side, so it
-    // asks before saving rather than blocking outright. Skipped when nothing
-    // was entered, since the field is optional.
-    const enteredInvoiceAmount = Number(header.invoiceAmount || 0);
-    if (
-      enteredInvoiceAmount > 0 &&
-      Math.abs(enteredInvoiceAmount - netAmt) > 0.01
-    ) {
+    // Skipped when no Invoice Amount was entered, since the field is optional.
+    if (amountMismatch) {
+      setMismatchFlagged(true);
       setShowAmountMismatch(true);
       return;
     }
 
     await submitPurchase();
   };
+
+  const enteredInvoiceAmount = Number(header.invoiceAmount || 0);
+  const amountMismatch =
+    enteredInvoiceAmount > 0 && Math.abs(enteredInvoiceAmount - netAmt) > 0.01;
 
   // Memoised so the `?? []` fallback doesn't hand useMemo a new array each render.
   const savedLines = useMemo(() => purchase?.purchaseDetails ?? [], [purchase]);
@@ -396,7 +398,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
           name: item.productName || item.productId,
           hsn: item.hsnCode || '-',
           batch: item.batchNumber || item.batchId,
-          expiry: item.expiryDate || '-',
+          expiry: formatDate(item.expiryDate, '-'),
           // Priced per purchase unit, so it multiplies straight by the quantity.
           purchaseAmt: Number(item.purchasePrice || 0),
           // The full gross — the line never shows its discounted value, only
@@ -447,14 +449,14 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
         <div className="flex-1 h-[126px] flex flex-col gap-[10px]">
           <InfoRow label="Supplier" value={header.supplierName || (header.supplierId ? `Supplier #${header.supplierId}` : '-')} />
           <InfoRow label="Invoice No" value={header.invoiceNo || "-"} />
-          <InfoRow label="Invoice Date" value={header.invoiceDate || "-"} />
+          <InfoRow label="Invoice Date" value={formatDate(header.invoiceDate, "-")} />
           <InfoRow label="Invoice Amount" value={header.invoiceAmount ? `₹ ${Number(header.invoiceAmount).toFixed(2)}` : "-"} />
         </div>
         <div className="flex-1 h-[126px] flex flex-col gap-[10px]">
           <InfoRow label="GRN" value={header.grnNo || "-"} />
           <InfoRow label="Payment Type" value={header.paymentType || "-"} />
           <InfoRow label="Credit Days" value={header.creditDays ? `${header.creditDays} Days` : "-"} />
-          <InfoRow label="Due Date" value={header.dueDate || "-"} />
+          <InfoRow label="Due Date" value={formatDate(header.dueDate, "-")} />
         </div>
       </div>
 
@@ -658,7 +660,7 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
           {currentMode === 'create' && (
             <button 
               onClick={handleSaveTaxInvoice} 
-              disabled={isSubmitting}
+              disabled={isSubmitting || (mismatchFlagged && amountMismatch)}
               className="w-[180px] h-9 bg-secondary-700 hover:bg-secondary-800 text-white rounded-lg text-[16px] leading-6 font-medium transition-colors disabled:opacity-50"
             >
               {isSubmitting ? "Saving..." : "Save TAX Invoice"}
@@ -693,14 +695,9 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       <ConfirmDialog
         isOpen={showAmountMismatch}
         title="Invoice Amount Mismatch"
-        message={`The entered Invoice Amount (₹ ${Number(header.invoiceAmount || 0).toFixed(2)}) does not match the Net Payable (₹ ${netAmt.toFixed(2)}). Do you want to save anyway?`}
-        confirmLabel="Save"
+        message={`The entered Invoice Amount (₹ ${enteredInvoiceAmount.toFixed(2)}) does not match the Net Payable (₹ ${netAmt.toFixed(2)}). Adjust the values so they match before saving.`}
         cancelLabel="Cancel"
-        loading={isSubmitting}
-        onConfirm={async () => {
-          setShowAmountMismatch(false);
-          await submitPurchase();
-        }}
+        hideConfirm
         onCancel={() => setShowAmountMismatch(false)}
       />
     </div>

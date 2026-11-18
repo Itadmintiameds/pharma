@@ -10,7 +10,6 @@ import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/componen
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import InvoiceSummary from "./InvoiceSummary";
-import ProductSearchTable from "./ProductSearchTable";
 import AddStockToProduct from "./AddStockToProduct";
 import DataTable from "@/app/components/common/table/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
@@ -206,9 +205,6 @@ const editableTabs = (line: OnboardedLine | null): string[] => {
   return line.packagingCreated ? TABS.slice(1) : TABS.slice(2);
 };
 
-/** Rows per page in the existing-product list. */
-const PRODUCT_PAGE_SIZE = 10;
-
 const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("Product Details");
@@ -219,13 +215,9 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
   const [viewState, setViewState] = useState<'search' | 'add' | 'addStock' | 'summary'>('search');
   const [stockTarget, setStockTarget] = useState<ProductStockRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  // Query the table is filtered by — only updated on submit, so typing alone
-  // narrows the dropdown without disturbing the list below it.
-  const [appliedQuery, setAppliedQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [productRows, setProductRows] = useState<ProductStockRow[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
-  const [productsError, setProductsError] = useState<string | null>(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Bumped to remount the three step forms with blank state.
@@ -452,23 +444,18 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     },
   ], [handleEditLine]);
 
-  // Product master, loaded once so both the search dropdown and the table
-  // below it filter the same client-side list.
+  // Product master, loaded once; the search dropdown filters it client-side.
   useEffect(() => {
     let active = true;
 
     const load = async () => {
       setIsLoadingProducts(true);
-      setProductsError(null);
       try {
         const products = await getOrganizationProductStockSummary();
         if (active) setProductRows(products.map(toProductStockRow));
       } catch (err) {
-        if (active) {
-          setProductsError(
-            err instanceof Error ? err.message : "Failed to load products."
-          );
-        }
+        // The dropdown falls back to "No matching products".
+        console.error("Failed to load products:", err);
       } finally {
         if (active) setIsLoadingProducts(false);
       }
@@ -481,24 +468,10 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     };
   }, []);
 
-  // Dropdown follows what is being typed; the table follows the submitted query.
+  // Dropdown follows what is being typed.
   const dropdownRows = useMemo(
     () => productRows.filter((row) => matchesProductQuery(row, searchQuery)).slice(0, 6),
     [productRows, searchQuery]
-  );
-
-  const tableRows = useMemo(
-    () => productRows.filter((row) => matchesProductQuery(row, appliedQuery)),
-    [productRows, appliedQuery]
-  );
-
-  // The dropdown is capped at six suggestions and needs none of this; only the
-  // table below it is paged.
-  const [productPage, setProductPage] = useState(1);
-
-  const productPageRows = tableRows.slice(
-    (productPage - 1) * PRODUCT_PAGE_SIZE,
-    productPage * PRODUCT_PAGE_SIZE
   );
 
   /**
@@ -679,13 +652,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
     setViewState('search'); // Go back to search view instead of list page
   };
 
-  const handleSearch = () => {
-    setAppliedQuery(searchQuery.trim());
-    // Back to page 1: a search run from page 4 would otherwise land on a page
-    // the narrowed list no longer has.
-    setProductPage(1);
-  };
-
   // Existing product: skip the product step and go straight to package + batch.
   const handleAddStock = (row: ProductStockRow) => {
     setShowDropdown(false);
@@ -747,6 +713,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
             mrpPerUnit: Number(batchData?.mrpPerSmallestUnit || 0),
             sellingPricePerUnit: Number(batchData?.sellingPricePerSmallestUnit || 0),
             rackLocation: batchData?.rackLocation || "",
+            minimumStockLevel: Number(batchData?.minimumStockLevel || 0),
             freeQuantity: Number(batchData?.freeQuantity || 0),
             freeUnit: batchData?.freeUnit || "",
             stockQuantity: Number(batchData?.purchaseQuantity || 0)
@@ -1011,7 +978,7 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
 
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div className="flex flex-col gap-4 w-full min-h-full">
       {/* Top Header */}
       <div className="flex flex-col gap-1 w-full mb-1">
         <h2 className="font-semibold text-[24px] text-pneutral-900 leading-[32px]">
@@ -1086,12 +1053,6 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
                     setSearchQuery(e.target.value);
                     setShowDropdown(e.target.value.length > 0);
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleSearch();
-                      setShowDropdown(false);
-                    }
-                  }}
                   className="flex-1 bg-transparent outline-none text-pneutral-900 text-[14px]"
                 />
                 <Image
@@ -1157,33 +1118,12 @@ const AddProducts: React.FC<AddProductsProps> = ({ onClose, onBack }) => {
             </button>
           </div>
 
-          {/* Product master list */}
-          <div className="mt-4">
-            <ProductSearchTable
-              rows={productPageRows}
-              loading={isLoadingProducts}
-              error={productsError}
-              emptyMessage={
-                appliedQuery
-                  ? `No products match "${appliedQuery}". Click '+ Add Item' to create one.`
-                  : "No products yet. Click '+ Add Item' to create one."
-              }
-              onAddStock={handleAddStock}
-              pagination={{
-                page: productPage,
-                pageSize: PRODUCT_PAGE_SIZE,
-                totalItems: tableRows.length,
-                onPageChange: setProductPage,
-              }}
-            />
-          </div>
-
           {/* The step's footer: Back to the supplier details this invoice is
               being built against on the left, and the way out of the step on
               the right. Both live on one rule so the two exits read as a pair
               rather than the action floating loose against the grid. */}
           {(onBack || store.purchaseDetails.length > 0) && (
-            <div className="flex justify-between items-center w-full mt-4 pt-4 border-t border-gray-100 pb-8">
+            <div className="flex justify-between items-center w-full mt-auto pt-4 border-t border-gray-100 pb-8">
               {onBack && (
                 <Button variant="outline" onClick={onBack} className="w-[120px]">
                   Back

@@ -14,6 +14,11 @@ interface ConfirmSalesReturnProps {
   returnAmount: string;
   outstandingAdjustment: string;
   refundAmount: string;
+  /** e.g. "UPI". Absent when nothing is paid back (an IP return that only
+   *  clears the outstanding) — the row is then left out. */
+  refundPaymentMode?: string;
+  /** Non-cash refunds only. */
+  transactionId?: string;
   status: string;
 }
 
@@ -50,6 +55,8 @@ const ConfirmSalesReturn = ({
   returnAmount,
   outstandingAdjustment,
   refundAmount,
+  refundPaymentMode,
+  transactionId,
   status,
 }: ConfirmSalesReturnProps) => {
   // Escape closes the modal, like the close icon
@@ -119,6 +126,12 @@ const ConfirmSalesReturn = ({
             value={refundAmount}
             valueClassName="text-primary-800"
           />
+          {refundPaymentMode && (
+            <SummaryRow label="Refund Payment Mode" value={refundPaymentMode} />
+          )}
+          {transactionId && (
+            <SummaryRow label="Transaction ID" value={transactionId} />
+          )}
           <SummaryRow
             label="Status"
             value={status}

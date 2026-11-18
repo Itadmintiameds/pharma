@@ -61,6 +61,9 @@ import {
   PRIMARY_BUTTON,
 } from "./billingButtons";
 import { parseGstPercentage } from "@/utils/gst";
+import { useAuthorizers } from "@/hooks/useAuthorizers";
+
+const DISCOUNT_REASON_MAX = 50;
 
 interface BillingProps {
   onCancel: () => void;
@@ -70,6 +73,12 @@ interface BillingProps {
     /** As typed on this screen — the unit is carried alongside it. */
     billDiscountValue: number;
     discountType: DiscountType;
+    /** Why the bill level discount was given, and who signed it off. */
+    discountReason: string;
+    /** userId of the authorizing Admin / Super Admin (re-selects it on return). */
+    authorizedBy: string;
+    /** Their full name, without the role — what the bill stores. */
+    authorizedByName: string;
     /** Uploaded against the bill once it has an id. */
     prescriptionFile?: File | null;
   }) => void;
@@ -77,6 +86,8 @@ interface BillingProps {
   initialLines?: BillLine[];
   initialBillDiscount?: number;
   initialDiscountType?: DiscountType;
+  initialDiscountReason?: string;
+  initialAuthorizedBy?: string;
 }
 
 /**
@@ -120,8 +131,8 @@ const CUSTOMER_TYPES: {
     icon: <TypeIcon src="/Billing/Walk-in.svg" size={14} />,
   },
   { label: "Registered", value: "REGISTERED", icon: <User size={16} /> },
-  { label: "OP Patient", value: "OP_PATIENT", icon: <TypeIcon src="/Billing/OP.svg" /> },
-  { label: "IP Patient", value: "IP_PATIENT", icon: <TypeIcon src="/Billing/IP.svg" /> },
+  { label: "Out-Patient", value: "OP_PATIENT", icon: <TypeIcon src="/Billing/OP.svg" /> },
+  { label: "In-Patient", value: "IP_PATIENT", icon: <TypeIcon src="/Billing/IP.svg" /> },
   { label: "Daycare", value: "DAYCARE", icon: <TypeIcon src="/Billing/Daycare.svg" /> },
   { label: "Corporate", value: "CORPORATE", icon: <Building2 size={16} /> },
   { label: "Business", value: "BUSINESS", icon: <Briefcase size={16} /> },
@@ -247,6 +258,8 @@ const Billing: React.FC<BillingProps> = ({
   initialLines,
   initialBillDiscount,
   initialDiscountType,
+  initialDiscountReason,
+  initialAuthorizedBy,
 }) => {
   const [customer, setCustomer] = useState<CustomerInfo>(
     initialCustomer ?? EMPTY_CUSTOMER
@@ -262,6 +275,14 @@ const Billing: React.FC<BillingProps> = ({
   const [billDiscountInput, setBillDiscountInput] = useState(
     initialBillDiscount ? String(initialBillDiscount) : "0"
   );
+  const [discountReason, setDiscountReason] = useState(initialDiscountReason ?? "");
+  const [authorizedBy, setAuthorizedBy] = useState(initialAuthorizedBy ?? "");
+  // Same people, by the same role rules, as a late sales return's authorizer.
+  const {
+    options: authorizerOptions,
+    loading: loadingOrgUsers,
+    nameOf: authorizerName,
+  } = useAuthorizers();
   const [prescriptionName, setPrescriptionName] = useState("");
   const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -480,6 +501,10 @@ const Billing: React.FC<BillingProps> = ({
           ? validateCode(customer.visitNumber ?? "", visitNumberLabel, CODE_MAX)
           : "",
       address: validateAddress(customer.address),
+      // Asked for whenever any discount is given — additional or item-wise.
+      discountReason:
+        hasAnyDiscount && !discountReason.trim() ? "Discount reason is required" : "",
+      authorizedBy: hasAnyDiscount && !authorizedBy ? "Discount authorized by is required" : "",
     };
 
     setFieldErrors(nextErrors);
@@ -506,12 +531,18 @@ const Billing: React.FC<BillingProps> = ({
         lines,
         billDiscountValue: Number(billDiscountInput) || 0,
         discountType,
+        // Hidden (and so ignored) when no discount is given.
+        discountReason: hasAnyDiscount ? discountReason.trim() : "",
+        authorizedBy: hasAnyDiscount ? authorizedBy.trim() : "",
+        authorizedByName: hasAnyDiscount
+          ? authorizerName(authorizedBy)
+          : "",
         prescriptionFile,
       });
     } catch (err) {
-      console.error("Failed to save the referring doctor:", err);
+      console.error("Failed to save the prescribing doctor:", err);
       showToast.error(
-        err instanceof Error ? err.message : "Failed to save the referring doctor."
+        err instanceof Error ? err.message : "Failed to save the prescribing doctor."
       );
     } finally {
       setIsSubmitting(false);
@@ -573,6 +604,10 @@ const Billing: React.FC<BillingProps> = ({
   // discounts, so it can't exceed that amount (the Net Amount on screen
   // already has it taken off, hence not compared against that).
   const netBeforeBillDiscount = totals.grossAmount - totals.itemDiscount;
+
+  // A reason and an authorizer are needed for any discount on the bill.
+  const hasAnyDiscount = billDiscount.amount > 0 || totals.itemDiscount > 0;
+
   const billDiscountError =
     billDiscount.amount > netBeforeBillDiscount + 0.005
       ? `Additional discount cannot be higher than the net amount (₹ ${formatAmount(
@@ -806,7 +841,7 @@ const Billing: React.FC<BillingProps> = ({
 
               {!isAddingNewDoctor ? (
                 <Dropdown
-                  label="Referred By"
+                  label="Prescribed By"
                   placeholder="Select doctor or add new"
                   options={doctorOptions}
                   value={customer.doctorId ?? ""}
@@ -816,7 +851,7 @@ const Billing: React.FC<BillingProps> = ({
                 />
               ) : (
                 <Input
-                  label="Referred By"
+                  label="Prescribed By"
                   placeholder="e.g. Dr. Anitha Rao"
                   value={newDoctorName}
                   onChange={(e) => setNewDoctorName(sanitizeName(e.target.value))}
@@ -961,7 +996,7 @@ const Billing: React.FC<BillingProps> = ({
         {/* Left Side - Discount Card & Clear Cart */}
         <div className="flex flex-col gap-5 w-full">
           {/* Discount Card */}
-          <div className="w-full rounded-[12px] border border-[#EAEAE9] bg-white p-4 shadow-sm flex flex-col justify-between h-[226px]">
+          <div className="w-full rounded-[12px] border border-[#EAEAE9] bg-white p-4 shadow-sm flex flex-col gap-3 min-h-[226px]">
             <div className="flex items-center justify-between">
               <span className="text-[18px] font-medium text-[#000000]">Additional Discount</span>
               <div className="h-[36px] w-[122px] p-[4px] rounded-[12px] border border-[#EAEAE9] bg-[#F5F5F5] flex items-center">
@@ -1029,6 +1064,37 @@ const Billing: React.FC<BillingProps> = ({
                   ? `Discount Percentage : ${billDiscount.percentage.toFixed(2)}%`
                   : `Discount Amount : ₹ ${formatAmount(billDiscount.amount)}`}
               </div>
+            )}
+
+            {hasAnyDiscount && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label="Discount Reason"
+                placeholder="e.g. Senior citizen"
+                value={discountReason}
+                onChange={(e) => {
+                  setDiscountReason(e.target.value);
+                  if (e.target.value.trim()) setFieldError("discountReason", "");
+                }}
+                maxLength={DISCOUNT_REASON_MAX}
+                required
+                error={fieldErrors.discountReason}
+              />
+              <Dropdown
+                label="Discount Authorized By"
+                placeholder="Select user"
+                options={authorizerOptions}
+                value={authorizedBy}
+                onChange={(value) => {
+                  setAuthorizedBy(String(value ?? ""));
+                  if (value) setFieldError("authorizedBy", "");
+                }}
+                isLoading={loadingOrgUsers}
+                searchable
+                required
+                error={fieldErrors.authorizedBy}
+              />
+            </div>
             )}
           </div>
 

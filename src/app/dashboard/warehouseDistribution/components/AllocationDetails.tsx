@@ -32,7 +32,7 @@ const formatAllocationDateDisplay = (value: string): string => {
 const referenceOptions: DropdownOption[] = [
   { label: 'Planned Replenishment', value: 'planned-replenishment' },
   { label: 'Emergency Requirement', value: 'emergency-requirement' },
-  { label: 'Festival Stock', value: 'festival-stock' },
+  { label: 'Seasonal Stock', value: 'seasonal-stock' },
   { label: 'Monthly Refill', value: 'monthly-refill' },
 ]
 

@@ -6,12 +6,29 @@ import { ColumnDef } from "@tanstack/react-table";
 import { ArrowLeft, ArrowRightLeft, Check } from "lucide-react";
 import Button from "@/app/components/common/Button";
 import Dropdown from "@/app/components/common/Dropdown";
+import Input from "@/app/components/common/Input";
 import DataTable from "@/app/components/common/table/DataTable";
 import { CUSTOMER_TYPE_LABEL } from "@/app/dashboard/dashboardComponents/salesOverview/aggregations";
 import { getBillingById } from "@/services/BillingService";
 import { BillingRecord } from "@/types/BillingData";
 import { formatAmount, roundToRupee } from "@/utils/billingTotals";
-import { loadSalesReturnDraft, saveSalesReturnDraft } from "./salesReturnDraft";
+import { pendingAfterReturns } from "@/utils/salesReturnAmounts";
+import {
+  loadSalesReturnDraft,
+  loadSalesReturnRefund,
+  saveSalesReturnDraft,
+  saveSalesReturnRefund,
+  type RefundMode,
+} from "./salesReturnDraft";
+
+const REFUND_MODE_OPTIONS: { label: string; value: RefundMode }[] = [
+  { label: "Cash", value: "CASH" },
+  { label: "Card", value: "CARD" },
+  { label: "UPI", value: "UPI" },
+  { label: "Net Banking", value: "NET_BANKING" },
+];
+
+const TRANSACTION_ID_MAX = 50;
 
 // Figma "boxShadowCard" — same three-layer shadow as the Find Original Bill cards
 const CARD_SHADOW =
@@ -347,11 +364,21 @@ const CreateSalesReturn = () => {
   const searchParams = useSearchParams();
   // Set by Find Original Bill ("Select" / "Continue to Create Return")
   const billingId = searchParams.get("billingId") ?? "";
+  // Set only for a late return; carried on to the review step, which saves it.
+  const authorizedBy = searchParams.get("authorizedBy") ?? "";
   const [bill, setBill] = useState<BillingRecord | null>(null);
   const [products, setProducts] = useState<BillProduct[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(billingId));
   const [loadError, setLoadError] = useState("");
   const [returnLines, setReturnLines] = useState<Record<number, ReturnLine>>({});
+  // Restored from the draft when coming back from Review (see the load below).
+  const [refundMode, setRefundMode] = useState<RefundMode | "">("");
+  const [transactionId, setTransactionId] = useState("");
+  // Errors show once a field has been left empty, not before.
+  const [refundTouched, setRefundTouched] = useState({ mode: false, txn: false });
+  const needsTransactionId = refundMode !== "" && refundMode !== "CASH";
+  const refundDetailsComplete =
+    refundMode !== "" && (!needsTransactionId || transactionId.trim() !== "");
 
   useEffect(() => {
     if (!billingId) return;
@@ -377,6 +404,9 @@ const CreateSalesReturn = () => {
             ])
           )
         );
+        const refund = loadSalesReturnRefund(billingId);
+        setRefundMode(refund.refundMode);
+        setTransactionId(refund.transactionId);
         setLoadError("");
       })
       .catch((err) => {
@@ -424,7 +454,20 @@ const CreateSalesReturn = () => {
   );
   // Review needs at least one line, and every ticked line needs a quantity, a
   // reason, and remarks when the reason is "Other".
+  // IP patients: the return first clears what is still owed on the bill and
+  // only the remainder is paid back — same rule as Review & Confirm. Refund
+  // details are asked for only when something is actually paid back.
+  const isIpPatient = bill?.customerType === "IP_PATIENT";
+  const ipOutstanding =
+    isIpPatient && bill
+      ? pendingAfterReturns(Number(bill.billingPayments?.at(-1)?.pendingAmount) || 0, bill)
+      : 0;
+  const refundAmount = totalReturnAmount - Math.min(totalReturnAmount, ipOutstanding);
+  const showRefundDetails = !isIpPatient || refundAmount > 0;
+  const refundComplete = !showRefundDetails || refundDetailsComplete;
+
   const canReview =
+    refundComplete &&
     returningItems.length > 0 &&
     products.every((product) => {
       const line = returnLines[product.id] ?? EMPTY_LINE;
@@ -449,8 +492,15 @@ const CreateSalesReturn = () => {
         };
       })
     );
+    saveSalesReturnRefund(
+      billingId,
+      showRefundDetails
+        ? { refundMode, transactionId: needsTransactionId ? transactionId.trim() : "" }
+        : { refundMode: "", transactionId: "" }
+    );
     router.push(
-      `/dashboard/salesReturn?view=review&billingId=${billingId}&billNo=${encodeURIComponent(billNo)}`
+      `/dashboard/salesReturn?view=review&billingId=${billingId}&billNo=${encodeURIComponent(billNo)}` +
+        (authorizedBy ? `&authorizedBy=${encodeURIComponent(authorizedBy)}` : "")
     );
   };
 
@@ -528,6 +578,44 @@ const CreateSalesReturn = () => {
         </ReturnLinesContext.Provider>
       </div>
 
+      {/* Refund — how the return amount is paid back. A non-cash refund needs
+          the transaction it went out on. */}
+      {showRefundDetails && (
+      <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2">
+        <Dropdown
+          label="Refund Payment Mode"
+          required
+          placeholder="Select refund payment mode"
+          options={REFUND_MODE_OPTIONS}
+          value={refundMode}
+          onChange={(value) => {
+            const mode = (value ?? "") as RefundMode | "";
+            setRefundMode(mode);
+            setRefundTouched((prev) => ({ ...prev, mode: true }));
+            if (mode === "CASH") setTransactionId("");
+          }}
+          error={refundTouched.mode && !refundMode ? "Refund payment mode is required" : ""}
+        />
+        {needsTransactionId && (
+          <Input
+            label="Transaction ID"
+            required
+            placeholder="Enter transaction ID"
+            value={transactionId}
+            maxLength={TRANSACTION_ID_MAX}
+            // maxLength stops typing and paste; the slice also covers autofill.
+            onChange={(e) => setTransactionId(e.target.value.slice(0, TRANSACTION_ID_MAX))}
+            onBlur={() => setRefundTouched((prev) => ({ ...prev, txn: true }))}
+            error={
+              refundTouched.txn && !transactionId.trim()
+                ? "Transaction ID is required"
+                : ""
+            }
+          />
+        )}
+      </div>
+      )}
+
       {/* Return Summary Card — Figma node 4023:56279 */}
       <div className="grid w-full grid-cols-1 gap-md rounded-2xl bg-pneutral-50 p-md sm:flex sm:items-start">
         {summaryItems.map(({ label, value }) => (
@@ -563,7 +651,9 @@ const CreateSalesReturn = () => {
           title={
             canReview
               ? undefined
-              : "Tick at least one product and give each ticked product a quantity and reason"
+              : !refundComplete
+                ? "Select a refund payment mode, with its transaction ID when it isn't cash"
+                : "Tick at least one product and give each ticked product a quantity and reason"
           }
           className={`${FOOTER_BUTTON} w-full! bg-primary-800! text-pneutral-50! disabled:cursor-not-allowed disabled:opacity-50 sm:w-57.5!`}
         >

@@ -12,7 +12,9 @@ interface ConfirmDialogProps {
   destructive?: boolean;
   /** Disables buttons and shows a busy label while the action runs. */
   loading?: boolean;
-  onConfirm: () => void;
+  /** Information only: shows just the cancel button. */
+  hideConfirm?: boolean;
+  onConfirm?: () => void;
   onCancel: () => void;
 }
 
@@ -24,6 +26,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelLabel = "Cancel",
   destructive = false,
   loading = false,
+  hideConfirm = false,
   onConfirm,
   onCancel,
 }) => {
@@ -46,6 +49,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           >
             {cancelLabel}
           </button>
+          {!hideConfirm && (
           <button
             type="button"
             onClick={onConfirm}
@@ -57,6 +61,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           >
             {loading ? "Please wait..." : confirmLabel}
           </button>
+          )}
         </div>
       </div>
     </div>

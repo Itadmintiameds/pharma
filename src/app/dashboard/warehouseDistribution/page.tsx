@@ -306,6 +306,9 @@ interface TransferRow {
   toCode: string
   products: number
   qty: string
+  receivedQty: string
+  /** Received, but not the quantity that was sent — shown in red. */
+  receivedMismatch: boolean
   status: string
 }
 
@@ -386,6 +389,12 @@ const toTransferRow = (summary: WarehouseDistributionSummaryData): TransferRow =
   toCode: summary.toId,
   products: summary.productsCount,
   qty: `${summary.totalIssueQuantity}`,
+  // Summed off the lines by the list endpoint; 0 until the stock is received.
+  receivedQty: `${summary.totalReceivedQuantity ?? 0}`,
+  // Only once received: before that the received figure is always 0.
+  receivedMismatch:
+    summary.currentStatus === 'STOCK_RECEIVED' &&
+    (summary.totalReceivedQuantity ?? 0) !== summary.totalIssueQuantity,
   status: distributionStatusLabel[summary.currentStatus] ?? summary.currentStatus,
 })
 
@@ -414,7 +423,7 @@ const colStatus = 'w-40 shrink-0'
 const colActions = 'w-26 shrink-0'
 
 const TransferTableHeader = () => (
-  <div className="flex w-full min-w-245 items-stretch">
+  <div className="flex w-full min-w-271 items-stretch">
     <div
       className={`flex h-18 items-center border-b border-r border-pneutral-200 bg-secondary-600 px-2 py-4 ${colTransferNo}`}
     >
@@ -451,6 +460,13 @@ const TransferTableHeader = () => (
       </p>
     </div>
     <div
+      className={`flex h-18 items-center justify-center border-b border-r border-pneutral-200 bg-secondary-600 px-2 py-4 ${colQty}`}
+    >
+      <p className="whitespace-nowrap text-label-l3 font-semibold text-secondary-50">
+        Received Qty
+      </p>
+    </div>
+    <div
       className={`flex h-18 items-center justify-center border-b border-r border-pneutral-200 bg-secondary-600 px-2 py-4 ${colStatus}`}
     >
       <p className="whitespace-nowrap text-label-l3 font-semibold text-secondary-50">
@@ -474,7 +490,7 @@ const TransferTableRow = ({
   row: TransferRow
   onView?: () => void
 }) => (
-  <div className="flex w-full min-w-245 items-stretch">
+  <div className="flex w-full min-w-271 items-stretch">
     <div
       className={`flex h-17 flex-col justify-center gap-1 border-b border-r border-pneutral-200 px-2 py-4 ${colTransferNo}`}
     >
@@ -513,6 +529,18 @@ const TransferTableRow = ({
     >
       <p className="whitespace-nowrap text-p3 font-medium text-pneutral-900">
         {row.qty}
+      </p>
+    </div>
+
+    <div
+      className={`flex h-17 items-center justify-center border-b border-r border-pneutral-200 px-2 py-4 ${colQty}`}
+    >
+      <p
+        className={`whitespace-nowrap text-p3 font-medium ${
+          row.receivedMismatch ? 'text-warning-600' : 'text-pneutral-900'
+        }`}
+      >
+        {row.receivedQty}
       </p>
     </div>
 
@@ -1096,11 +1124,11 @@ const page = () => {
         <div className="w-full overflow-x-auto rounded-sm border border-pneutral-200">
           <TransferTableHeader />
           {isLoadingTransferList ? (
-            <div className="flex min-w-245 items-center justify-center py-10 text-p3 text-pneutral-500">
+            <div className="flex min-w-271 items-center justify-center py-10 text-p3 text-pneutral-500">
               Loading transfers...
             </div>
           ) : filteredTransferList.length === 0 ? (
-            <div className="flex min-w-245 items-center justify-center py-10 text-p3 text-pneutral-500">
+            <div className="flex min-w-271 items-center justify-center py-10 text-p3 text-pneutral-500">
               {transferList.length === 0
                 ? 'No transfers found.'
                 : 'No transfers match the selected filters.'}

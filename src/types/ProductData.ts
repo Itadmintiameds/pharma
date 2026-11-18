@@ -180,6 +180,8 @@ export interface ProductBatchDetails {
   stockQuantity: number;
   purchaseUnit: string;
   rackLocation: string | null;
+  /** Absent on batches saved before the column existed. */
+  minimumStockLevel?: number | null;
   mrp: number;
   mrpPerUnit: number;
   purchasePrice: number;
@@ -276,6 +278,7 @@ export interface NewBatchPayload {
   mrpPerUnit: number;
   sellingPricePerUnit: number;
   rackLocation: string;
+  minimumStockLevel: number;
 }
 
 /**

@@ -26,6 +26,9 @@ interface BuildPayloadArgs {
   /** The bill level discount as entered on the billing screen. */
   billDiscountValue: number;
   discountType: DiscountType;
+  /** Why the discount was given, and the name of who authorized it. */
+  discountReason?: string;
+  discountAuthorizedBy?: string;
 }
 
 /**
@@ -39,6 +42,8 @@ export const buildBillingPayload = ({
   payment,
   billDiscountValue,
   discountType,
+  discountReason,
+  discountAuthorizedBy,
 }: BuildPayloadArgs): CreateBillingPayload => {
   // An amount is converted against the cart's MRP total, then every line
   // carries that same percentage on top of its own discount.
@@ -149,6 +154,10 @@ export const buildBillingPayload = ({
     totalNetAmount,
     roundOffAmount,
     totalNetAmountAfterRoundOff,
+    ...(discountReason?.trim() ? { discountReason: discountReason.trim() } : {}),
+    ...(discountAuthorizedBy?.trim()
+      ? { discountAuthorizedBy: discountAuthorizedBy.trim() }
+      : {}),
 
     billingDetails,
     billingPayments: [

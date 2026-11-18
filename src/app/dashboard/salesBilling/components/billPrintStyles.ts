@@ -310,4 +310,9 @@ body { margin: 0 !important; padding: 0 !important; }
   width: 42px !important;
   max-width: none !important;
 }
+
+/* Discount reason / authorizer are for the counter, not the customer's copy. */
+[data-print="discount"] {
+  display: none !important;
+}
 `;

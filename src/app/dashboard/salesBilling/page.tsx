@@ -292,6 +292,12 @@ interface BillDraft {
   /** The bill level discount as typed, with the unit it was typed in. */
   billDiscountValue: number;
   discountType: DiscountType;
+  /** Why the discount was given; saved on the bill as discountReason. */
+  discountReason?: string;
+  /** userId, to re-select it on the billing screen. */
+  authorizedBy?: string;
+  /** Full name of the authorizer, as saved on the bill. */
+  authorizedByName?: string;
   payment?: PaymentDetails;
   /** Uploaded once the bill has an id. */
   prescriptionFile?: File | null;
@@ -472,6 +478,9 @@ const SalesBillingContent = () => {
         },
         invoiceNo: bill.billNo,
         billDate: bill.createdAt?.split("T")[0] ?? "",
+        // Only set on bills that carried a discount.
+        discountReason: bill.discountReason ?? "",
+        authorizedByName: bill.discountAuthorizedBy ?? "",
         // Whatever was uploaded against the bill, so the invoice screen can
         // offer it beside Print.
         prescriptionUrl: bill.prescriptionUrl,
@@ -665,6 +674,8 @@ const SalesBillingContent = () => {
         initialLines={draft.lines}
         initialBillDiscount={draft.billDiscountValue}
         initialDiscountType={draft.discountType}
+        initialDiscountReason={draft.discountReason}
+        initialAuthorizedBy={draft.authorizedBy}
         onCancel={() => {
           setDraft(EMPTY_DRAFT);
           setStep("list");
@@ -674,6 +685,9 @@ const SalesBillingContent = () => {
           lines,
           billDiscountValue,
           discountType,
+          discountReason,
+          authorizedBy,
+          authorizedByName,
           prescriptionFile,
         }) => {
           setDraft((prev) => ({
@@ -682,6 +696,9 @@ const SalesBillingContent = () => {
             lines,
             billDiscountValue,
             discountType,
+            discountReason,
+            authorizedBy,
+            authorizedByName,
             prescriptionFile,
           }));
           setStep("payment");
@@ -774,6 +791,8 @@ const SalesBillingContent = () => {
         payment={draft.payment}
         mode={summaryMode}
         prescriptionUrl={draft.prescriptionUrl}
+        discountReason={draft.discountReason}
+        discountAuthorizedBy={draft.authorizedByName}
         onBack={() => {
           if (summaryMode === "view" && returnTo) {
             // Reached from another screen's link — go back there
@@ -796,6 +815,8 @@ const SalesBillingContent = () => {
                 payment: draft.payment,
                 billDiscountValue: draft.billDiscountValue,
                 discountType: draft.discountType,
+                discountReason: draft.discountReason,
+                discountAuthorizedBy: draft.authorizedByName,
               })
             );
 
@@ -859,6 +880,8 @@ const SalesBillingContent = () => {
           }
           payment={downloading.draft.payment}
           pharmacy={downloading.pharmacy}
+          discountReason={downloading.draft.discountReason}
+          discountAuthorizedBy={downloading.draft.authorizedByName}
           onDone={() => setDownloading(null)}
         />
       )}

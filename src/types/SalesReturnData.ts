@@ -24,6 +24,12 @@ export interface SalesReturnData {
   totalGstAmount: number;
   totalNetAmount: number;
   itemCount?: number;
+  /** Who allowed a return past the return window; null otherwise. */
+  returnAuthorizedBy?: string | null;
+  /** How the return was paid back: CASH, CARD, UPI or NET_BANKING. */
+  returnPaymentMode?: string | null;
+  /** Reference of a non-cash refund; null for cash. */
+  returnTransactionId?: string | null;
 
   createdBy?: string;
   createdAt?: string;
@@ -51,6 +57,12 @@ export interface SalesReturnCreatePayload {
   totalGrossAmount: number;
   totalGstAmount: number;
   totalNetAmount: number;
+  /** Full name (no role) of who authorized a late return. Sent only then. */
+  returnAuthorizedBy?: string;
+  /** Sent only when money is actually paid back. */
+  returnPaymentMode?: string;
+  /** Sent only for a non-cash refund. */
+  returnTransactionId?: string;
   salesReturnDetails: SalesReturnCreateDetail[];
 }
 

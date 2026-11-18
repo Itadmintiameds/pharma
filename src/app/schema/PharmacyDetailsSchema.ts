@@ -8,7 +8,7 @@ const validStateCodes = [
 ];
 
 // Business types (SetupPharmacy's "Business Type") that aren't required to have a GSTIN.
-export const GST_OPTIONAL_PHARMACY_TYPES = ["clinic", "hospital", "doctor"];
+export const GST_OPTIONAL_PHARMACY_TYPES = ["clinic", "doctor"];
 
 const gstNumberFormat = z
     .string()

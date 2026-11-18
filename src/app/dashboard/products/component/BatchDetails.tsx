@@ -79,7 +79,9 @@ const EMPTY_FORM = {
   purchasePricePerSmallestUnit: '',
   mrpPerSmallestUnit: '',
   sellingPricePerSmallestUnit: '',
-  rackLocation: ''
+  rackLocation: '',
+  // Required on a new batch; part of the batch master, like the rack.
+  minimumStockLevel: ''
 };
 
 /** "" for null/undefined, so a locked input shows blank rather than "null". */
@@ -250,7 +252,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
    * "15" would be worse than ignoring it.
    */
   const handleIntegerChange = (
-    field: 'purchaseQuantity' | 'freeQuantity',
+    field: 'purchaseQuantity' | 'freeQuantity' | 'minimumStockLevel',
     value: string
   ) => {
     if (!/^\d*$/.test(value)) return;
@@ -353,7 +355,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       purchasePricePerSmallestUnit: str(batch.purchasePricePerUnit),
       mrpPerSmallestUnit: str(batch.mrpPerUnit),
       sellingPricePerSmallestUnit: str(batch.sellingPricePerUnit),
-      rackLocation: str(batch.rackLocation)
+      rackLocation: str(batch.rackLocation),
+      minimumStockLevel: str(batch.minimumStockLevel)
     });
   };
 
@@ -488,6 +491,15 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
     return { ...validateFreeGoods(), ...next };
   };
 
+  /**
+   * Required on a new batch. A saved batch's master data is read-only here, so
+   * one created before the field existed can't be asked for it.
+   */
+  const minimumStockErrors = (): Record<string, string> =>
+    String(formData.minimumStockLevel).trim() === ''
+      ? { minimumStockLevel: 'Minimum Stock Level is required' }
+      : {};
+
   useImperativeHandle(ref, () => ({
     getFormData: () => ({
       ...resolvedFormData,
@@ -541,6 +553,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       );
 
       Object.assign(nextErrors, validateFreeGoods());
+      Object.assign(nextErrors, minimumStockErrors());
       // After the schema, so "must be at least the purchase price" replaces a
       // bare "is required" only once a value is actually there.
       Object.assign(nextErrors, priceOrderErrors());
@@ -787,6 +800,23 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               value={formData.rackLocation}
               onChange={(e) => handleChange('rackLocation', e.target.value)}
               error={errors.rackLocation}
+              {...masterProps}
+            />
+            <Input
+              label={`Minimum Stock Level (${smallestUnitLabel})`}
+              required={!isLocked}
+              type="number"
+              min={0}
+              step={1}
+              placeholder="0"
+              value={formData.minimumStockLevel}
+              onKeyDown={blockNonIntegerKeys}
+              onChange={(e) => {
+                handleIntegerChange('minimumStockLevel', e.target.value);
+                if (e.target.value.trim())
+                  setErrors(prev => ({ ...prev, minimumStockLevel: '' }));
+              }}
+              error={errors.minimumStockLevel}
               {...masterProps}
             />
           </div>

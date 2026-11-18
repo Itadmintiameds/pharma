@@ -151,6 +151,10 @@ export interface CreateBillingPayload {
   roundOffAmount: number;
   /** What the customer actually pays — totalNetAmount to the whole rupee. */
   totalNetAmountAfterRoundOff: number;
+  /** Sent only when the bill carries a discount (additional or item-wise). */
+  discountReason?: string;
+  /** Full name of the Admin / Super Admin who approved it — no role. */
+  discountAuthorizedBy?: string;
   billingDetails: BillingDetailPayload[];
   billingPayments: BillingPaymentPayload[];
 }
@@ -322,6 +326,9 @@ export interface BillingRecord {
   paymentType: PaymentType | null;
   prescriptionUrl: string | null;
   sellingType: string | null;
+  /** Set only on bills that carried a discount. */
+  discountReason?: string | null;
+  discountAuthorizedBy?: string | null;
   pharmacyId?: string;
   /** Sum of the lines' MRP totals. Absent on bills saved before the column
    *  existed. */

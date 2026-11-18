@@ -16,6 +16,20 @@ import {
 } from "@/services/BillingService";
 import { BillingRecord } from "@/types/BillingData";
 import { formatAmount } from "@/utils/billingTotals";
+import { useAuthorizers } from "@/hooks/useAuthorizers";
+
+/** Bills older than this need an Admin / Super Admin to authorize the return. */
+const RETURN_WINDOW_DAYS = 7;
+
+/** Whole days from the bill's date to today (local midnight to midnight). */
+const daysSince = (iso?: string): number => {
+  const [year, month, day] = (iso ?? "").split("T")[0].split("-").map(Number);
+  if (!year || !month || !day) return 0;
+  const billDay = new Date(year, month - 1, day);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((today.getTime() - billDay.getTime()) / 86_400_000);
+};
 
 // Page background (#f8f5ff) and 24px padding of Figma "Content" (node 4023:56043)
 // come from the dashboard layout's <main>.
@@ -52,6 +66,8 @@ interface OriginalBill {
   billingId: number;
   billNo: string;
   billDate: string;
+  /** Raw API timestamp, for the return-window check. */
+  createdAt?: string;
   customerName: string;
   customerType: string;
   mobileNumber: string;
@@ -93,6 +109,7 @@ const toOriginalBill = (bill: BillingRecord): OriginalBill => {
     billingId: bill.billingId,
     billNo: bill.billNo,
     billDate: formatBillDate(bill.createdAt),
+    createdAt: bill.createdAt,
     // Null for an anonymous walk-in bill.
     customerName: bill.customerName || "Walk-in Customer",
     customerType: bill.customerType ? CUSTOMER_TYPE_LABEL[bill.customerType] : "—",
@@ -302,11 +319,31 @@ const FindOriginalBill = () => {
     }
   };
 
-  // The bill number rides along in the URL so the create step can load it.
-  const openCreateSalesReturn = (bill: OriginalBill) =>
+  // The bill number rides along in the URL so the create step can load it —
+  // and, for a late return, who authorized it, which is saved with the return.
+  const openCreateSalesReturn = (bill: OriginalBill, authorizedBy = "") =>
     router.push(
-      `/dashboard/salesReturn?view=create&billingId=${bill.billingId}&billNo=${encodeURIComponent(bill.billNo)}`
+      `/dashboard/salesReturn?view=create&billingId=${bill.billingId}&billNo=${encodeURIComponent(bill.billNo)}` +
+        (authorizedBy ? `&authorizedBy=${encodeURIComponent(authorizedBy)}` : "")
     );
+
+  // Every return needs someone to authorize it; a bill past the return window
+  // also gets the "window exceeded" warning.
+  const [lateBill, setLateBill] = useState<OriginalBill | null>(null);
+  const [lateAuthorizer, setLateAuthorizer] = useState("");
+  const {
+    options: authorizerOptions,
+    loading: loadingAuthorizers,
+    nameOf: authorizerName,
+  } = useAuthorizers();
+
+  const requestCreateReturn = (bill: OriginalBill) => {
+    setLateAuthorizer("");
+    setLateBill(bill);
+  };
+  const isPastWindow = lateBill
+    ? daysSince(lateBill.createdAt) > RETURN_WINDOW_DAYS
+    : false;
 
   const activeMethod = SEARCH_METHODS.find((m) => m.value === searchMethod)!;
 
@@ -461,7 +498,7 @@ const FindOriginalBill = () => {
               so all columns fit without horizontal scrolling. */}
           <div className="w-full [&>div]:rounded-lg [&>div]:shadow-none [&_thead_tr]:h-15 [&_th]:border-pneutral-200 [&_th]:p-xsm [&_th]:font-work-sans [&_th]:text-label-l3 [&_th]:font-semibold [&_tbody_tr]:h-16 [&_td]:p-xsm [&_td]:wrap-break-word">
             <DataTable
-              columns={buildMatchingBillColumns(openCreateSalesReturn)}
+              columns={buildMatchingBillColumns(requestCreateReturn)}
               data={matchingBills}
               emptyState={
                 <div className="flex h-40 items-center justify-center text-label-l4 text-pneutral-500">
@@ -556,12 +593,96 @@ const FindOriginalBill = () => {
           <Button
             type="button"
             variant="primary"
-            onClick={() => openCreateSalesReturn(originalBill)}
+            onClick={() => requestCreateReturn(originalBill)}
             className="h-12! max-h-13 min-h-12 w-full! min-w-27 gap-xsm rounded-lg! bg-primary-800! px-md text-label-l4! font-medium! text-pneutral-50! sm:w-71.75!"
           >
             Continue to Create Return
             <ArrowRightLeft size={20} className="shrink-0" />
           </Button>
+        </div>
+      )}
+
+      {/* Authorize return — an Admin / Super Admin has to be named before any
+          return is created; past the return window it also warns. */}
+      {lateBill && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px] px-4">
+          <div
+            role="alertdialog"
+            aria-labelledby="late-return-title"
+            className="relative flex w-full max-w-[460px] flex-col gap-4 rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            {isPastWindow ? (
+            <div className="flex items-start gap-sm rounded-xl bg-warning-50 p-sm text-warning-600">
+              <TriangleAlert
+                size={24}
+                aria-hidden
+                fill="currentColor"
+                stroke="white"
+                className="shrink-0"
+              />
+              <div className="flex min-w-0 flex-col gap-xxsm">
+                <p id="late-return-title" className="text-label-l4 font-semibold">
+                  Return window exceeded
+                </p>
+                <p className="text-p3 font-regular">
+                  Bill {lateBill.billNo} was raised on {lateBill.billDate}, it&apos;s been{" "}
+                  {daysSince(lateBill.createdAt)} days — more than the{" "}
+                  {RETURN_WINDOW_DAYS}-day return window. Select who authorized this
+                  return to continue.
+                </p>
+              </div>
+            </div>
+            ) : (
+              <div className="flex min-w-0 flex-col gap-xxsm">
+                <p
+                  id="late-return-title"
+                  className="text-label-l4 font-semibold text-pneutral-900"
+                >
+                  Authorize Sales Return
+                </p>
+                <p className="text-p3 font-regular text-pneutral-600">
+                  Bill {lateBill.billNo} was raised on {lateBill.billDate}. Select who
+                  authorized this return to continue.
+                </p>
+              </div>
+            )}
+
+            <Dropdown
+              label="Authorized By"
+              required
+              placeholder="Select user"
+              options={authorizerOptions}
+              value={lateAuthorizer}
+              onChange={(value) => setLateAuthorizer(String(value ?? ""))}
+              isLoading={loadingAuthorizers}
+              searchable
+            />
+
+            <div className="mt-2 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLateBill(null)}
+                className="w-30"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="primary"
+                disabled={!lateAuthorizer}
+                onClick={() => {
+                  const bill = lateBill;
+                  setLateBill(null);
+                  // The name alone, without the role, is what gets saved.
+                  openCreateSalesReturn(bill, authorizerName(lateAuthorizer));
+                }}
+                className="w-30 bg-primary-800!"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

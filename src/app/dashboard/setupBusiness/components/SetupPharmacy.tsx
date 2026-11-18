@@ -369,7 +369,7 @@ const SetupPharmacy = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillData]);
 
-  // Clinics, hospitals and doctors aren't required to register for GST.
+  // Clinics and doctors aren't required to register for GST.
   const isGstOptionalForBusinessType = (businessType: string) =>
     GST_OPTIONAL_PHARMACY_TYPES.includes(businessType);
 
@@ -980,7 +980,13 @@ const SetupPharmacy = ({
                     onChange={(e) => {
                       setSelected(e.target.value);
                       validateField("pharmacyType", e.target.value);
-                      validateGstField(pharmacyGst, e.target.value);
+                      // Don't flag an untouched GSTIN as "required" just
+                      // because the type changed — that's shown on change/submit.
+                      if (pharmacyGst.trim()) {
+                        validateGstField(pharmacyGst, e.target.value);
+                      } else {
+                        setErrors((prev) => ({ ...prev, pharmacyGst: "" }));
+                      }
                     }}
                     className="absolute left-4 top-4 h-5 w-5 accent-secondary-700"
                   />

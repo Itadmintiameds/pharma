@@ -18,6 +18,9 @@ import {
   getBatchExpiryKpi,
   getProductStockSummary,
 } from "@/services/InventoryService";
+import { getInventorySalesReport } from "@/services/AuditReports/InventorySalesService";
+import { usePharmacyStore } from "@/store/pharmacyStore";
+import { useWarehouseStore } from "@/store/warehouseStore";
 import { packageSmallestUnitName } from "@/types/ProductData";
 import type {
   // ProductExpiryKpi, // old product-level expiry KPI type (kept for reference)
@@ -130,7 +133,24 @@ const statusOptions = [
   { label: "Near Expiry", value: "NEAR_EXPIRY" },
   { label: "Expired", value: "EXPIRED" },
   { label: "Out of Stock", value: "OUT_OF_STOCK" },
+  { label: "Low Stock", value: "LOW_STOCK" },
+  { label: "Slow Moving", value: "SLOW_MOVING" },
 ];
+
+/**
+ * Slow Moving: in stock, and no more than SLOW_MOVING_MAX_UNITS net smallest
+ * units sold in the last SLOW_MOVING_DAYS days (no sales at all counts too).
+ */
+const SLOW_MOVING_DAYS = 30;
+const SLOW_MOVING_MAX_UNITS = 5;
+
+/** Local date as YYYY-MM-DD, the format the report filters take. */
+const toYmd = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Sales report rows only carry the product name, so that's the join key. */
+const productKey = (name: string | null | undefined) =>
+  (name ?? "").trim().toLowerCase();
 
 const PAGE_SIZE = 10;
 const NEAR_EXPIRY_DAYS = 30;
@@ -180,11 +200,18 @@ const STOCK_STATUS_BADGE: Record<StockStatus, BadgeStatus> = {
   OUT_OF_STOCK: "Out of Stock",
 };
 
-/** Status of a single batch, derived from stock + expiry. */
+/**
+ * Status of a single batch, derived from stock + expiry. Low Stock (at or below
+ * the batch's minimum stock level) ranks below Expired — an expired batch can't
+ * be sold whatever its count — but above Near Expiry.
+ */
 const batchStatus = (b: ProductBatchDetails): BadgeStatus => {
   if (b.stockQuantity <= 0) return "Out of Stock";
   const days = daysUntil(b.expiryDate);
   if (days < 0) return "Expired";
+  // Batches saved before the field existed have no level, so are never low.
+  if (b.minimumStockLevel != null && b.minimumStockLevel > 0 && b.stockQuantity <= b.minimumStockLevel)
+    return "Low Stock";
   if (days <= NEAR_EXPIRY_DAYS) return "Near Expiry";
   return "Healthy";
 };
@@ -194,8 +221,8 @@ const batchStatus = (b: ProductBatchDetails): BadgeStatus => {
  * considered — an out-of-stock batch cannot make the variant look expired or
  * near-expiry.
  *
- * Priority when in-stock batches disagree: Near Expiry > Healthy/Active >
- * Expired > Out of Stock. Near expiry wins so the "sell this soon" signal is
+ * Priority when in-stock batches disagree: Near Expiry > Low Stock >
+ * Healthy/Active > Expired > Out of Stock. Near expiry wins so the "sell this soon" signal is
  * never hidden by other stock; a variant with any usable (active) stock reads as
  * Active, and only reads Expired when every in-stock batch is expired.
  */
@@ -210,7 +237,12 @@ const packageStatus = (pkg: ProductPackageDetails): BadgeStatus => {
   const isActive = (b: ProductBatchDetails) => daysUntil(b.expiryDate) > NEAR_EXPIRY_DAYS;
 
   if (withStock.some(isNear)) return "Near Expiry Batch";
-  if (withStock.some(isActive)) return "Active";
+  if (withStock.some(isActive)) {
+    // Usable stock, but a batch of it is at/below its minimum level — flag it
+    // rather than reading as plain Active.
+    const sellable = withStock.filter((b) => daysUntil(b.expiryDate) >= 0);
+    return sellable.some((b) => batchStatus(b) === "Low Stock") ? "Low Stock" : "Active";
+  }
   return "Expired batch";
 };
 
@@ -340,7 +372,21 @@ const buildPackageColumns = (
   },
 ];
 
-const productColumns: TableColumn<ProductStockSummary>[] = [
+/**
+ * True when the product has sellable stock and every sellable (in-stock,
+ * unexpired) batch is at or below its minimum stock level.
+ */
+const isProductLowStock = (packages: ProductPackageDetails[]): boolean => {
+  const sellable = packages
+    .flatMap((pkg) => pkg.batches)
+    .filter((b) => b.stockQuantity > 0 && daysUntil(b.expiryDate) >= 0);
+  return sellable.length > 0 && sellable.every((b) => batchStatus(b) === "Low Stock");
+};
+
+/** `lowStockIds`: products whose every batch is low — they read Low Stock, not Active. */
+const buildProductColumns = (
+  lowStockIds: Set<string>
+): TableColumn<ProductStockSummary>[] => [
   {
     header: "Product Name / Variant",
     render: (p) => (
@@ -364,7 +410,15 @@ const productColumns: TableColumn<ProductStockSummary>[] = [
   },
   {
     header: "Overall Status",
-    render: (p) => <StatusBadge status={STOCK_STATUS_BADGE[p.overallStatus]} />,
+    render: (p) => (
+      <StatusBadge
+        status={
+          p.overallStatus === "ACTIVE" && lowStockIds.has(p.productId)
+            ? "Low Stock"
+            : STOCK_STATUS_BADGE[p.overallStatus]
+        }
+      />
+    ),
   },
   {
     header: "Nearest Expiry",
@@ -532,6 +586,16 @@ const Page = () => {
   const [products, setProducts] = useState<ProductStockSummary[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [kpi, setKpi] = useState<BatchExpiryKpi | null>(null);
+  // Net units sold per product (by name) over the slow-moving window; null
+  // until first needed, since it costs a report query.
+  const [unitsSold, setUnitsSold] = useState<Map<string, number> | null>(null);
+  const [unitsSoldLoading, setUnitsSoldLoading] = useState(false);
+  // Stops a failed fetch from retrying on every render.
+  const [unitsSoldFailed, setUnitsSoldFailed] = useState(false);
+  const pharmacyId = usePharmacyStore(
+    (state) => state.selectedPharmacy?.pharmacyId ?? ""
+  );
+  const actingAsWarehouse = useWarehouseStore((state) => state.actingAsWarehouse);
 
   useEffect(() => {
     const load = async () => {
@@ -563,6 +627,42 @@ const Page = () => {
 
     load();
   }, []);
+
+  // Fetched once, the first time Slow Moving is picked.
+  useEffect(() => {
+    if (status !== "SLOW_MOVING" || unitsSold || unitsSoldLoading || unitsSoldFailed)
+      return;
+
+    const load = async () => {
+      setUnitsSoldLoading(true);
+      try {
+        const to = new Date();
+        const from = new Date();
+        from.setDate(from.getDate() - (SLOW_MOVING_DAYS - 1));
+        const report = await getInventorySalesReport({
+          fromDate: toYmd(from),
+          toDate: toYmd(to),
+          // Same location the stock list is for; a warehouse has no sales of
+          // its own, so it falls back to every pharmacy.
+          pharmacyIds: pharmacyId && !actingAsWarehouse ? [pharmacyId] : undefined,
+          unpaged: true,
+        });
+        const sold = new Map<string, number>();
+        report.productSalesDetails.data.forEach((row) => {
+          const key = productKey(row.productName);
+          sold.set(key, (sold.get(key) ?? 0) + row.netSaleQuantity);
+        });
+        setUnitsSold(sold);
+      } catch (error) {
+        console.error("Unable to fetch sales for slow-moving filter", error);
+        setUnitsSoldFailed(true);
+      } finally {
+        setUnitsSoldLoading(false);
+      }
+    };
+
+    load();
+  }, [status, unitsSold, unitsSoldLoading, unitsSoldFailed, pharmacyId, actingAsWarehouse]);
 
   // Category options: one entry per distinct category present in the data.
   const categoryOptions = useMemo(() => {
@@ -596,7 +696,15 @@ const Page = () => {
     return products.filter((p) => {
       if (category !== "all" && String(p.productCategoryId) !== category)
         return false;
-      if (status !== "all" && p.overallStatus !== status) return false;
+      if (status === "LOW_STOCK") {
+        // Not an API status — derived from stock, same band as the Stock filter.
+        if (!(p.totalStock > 0 && p.totalStock <= LOW_STOCK_MAX)) return false;
+      } else if (status === "SLOW_MOVING") {
+        // Until sales load there's nothing to judge by, so show nothing.
+        if (!unitsSold || p.totalStock <= 0) return false;
+        if ((unitsSold.get(productKey(p.productName)) ?? 0) > SLOW_MOVING_MAX_UNITS)
+          return false;
+      } else if (status !== "all" && p.overallStatus !== status) return false;
       if (manufacturer !== "all" && p.manufacturerName !== manufacturer)
         return false;
       if (query) {
@@ -621,7 +729,7 @@ const Page = () => {
 
       return true;
     });
-  }, [products, search, category, status, manufacturer, advancedFilters]);
+  }, [products, search, category, status, manufacturer, advancedFilters, unitsSold]);
 
   // Any filter/search change collapses the result set — jump back to page 1 so
   // the user isn't stranded on a now-empty page.
@@ -632,6 +740,49 @@ const Page = () => {
   const pageData = filteredProducts.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE
+  );
+
+  // The summary API knows nothing of minimum stock levels, so an Active
+  // product's batches are read to see whether every one of them is low. Only
+  // the visible page is checked, and each product once.
+  const [lowStockChecked, setLowStockChecked] = useState<Record<string, boolean>>({});
+  const pageActiveIds = pageData
+    .filter((p) => p.overallStatus === "ACTIVE")
+    .map((p) => p.productId)
+    .join(",");
+
+  useEffect(() => {
+    const ids = pageActiveIds
+      ? pageActiveIds.split(",").filter((id) => !(id in lowStockChecked))
+      : [];
+    if (ids.length === 0) return;
+
+    let active = true;
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          const details = await getProductDetails(id);
+          return [id, isProductLowStock(details.packages)] as const;
+        } catch (error) {
+          console.error("Unable to check low stock for product", id, error);
+          return [id, false] as const;
+        }
+      })
+    ).then((results) => {
+      if (active) setLowStockChecked((prev) => ({ ...prev, ...Object.fromEntries(results) }));
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [pageActiveIds, lowStockChecked]);
+
+  const productColumns = useMemo(
+    () =>
+      buildProductColumns(
+        new Set(Object.keys(lowStockChecked).filter((id) => lowStockChecked[id]))
+      ),
+    [lowStockChecked]
   );
 
   const renderProductPackages = (product: ProductStockSummary) => (
@@ -772,7 +923,7 @@ const Page = () => {
         rowKey={(p) => p.productId}
         headerVariant="primary"
         container="card"
-        loading={loading}
+        loading={loading || (status === "SLOW_MOVING" && unitsSoldLoading)}
         renderExpanded={renderProductPackages}
         pagination={{
           page: currentPage,

@@ -70,6 +70,7 @@ const BATCH_FIELDS: FieldMap = {
   mrpPerUnit: (d) => num(d?.mrpPerSmallestUnit),
   sellingPricePerUnit: (d) => num(d?.sellingPricePerSmallestUnit),
   rackLocation: (d) => text(d?.rackLocation),
+  minimumStockLevel: (d) => num(d?.minimumStockLevel),
 };
 
 /**

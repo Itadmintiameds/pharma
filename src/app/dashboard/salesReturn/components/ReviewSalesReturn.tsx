@@ -17,8 +17,18 @@ import { roundToRupee } from "@/utils/billingTotals";
 import {
   clearSalesReturnDraft,
   loadSalesReturnDraft,
+  loadSalesReturnRefund,
+  EMPTY_REFUND,
   SalesReturnDraftLine,
+  type SalesReturnRefund,
 } from "./salesReturnDraft";
+
+const REFUND_MODE_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  CARD: "Card",
+  UPI: "UPI",
+  NET_BANKING: "Net Banking",
+};
 
 // Figma "boxShadowCard" — same three-layer shadow as the other sales return cards
 const CARD_SHADOW =
@@ -317,12 +327,16 @@ const ReviewSalesReturn = () => {
   const searchParams = useSearchParams();
   // Carried over from Create Sales Return ("Review and Confirm")
   const billingId = searchParams.get("billingId") ?? "";
+  // Who authorized a return past the return window — set only for those.
+  const authorizedBy = searchParams.get("authorizedBy")?.trim() ?? "";
   const [billing, setBilling] = useState<BillingRecord | null>(null);
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(billingId));
   const [loadError, setLoadError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // Refund Payment Mode / Transaction ID picked on Create, for the sentence below.
+  const [refund, setRefund] = useState<SalesReturnRefund>(EMPTY_REFUND);
   // Set once the API has saved the return — opens the success modal
   const [savedReturn, setSavedReturn] = useState<SalesReturnData | null>(null);
 
@@ -336,6 +350,7 @@ const ReviewSalesReturn = () => {
         if (!active) return;
         setBilling(data);
         setItems(toReviewItems(data, loadSalesReturnDraft(billingId)));
+        setRefund(loadSalesReturnRefund(billingId));
         setLoadError("");
       })
       .catch((err) => {
@@ -400,6 +415,17 @@ const ReviewSalesReturn = () => {
   const confirmSalesReturn = async () => {
     if (!billing || items.length === 0 || isSubmitting) return;
 
+    // Picked on Create and required there whenever money goes back; missing
+    // only if the draft was lost. An IP return that only clears the
+    // outstanding pays nothing back, so it has no refund mode.
+    const refund = loadSalesReturnRefund(billingId);
+    if (refundAmount > 0 && !refund.refundMode) {
+      setSubmitError(
+        "Refund payment mode is missing. Go back and select it before confirming."
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmitError("");
 
@@ -410,6 +436,13 @@ const ReviewSalesReturn = () => {
         totalGstAmount: round2(items.reduce((sum, item) => sum + item.gst, 0)),
         // The rounded figure — what is actually refunded / adjusted.
         totalNetAmount: returnAmount,
+        ...(authorizedBy ? { returnAuthorizedBy: authorizedBy } : {}),
+        ...(refundAmount > 0 && refund.refundMode
+          ? { returnPaymentMode: refund.refundMode }
+          : {}),
+        ...(refundAmount > 0 && refund.refundMode !== "CASH" && refund.transactionId.trim()
+          ? { returnTransactionId: refund.transactionId.trim() }
+          : {}),
         salesReturnDetails: items.map((item) => ({
           productId: item.productId,
           batchId: item.batchId,
@@ -650,8 +683,24 @@ const ReviewSalesReturn = () => {
           <p className="text-label-l4 font-semibold">Refund Details</p>
           <p className="text-p3 font-regular">
             {isIpPatient
-              ? `${formatRupees(refundAmount)} shall be refunded to the customer after adjusting the return value against the IP outstanding.`
-              : `${formatRupees(refundAmount)} shall be refunded to the customer via the original payment mode (${bill.paymentMode}).`}
+              ? refundAmount > 0 && refund.refundMode
+                ? `${formatRupees(refundAmount)} shall be refunded to the customer via ${
+                    REFUND_MODE_LABEL[refund.refundMode] ?? refund.refundMode
+                  }${
+                    refund.refundMode !== "CASH" && refund.transactionId
+                      ? ` (Transaction ID: ${refund.transactionId})`
+                      : ""
+                  } after adjusting the return value against the IP outstanding.`
+                : `${formatRupees(refundAmount)} shall be refunded to the customer after adjusting the return value against the IP outstanding.`
+              : refund.refundMode
+                ? `${formatRupees(refundAmount)} shall be refunded to the customer via ${
+                    REFUND_MODE_LABEL[refund.refundMode] ?? refund.refundMode
+                  }${
+                    refund.refundMode !== "CASH" && refund.transactionId
+                      ? ` (Transaction ID: ${refund.transactionId})`
+                      : ""
+                  }.`
+                : `${formatRupees(refundAmount)} shall be refunded to the customer.`}
           </p>
         </div>
       </div>
@@ -672,7 +721,8 @@ const ReviewSalesReturn = () => {
           variant="outline"
           onClick={() =>
             router.push(
-              `/dashboard/salesReturn?view=create&billingId=${billingId}&billNo=${encodeURIComponent(billNo)}`,
+              `/dashboard/salesReturn?view=create&billingId=${billingId}&billNo=${encodeURIComponent(billNo)}` +
+                (authorizedBy ? `&authorizedBy=${encodeURIComponent(authorizedBy)}` : ""),
             )
           }
           className={`${FOOTER_BUTTON} w-full! border-secondary-700! text-secondary-700! sm:w-71.25!`}
@@ -716,6 +766,16 @@ const ReviewSalesReturn = () => {
         returnAmount={formatRupees(returnAmount)}
         outstandingAdjustment={formatRupees(outstandingAdjustment)}
         refundAmount={formatRupees(refundAmount)}
+        // What the server stored, else what was picked on Create.
+        refundPaymentMode={(() => {
+          const mode = savedReturn?.returnPaymentMode || (refundAmount > 0 ? refund.refundMode : "");
+          return mode ? REFUND_MODE_LABEL[mode] ?? mode : undefined;
+        })()}
+        transactionId={
+          savedReturn?.returnTransactionId ||
+          (refundAmount > 0 && refund.refundMode !== "CASH" ? refund.transactionId : "") ||
+          undefined
+        }
         status={savedReturn?.salesReturnStatus ?? "Completed"}
       />
     </div>

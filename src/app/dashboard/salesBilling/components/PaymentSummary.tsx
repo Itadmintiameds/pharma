@@ -62,7 +62,22 @@ interface PaymentSummaryProps {
    * absent rather than offering a dialog with nothing in it.
    */
   prescriptionUrl?: string | null;
+  /** Shown under Amount in words, each only when present. */
+  discountReason?: string | null;
+  discountAuthorizedBy?: string | null;
 }
+
+/** Same wording as the customer-type chips on the billing screen. */
+const PATIENT_TYPE_LABEL: Record<string, string> = {
+  WALK_IN: "Walk-in",
+  REGISTERED: "Registered",
+  OP_PATIENT: "Out-Patient",
+  IP_PATIENT: "In-Patient",
+  DAYCARE: "Daycare",
+  CORPORATE: "Corporate",
+  BUSINESS: "Business",
+  INSURANCE: "Insurance",
+};
 
 const PAYMENT_MODE_LABELS: Record<string, string> = {
   CASH: "Cash",
@@ -227,8 +242,16 @@ const BillHeader: React.FC<{
 const BillFooter: React.FC = () => (
   <div
     data-print="footer"
-    className="w-full flex items-center justify-center gap-2 border-t border-pneutral-200 pt-3"
+    className="w-full flex items-center justify-between gap-4 border-t border-pneutral-200 pt-3"
   >
+    {/* Terms on the left, Tiameds' branding on the right. */}
+    <span
+      data-print="terms"
+      className="font-body text-p3 font-normal text-pneutral-600"
+    >
+      E &amp; O.E. Goods once sold cannot be taken back or exchanged
+    </span>
+    <div className="flex items-center gap-2 shrink-0">
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Powered by
     </span>
@@ -264,6 +287,7 @@ const BillFooter: React.FC = () => (
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Tiameds Technologies Pvt Ltd.
     </span>
+    </div>
   </div>
 );
 
@@ -306,6 +330,8 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   onSave,
   pharmacy: pharmacyProp,
   prescriptionUrl,
+  discountReason,
+  discountAuthorizedBy,
 }) => {
   // PRINT covers the printed bill; CREATE covers saving one.
   const { canCreate, canPrint } = useModulePermissions("SALES");
@@ -583,10 +609,14 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   /** Still owed on the bill — after payments and, on a saved bill, returns. */
   const pendingAmount = Math.max(0, payment.pendingAmount || 0);
 
-  /** The two customer facts on the right. */
+  /** The customer facts on the right. */
   const CUSTOMER_FACTS = [
     { label: "Customer", value: customer?.customerName || "Walk-in Customer" },
     { label: "Mobile", value: customer?.mobileNo || "—" },
+    {
+      label: "Patient Type",
+      value: PATIENT_TYPE_LABEL[customer?.customerType ?? ""] ?? customer?.customerType ?? "—",
+    },
   ];
 
   /**
@@ -755,6 +785,34 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
                   <span className="font-body text-p4 font-semibold text-pneutral-900 capitalize">
                     {amountInWords(totals.netAmount || 0)}
                   </span>
+
+                  {(discountReason?.trim() || discountAuthorizedBy?.trim()) && (
+                    <div
+                      data-print="discount"
+                      className="flex flex-col gap-2 border-t border-pneutral-200 pt-2"
+                    >
+                      {discountReason?.trim() && (
+                        <div className="flex flex-col">
+                          <span className="font-body text-p4 font-normal text-pneutral-800">
+                            Discount Reason
+                          </span>
+                          <span className="font-body text-p4 font-semibold text-pneutral-900 break-words">
+                            {discountReason}
+                          </span>
+                        </div>
+                      )}
+                      {discountAuthorizedBy?.trim() && (
+                        <div className="flex flex-col">
+                          <span className="font-body text-p4 font-normal text-pneutral-800">
+                            Discount Authorized By
+                          </span>
+                          <span className="font-body text-p4 font-semibold text-pneutral-900">
+                            {discountAuthorizedBy}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Amount summary — five 24px lines at an 8px rhythm, then NET

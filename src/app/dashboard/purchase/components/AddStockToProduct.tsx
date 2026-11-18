@@ -225,6 +225,7 @@ const AddStockToProduct: React.FC<AddStockToProductProps> = ({
         mrpPerUnit: Number(batchData?.mrpPerSmallestUnit || 0),
         sellingPricePerUnit: Number(batchData?.sellingPricePerSmallestUnit || 0),
         rackLocation: batchData?.rackLocation || "",
+        minimumStockLevel: Number(batchData?.minimumStockLevel || 0),
       };
 
       const knownBatchIds = new Set(allBatches(details).map((b) => b.batchId));

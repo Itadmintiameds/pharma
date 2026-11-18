@@ -8,6 +8,7 @@ export type BadgeStatus =
   | "Expired"
   | "Expired batch"
   | "Out of Stock"
+  | "Low Stock"
   | "Received"
   | "Fully Paid"
   | "Pending";
@@ -32,6 +33,9 @@ const styles: Record<BadgeStatus, string> = {
 
   Expired: "bg-warning-50 text-warning-600 border-warning-600",
   "Expired batch": "bg-warning-50 text-warning-600 border-warning-600",
+
+  // Same red as Expired.
+  "Low Stock": "bg-warning-50 text-warning-600 border-warning-600",
 
   "Out of Stock": "bg-pneutral-100 text-pneutral-600 border-pneutral-300",
 };

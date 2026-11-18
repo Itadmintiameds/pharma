@@ -71,8 +71,8 @@ export const getPaymentStatusBreakdown = (
 export const CUSTOMER_TYPE_LABEL: Record<CustomerType, string> = {
   WALK_IN: "Walk-in",
   REGISTERED: "Registered",
-  OP_PATIENT: "OP Patient",
-  IP_PATIENT: "IP Patient",
+  OP_PATIENT: "OP",
+  IP_PATIENT: "IP",
   DAYCARE: "Daycare",
   CORPORATE: "Corporate",
   BUSINESS: "Business",

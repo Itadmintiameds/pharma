@@ -13,6 +13,37 @@ export interface SalesReturnDraftLine {
 }
 
 const draftKey = (billingId: string | number) => `salesReturnDraft:${billingId}`;
+const refundKey = (billingId: string | number) => `salesReturnRefund:${billingId}`;
+
+export type RefundMode = "CASH" | "CARD" | "UPI" | "NET_BANKING";
+
+/** How the return is paid back. transactionId is "" for cash. */
+export interface SalesReturnRefund {
+  refundMode: RefundMode | "";
+  transactionId: string;
+}
+
+export const EMPTY_REFUND: SalesReturnRefund = { refundMode: "", transactionId: "" };
+
+export const saveSalesReturnRefund = (
+  billingId: string | number,
+  refund: SalesReturnRefund
+) => {
+  try {
+    sessionStorage.setItem(refundKey(billingId), JSON.stringify(refund));
+  } catch {
+    // Storage blocked — the refund fields simply come back empty.
+  }
+};
+
+export const loadSalesReturnRefund = (billingId: string | number): SalesReturnRefund => {
+  try {
+    const raw = sessionStorage.getItem(refundKey(billingId));
+    return raw ? { ...EMPTY_REFUND, ...JSON.parse(raw) } : EMPTY_REFUND;
+  } catch {
+    return EMPTY_REFUND;
+  }
+};
 
 export const saveSalesReturnDraft = (
   billingId: string | number,
@@ -40,6 +71,7 @@ export const loadSalesReturnDraft = (
 export const clearSalesReturnDraft = (billingId: string | number) => {
   try {
     sessionStorage.removeItem(draftKey(billingId));
+    sessionStorage.removeItem(refundKey(billingId));
   } catch {
     // Nothing to clean up if storage is unavailable.
   }
