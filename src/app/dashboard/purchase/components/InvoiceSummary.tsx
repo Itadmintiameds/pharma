@@ -340,7 +340,8 @@ const InvoiceSummary: React.FC<InvoiceSummaryProps> = ({ onCancel, onSubmit, onS
       return;
     }
 
-    // Skipped when no Invoice Amount was entered, since the field is optional.
+    // Skipped when no Invoice Amount is on record (purchases saved before the
+    // field became mandatory in Goods Receipt).
     if (amountMismatch) {
       setMismatchFlagged(true);
       setShowAmountMismatch(true);
