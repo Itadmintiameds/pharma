@@ -191,15 +191,9 @@ export default function Home() {
           <div className="flex items-center gap-3">
             <Link
               href="/login"
-              className="hidden h-11 items-center justify-center rounded-lg px-5 text-label-l4 font-semibold text-pneutral-800 transition-colors hover:bg-pneutral-50 sm:inline-flex"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/registration"
               className="inline-flex h-11 items-center justify-center rounded-lg bg-secondary-700 px-5 text-label-l4 font-semibold text-white shadow-xsm transition-all hover:bg-secondary-800 hover:shadow-sm"
             >
-              Get Started
+              Log in
             </Link>
           </div>
         </div>
@@ -233,14 +227,8 @@ export default function Home() {
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row sm:items-center">
               <Link
-                href="/registration"
-                className="inline-flex h-13 items-center justify-center rounded-lg bg-secondary-700 px-8 text-label-l4 font-semibold text-white shadow-md transition-all hover:bg-secondary-800 hover:shadow-lg"
-              >
-                Get Started Free
-              </Link>
-              <Link
                 href="/login"
-                className="inline-flex h-13 items-center justify-center rounded-lg border-2 border-pneutral-200 px-8 text-label-l4 font-semibold text-pneutral-800 transition-all hover:border-secondary-300 hover:text-secondary-700"
+                className="inline-flex h-13 items-center justify-center rounded-lg bg-secondary-700 px-8 text-label-l4 font-semibold text-white shadow-md transition-all hover:bg-secondary-800 hover:shadow-lg"
               >
                 Log in to your account
               </Link>
@@ -431,14 +419,8 @@ export default function Home() {
           </p>
           <div className="relative mt-9 flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              href="/registration"
-              className="inline-flex h-13 items-center justify-center rounded-lg bg-white px-8 text-label-l4 font-semibold text-secondary-700 shadow-md transition-transform hover:scale-[1.03]"
-            >
-              Create your account
-            </Link>
-            <Link
               href="/login"
-              className="inline-flex h-13 items-center justify-center rounded-lg border-2 border-white/40 px-8 text-label-l4 font-semibold text-white transition-colors hover:bg-white/10"
+              className="inline-flex h-13 items-center justify-center rounded-lg bg-white px-8 text-label-l4 font-semibold text-secondary-700 shadow-md transition-transform hover:scale-[1.03]"
             >
               Log in
             </Link>
@@ -470,9 +452,7 @@ export default function Home() {
             <div>
               <p className="text-label-l3 font-semibold text-pneutral-900">Account</p>
               <ul className="mt-4 space-y-3">
-                <li><Link href="/login" className="text-p3 text-pneutral-600 hover:text-secondary-700">Log in</Link></li>
-                <li><Link href="/registration" className="text-p3 text-pneutral-600 hover:text-secondary-700">Register</Link></li>
-              </ul>
+                <li><Link href="/login" className="text-p3 text-pneutral-600 hover:text-secondary-700">Log in</Link></li>              </ul>
             </div>
 
             <div>
