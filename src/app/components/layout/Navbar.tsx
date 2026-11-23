@@ -19,7 +19,7 @@ import { UserData, warehouseLabel } from "@/types/UserData";
 import { useAccess } from "@/app/components/providers/AccessProvider";
 import Dropdown, { DropdownOption } from "../common/Dropdown";
 import ConfirmDialog from "../common/ConfirmDialog";
-import DevTestIds from "./DevTestIds";
+import NotificationBell from "./NotificationBell";
 
 interface NavbarProps {
   userRole?: string;
@@ -298,10 +298,7 @@ const Navbar = ({ userRole }: NavbarProps) => {
           </div>
         </div>
 
-        {/* DEVELOPMENT ONLY — the bell is standing in for a sample-identifier
-            list while forms are being built. Restore the plain button and
-            delete DevTestIds.tsx when notifications are implemented. */}
-        <DevTestIds />
+        <NotificationBell />
 
         <div ref={profileRef} className="relative shrink-0">
           <button
