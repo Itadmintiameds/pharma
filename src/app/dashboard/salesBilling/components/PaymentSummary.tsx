@@ -65,6 +65,8 @@ interface PaymentSummaryProps {
   /** Shown under Amount in words, each only when present. */
   discountReason?: string | null;
   discountAuthorizedBy?: string | null;
+  /** Full name of the user who raised the bill, shown in the footer. */
+  billedBy?: string | null;
 }
 
 /** Same wording as the customer-type chips on the billing screen. */
@@ -239,19 +241,28 @@ const BillHeader: React.FC<{
 };
 
 /** Closes every bill — Tiameds' own mark, not the pharmacy's. */
-const BillFooter: React.FC = () => (
+const BillFooter: React.FC<{ billedBy?: string | null }> = ({ billedBy }) => (
   <div
     data-print="footer"
-    className="w-full flex items-center justify-between gap-4 border-t border-pneutral-200 pt-3"
+    // 1fr | auto | 1fr: equal side tracks keep the terms truly centred on the
+    // page however long the user's name or the branding runs.
+    className="w-full grid grid-cols-[1fr_auto_1fr] items-center gap-4 border-t border-pneutral-200 pt-3"
   >
-    {/* Terms on the left, Tiameds' branding on the right. */}
+    {/* Terms on the left, who raised the bill in the middle, Tiameds'
+        branding on the right. */}
     <span
       data-print="terms"
-      className="font-body text-p3 font-normal text-pneutral-600"
+      className="min-w-0 font-body text-p3 font-normal text-pneutral-600"
     >
       E &amp; O.E. Goods once sold cannot be taken back or exchanged
     </span>
-    <div className="flex items-center gap-2 shrink-0">
+    <span
+      data-print="billed-by"
+      className="text-center font-body text-p3 font-normal text-pneutral-600"
+    >
+      Billed By : {billedBy?.trim() || "—"}
+    </span>
+    <div className="flex items-center justify-self-end gap-2 shrink-0">
     <span className="font-body text-p3 font-normal text-pneutral-600">
       Powered by
     </span>
@@ -332,6 +343,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
   prescriptionUrl,
   discountReason,
   discountAuthorizedBy,
+  billedBy,
 }) => {
   // PRINT covers the printed bill; CREATE covers saving one.
   const { canCreate, canPrint } = useModulePermissions("SALES");
@@ -861,7 +873,7 @@ const PaymentSummary: React.FC<PaymentSummaryProps> = ({
           <tr className="block">
             <td className="block p-0">
               <div className="pt-4">
-                <BillFooter />
+                <BillFooter billedBy={billedBy} />
               </div>
             </td>
           </tr>

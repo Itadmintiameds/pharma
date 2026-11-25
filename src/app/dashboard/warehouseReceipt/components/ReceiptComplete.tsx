@@ -97,17 +97,29 @@ const buildProgressSteps = (
     return [{ label: 'Receipt Completed', bold: true }]
   }
 
+  // Only a pharmacy-to-pharmacy (inter-store) transfer has an acceptance step;
+  // a warehouse-to-pharmacy allocation goes straight from created to dispatched.
+  const isInterStore =
+    distribution?.sourceType === 'PHARMACY' &&
+    distribution?.destinationType === 'PHARMACY'
+
   const steps = statuses.flatMap((s): Omit<ProgressStep, 'bold'>[] => {
     const timestamp = s.createdAt ? formatDateTime(s.createdAt) : undefined
 
     switch (s.status) {
-      case 'DISTRIBUTION_CREATED':
-        // The transfer's creation reads as two steps: who created it, then
-        // the receiving store taking it on before dispatch.
-        return [
-          { label: 'Transfer Created', timestamp, actor: creatorRole ?? undefined },
-          { label: 'Accepted', timestamp, actor: destinationLabel },
-        ]
+      case 'DISTRIBUTION_CREATED': {
+        const created = {
+          label: 'Transfer Created',
+          timestamp,
+          actor: creatorRole ?? undefined,
+        }
+        // An inter-store transfer's creation reads as two steps: who created
+        // it, then the sending store accepting the request — the same store
+        // that goes on to dispatch it.
+        return isInterStore
+          ? [created, { label: 'Accepted', timestamp, actor: sourceLabel }]
+          : [created]
+      }
       case 'PRODUCTS_DISPATCHED':
         return [{ label: 'Dispatched', timestamp, actor: sourceLabel }]
       case 'STOCK_RECEIVED':
