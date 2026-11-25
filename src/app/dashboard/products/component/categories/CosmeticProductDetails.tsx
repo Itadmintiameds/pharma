@@ -20,9 +20,12 @@ export interface ProductDetailsRef {
  */
 export interface CosmeticProductDetailsProps {
   initialData?: Record<string, any>;
+  /** Fields shown read-only (editing a saved product). */
+  lockedFields?: string[];
 }
 
-const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDetailsProps>(({ initialData }, ref) => {
+const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDetailsProps>(({ initialData, lockedFields }, ref) => {
+  const isLocked = (field: string) => !!lockedFields?.includes(field);
   const [formData, setFormData] = useState(() => {
     const blank = {
       productName: "",
@@ -215,6 +218,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
           handleChange('hairType', ""); // Reset hair type
         }}
         error={errors.productType}
+        disabled={isLocked('productType')}
       />
       
       <Dropdown
@@ -286,6 +290,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
         onChange={(val) => handleChange('ageGroup', val)}
         multiple
         error={errors.ageGroup}
+        disabled={isLocked('ageGroup')}
       />
       
       <Dropdown
@@ -300,6 +305,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
         value={formData.gender}
         onChange={(val) => handleChange('gender', val)}
         error={errors.gender}
+        disabled={isLocked('gender')}
       />
       
       <Input 
@@ -319,10 +325,11 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
           <div className="flex-1">
             <input 
               type="text" 
-              placeholder="e.g. 100" 
+              placeholder="e.g. 100"
               value={formData.netQuantity}
               onChange={(e) => handleChange('netQuantity', e.target.value)}
-              className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 ${
+              disabled={isLocked('netQuantity')}
+              className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 disabled:cursor-not-allowed disabled:bg-sneutral-100 disabled:text-pneutral-500 ${
                 errors.netQuantity ? "border-warning-500" : "border-pneutral-300"
               }`} 
             />
@@ -335,7 +342,8 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
               <path d="M6 9l6 6 6-6" />
             </svg>
             <select
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+              disabled={isLocked('netQuantityUnit')}
               value={formData.netQuantityUnit}
               onChange={(e) => handleChange('netQuantityUnit', e.target.value)}
             >
@@ -370,6 +378,7 @@ const CosmeticProductDetails = forwardRef<ProductDetailsRef, CosmeticProductDeta
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
         error={errors.gst}
+        disabled={isLocked('gst')}
       />
       
       <Input 

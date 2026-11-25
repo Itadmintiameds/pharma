@@ -31,6 +31,22 @@ export class ProductService {
     }
   }
 
+  /**
+   * Masters → Products edit. Same body, headers and response as updateProduct
+   * (it runs the same backend service), but behind the PRODUCTS / PRODUCTS /
+   * EDIT permission — users without it get 403, Super Admin always passes.
+   * The purchase flow keeps using updateProduct (PUT /product/{productId}).
+   */
+  static async editProductMaster(productId: string, payload: any) {
+    try {
+      const response = await api.put(`/product/${productId}/edit`, payload);
+      return response.data;
+    } catch (error) {
+      console.error(`Error editing product ${productId}:`, error);
+      throw error;
+    }
+  }
+
   static async getAllBatches() {
     try {
       const response = await api.get('/product/batches');

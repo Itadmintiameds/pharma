@@ -15,25 +15,31 @@ interface ProductDetailsProps {
    * the category it came from.
    */
   initialData?: Record<string, any>;
+  /**
+   * Form fields shown read-only — used when editing a saved product, where
+   * only some of its details may change. Names are the form's own field keys.
+   */
+  lockedFields?: string[];
 }
 
-const ProductDetails = forwardRef<ProductDetailsRef, ProductDetailsProps>(({ categoryId = 1, initialData }, ref) => {
+const ProductDetails = forwardRef<ProductDetailsRef, ProductDetailsProps>(({ categoryId = 1, initialData, lockedFields }, ref) => {
   const renderCategoryContent = () => {
+    const props = { ref, initialData, lockedFields };
     switch (categoryId) {
       case 1:
-        return <DrugProductDetails ref={ref} initialData={initialData} />;
+        return <DrugProductDetails {...props} />;
       case 2:
-        return <SupplementProductDetails ref={ref} initialData={initialData} />;
+        return <SupplementProductDetails {...props} />;
       case 3:
-        return <FoodInfantProductDetails ref={ref} initialData={initialData} />;
+        return <FoodInfantProductDetails {...props} />;
       case 4:
-        return <CosmeticProductDetails ref={ref} initialData={initialData} />;
+        return <CosmeticProductDetails {...props} />;
       case 5:
-        return <ConsumableProductDetails ref={ref} initialData={initialData} />;
+        return <ConsumableProductDetails {...props} />;
       case 6:
-        return <NonConsumableProductDetails ref={ref} initialData={initialData} />;
+        return <NonConsumableProductDetails {...props} />;
       default:
-        return <DrugProductDetails ref={ref} initialData={initialData} />;
+        return <DrugProductDetails {...props} />;
     }
   };
 

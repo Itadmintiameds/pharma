@@ -19,9 +19,12 @@ export interface ProductDetailsRef {
  */
 export interface ConsumableProductDetailsProps {
   initialData?: Record<string, any>;
+  /** Fields shown read-only (editing a saved product). */
+  lockedFields?: string[];
 }
 
-const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProductDetailsProps>(({ initialData }, ref) => {
+const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProductDetailsProps>(({ initialData, lockedFields }, ref) => {
+  const isLocked = (field: string) => !!lockedFields?.includes(field);
   const [formData, setFormData] = useState(() => {
     const blank = {
       productName: "",
@@ -137,6 +140,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
           handleChange('deviceSubCategory', ""); // Reset subcategory when category changes
         }}
         error={errors.deviceCategory}
+        disabled={isLocked('deviceCategory')}
       />
       
       <Dropdown
@@ -166,11 +170,11 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
         </label>
         <div className="flex gap-6 mt-1 h-12 items-center">
           <label className="flex items-center gap-2 cursor-pointer text-p4 text-pneutral-900">
-            <input type="radio" name="sterile" value="Sterile" checked={formData.sterile === "Sterile"} onChange={(e) => handleChange('sterile', e.target.value)} className="w-5 h-5 accent-secondary-600 cursor-pointer" />
+            <input type="radio" name="sterile" value="Sterile" checked={formData.sterile === "Sterile"} onChange={(e) => handleChange('sterile', e.target.value)} disabled={isLocked('sterile')} className="w-5 h-5 accent-secondary-600 cursor-pointer disabled:cursor-not-allowed" />
             Sterile
           </label>
           <label className="flex items-center gap-2 cursor-pointer text-p4 text-pneutral-900">
-            <input type="radio" name="sterile" value="Non-Sterile" checked={formData.sterile === "Non-Sterile"} onChange={(e) => handleChange('sterile', e.target.value)} className="w-5 h-5 accent-secondary-600 cursor-pointer" />
+            <input type="radio" name="sterile" value="Non-Sterile" checked={formData.sterile === "Non-Sterile"} onChange={(e) => handleChange('sterile', e.target.value)} disabled={isLocked('sterile')} className="w-5 h-5 accent-secondary-600 cursor-pointer disabled:cursor-not-allowed" />
             Non-Sterile
           </label>
         </div>
@@ -183,11 +187,11 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
         </label>
         <div className="flex gap-6 mt-1 h-12 items-center">
           <label className="flex items-center gap-2 cursor-pointer text-p4 text-pneutral-900">
-            <input type="radio" name="disposable" value="Disposable" checked={formData.disposable === "Disposable"} onChange={(e) => handleChange('disposable', e.target.value)} className="w-5 h-5 accent-secondary-600 cursor-pointer" />
+            <input type="radio" name="disposable" value="Disposable" checked={formData.disposable === "Disposable"} onChange={(e) => handleChange('disposable', e.target.value)} disabled={isLocked('disposable')} className="w-5 h-5 accent-secondary-600 cursor-pointer disabled:cursor-not-allowed" />
             Disposable
           </label>
           <label className="flex items-center gap-2 cursor-pointer text-p4 text-pneutral-900">
-            <input type="radio" name="disposable" value="Reusable" checked={formData.disposable === "Reusable"} onChange={(e) => handleChange('disposable', e.target.value)} className="w-5 h-5 accent-secondary-600 cursor-pointer" />
+            <input type="radio" name="disposable" value="Reusable" checked={formData.disposable === "Reusable"} onChange={(e) => handleChange('disposable', e.target.value)} disabled={isLocked('disposable')} className="w-5 h-5 accent-secondary-600 cursor-pointer disabled:cursor-not-allowed" />
             Reusable
           </label>
         </div>
@@ -209,6 +213,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
         value={formData.isIsoCertified}
         onChange={(val) => handleChange('isIsoCertified', val)}
         error={errors.isIsoCertified}
+        disabled={isLocked('isIsoCertified')}
       />
 
       <Dropdown
@@ -220,6 +225,7 @@ const ConsumableProductDetails = forwardRef<ProductDetailsRef, ConsumableProduct
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
         error={errors.gst}
+        disabled={isLocked('gst')}
       />
       
       <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} error={errors.hsnCode} />

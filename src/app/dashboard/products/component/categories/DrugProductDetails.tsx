@@ -21,9 +21,12 @@ export interface ProductDetailsRef {
  */
 export interface DrugProductDetailsProps {
   initialData?: Record<string, any>;
+  /** Fields shown read-only (editing a saved product). */
+  lockedFields?: string[];
 }
 
-const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps>(({ initialData }, ref) => {
+const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps>(({ initialData, lockedFields }, ref) => {
+  const isLocked = (field: string) => !!lockedFields?.includes(field);
   const [formData, setFormData] = useState(() => {
     const blank = {
       productName: "",
@@ -363,6 +366,7 @@ const DrugProductDetails = forwardRef<ProductDetailsRef, DrugProductDetailsProps
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
         error={errors.gst}
+        disabled={isLocked('gst')}
       />
       
       <Input 

@@ -184,3 +184,57 @@ export const buildProductUpdatePayload = (
 
   return { payload, hasChanges };
 };
+
+/* -------------------------------------------------------------------------- */
+/*  Masters → Products: edit one variant (package) and all of its batches       */
+/* -------------------------------------------------------------------------- */
+
+/** One batch form's reading, keyed by the batch it edits. */
+export interface BatchFormSnapshot {
+  batchId: string;
+  data: FormData;
+}
+
+/** The same three step forms, but with every batch of the variant. */
+export interface VariantFormSnapshot {
+  productData: FormData;
+  packagingData: FormData;
+  batches: BatchFormSnapshot[];
+}
+
+/**
+ * Same rules as buildProductUpdatePayload, for a variant that can hold many
+ * batches: only changed fields go out, and every packaging / batch entry
+ * carries its own id so the backend updates it instead of creating a copy.
+ * Untouched batches are left out entirely.
+ */
+export const buildVariantUpdatePayload = (
+  productCategoryId: number,
+  packagingId: string,
+  before: VariantFormSnapshot,
+  after: VariantFormSnapshot
+): ProductUpdatePayload => {
+  const payload: Record<string, unknown> = {
+    productCategoryId,
+    ...changedFields(PRODUCT_FIELDS, before.productData, after.productData),
+    ...changedAttributes(productCategoryId, before.productData, after.productData),
+  };
+
+  const packaging = changedFields(PACKAGING_FIELDS, before.packagingData, after.packagingData);
+  if (Object.keys(packaging).length > 0) {
+    payload.packagingDetails = [{ packagingId, ...packaging }];
+  }
+
+  const batchDetails = after.batches
+    .map(({ batchId, data }) => {
+      const prev = before.batches.find((b) => b.batchId === batchId);
+      if (!prev) return null;
+      const changes = changedFields(BATCH_FIELDS, prev.data, data);
+      return Object.keys(changes).length > 0 ? { batchId, packagingId, ...changes } : null;
+    })
+    .filter(Boolean);
+  if (batchDetails.length > 0) payload.batchDetails = batchDetails;
+
+  const hasChanges = Object.keys(payload).some((key) => key !== "productCategoryId");
+  return { payload, hasChanges };
+};

@@ -61,9 +61,29 @@ export interface BatchDetailsProps {
    * so the batch number is shown read-only instead.
    */
   lockedBatch?: boolean;
+  /**
+   * Editing a saved batch from Masters → Products. The master fields stay
+   * editable, but there is no purchase behind the edit, so the purchase
+   * quantity and free goods are hidden. Validation only judges what the user
+   * changed: a batch already on record (one near expiry, or saved under older
+   * rules) must stay editable for its rack or prices without first having to
+   * pass the checks a newly received batch would.
+   */
+  editExisting?: boolean;
+  /** Master fields shown read-only, by form field key (e.g. "rackLocation"). */
+  lockedFields?: string[];
 }
 
 const ADD_NEW_BATCH = 'ADD_NEW';
+
+/** Fields with no meaning when editing a saved batch (no purchase, hidden selling price). */
+const EDIT_IGNORED_FIELDS = new Set([
+  'purchaseQuantity',
+  'freeUnit',
+  'freeQuantity',
+  'sellingPricePerBox',
+  'sellingPricePerSmallestUnit',
+]);
 
 const EMPTY_FORM = {
   batchNumber: '',
@@ -136,7 +156,7 @@ const toLastOfMonth = (monthYear: string): string => {
 
 
 const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
-  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '', productId = '', packagingId = '', initialData, lockedBatch = false },
+  { mode = 'new', batches = [], purchaseUnit = '', smallestUnit = '', unitContains = '', productId = '', packagingId = '', initialData, lockedBatch = false, editExisting = false, lockedFields },
   ref
 ) => {
   const [formData, setFormData] = useState(() => {
@@ -153,6 +173,8 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
           expiryDate: toMonthInput(restored.expiryDate),
         };
   });
+  // The form as it opened — what editExisting judges "changed" against.
+  const [initialForm] = useState(formData);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // "" = nothing picked yet, ADD_NEW_BATCH = create one, otherwise a batchId.
   const [selectedBatch, setSelectedBatch] = useState('');
@@ -558,6 +580,30 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
       // bare "is required" only once a value is actually there.
       Object.assign(nextErrors, priceOrderErrors());
 
+      if (editExisting) {
+        const changed = (field: string) =>
+          String(formData[field as keyof typeof formData] ?? '') !==
+          String(initialForm[field as keyof typeof initialForm] ?? '');
+
+        // Only what the user touched is judged.
+        Object.keys(nextErrors).forEach((field) => {
+          if (EDIT_IGNORED_FIELDS.has(field) || !changed(field)) delete nextErrors[field];
+        });
+
+        // Cross-field rules land on one field but are broken by either.
+        if (changed('purchasePricePerBox') || changed('mrpPerBox')) {
+          Object.assign(nextErrors, priceOrderErrors());
+        }
+        if (
+          (changed('manufacturingDate') || changed('expiryDate')) &&
+          formData.manufacturingDate &&
+          formData.expiryDate &&
+          formData.expiryDate <= formData.manufacturingDate
+        ) {
+          nextErrors.expiryDate = 'Expiry date must be after manufacturing date';
+        }
+      }
+
       // A duplicate found on blur takes priority over the schema's own message.
       if (batchExistsError) nextErrors.batchNumber = batchExistsError;
 
@@ -570,6 +616,12 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
   const masterProps = isLocked
     ? { readOnly: true, disabled: true, className: 'bg-gray-50' }
     : { disabled: awaitingBatchChoice };
+
+  // A single master field the caller has locked, on top of the above.
+  const fieldProps = (field: string) =>
+    lockedFields?.includes(field)
+      ? { readOnly: true, disabled: true, className: 'bg-gray-50' }
+      : masterProps;
 
   // Per-unit prices are computed from the per-purchase-unit ones whenever the
   // pack size is known, so they stay read-only rather than drifting apart.
@@ -637,6 +689,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
                 value={formData.batchNumber}
                 onChange={(e) => handleChange('batchNumber', e.target.value)}
                 onBlur={(e) => checkBatchNumberExists(e.target.value)}
+                {...(lockedFields?.includes('batchNumber')
+                  ? { readOnly: true, disabled: true, className: 'bg-gray-50' }
+                  : {})}
                 error={errors.batchNumber || batchExistsError}
                 hint={isCheckingBatch ? 'Checking batch number…' : undefined}
                 rightIcon={
@@ -689,7 +744,9 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               error={errors.purchaseUnit}
             />
 
-            {/* The three purchase fields stay editable for a saved batch. */}
+            {/* The three purchase fields stay editable for a saved batch.
+                Editing from the master has no purchase, so they're hidden. */}
+            {!editExisting && (<>
             <Input
               label="Purchase Quantity"
               required
@@ -731,6 +788,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               error={errors.freeQuantity}
               disabled={awaitingBatchChoice}
             />
+            </>)}
 
             <Input
               label={`Purchase Price (per ${purchaseUnitLabel})`}
@@ -740,7 +798,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               value={formData.purchasePricePerBox}
               onChange={(e) => handleChange('purchasePricePerBox', e.target.value)}
               error={errors.purchasePricePerBox}
-              {...masterProps}
+              {...fieldProps('purchasePricePerBox')}
             />
             <Input
               label={`MRP (per ${purchaseUnitLabel})`}
@@ -800,7 +858,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
               value={formData.rackLocation}
               onChange={(e) => handleChange('rackLocation', e.target.value)}
               error={errors.rackLocation}
-              {...masterProps}
+              {...fieldProps('rackLocation')}
             />
             <Input
               label={`Minimum Stock Level (${smallestUnitLabel})`}
@@ -817,7 +875,7 @@ const BatchDetails = forwardRef<BatchDetailsRef, BatchDetailsProps>((
                   setErrors(prev => ({ ...prev, minimumStockLevel: '' }));
               }}
               error={errors.minimumStockLevel}
-              {...masterProps}
+              {...fieldProps('minimumStockLevel')}
             />
           </div>
         </div>

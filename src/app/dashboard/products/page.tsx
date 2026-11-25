@@ -26,12 +26,15 @@ import type {
   // ProductExpiryKpi, // old product-level expiry KPI type (kept for reference)
   BatchExpiryKpi,
   ProductBatchDetails,
+  ProductDetails,
   ProductPackageDetails,
   ProductStockSummary,
   StockStatus,
 } from "@/types/ProductData";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import EditProductView from "./component/EditProductView";
+import { useModulePermissions } from "@/hooks/useModulePermissions";
 
 interface StatCard {
   /** Field on the batch expiry-KPI payload that supplies this card's count. */
@@ -308,51 +311,64 @@ const batchColumns: TableColumn<ProductBatchDetails>[] = [
   },
 ];
 
+/** `onEdit` is left out when the user may not edit products — no button then. */
 const buildPackageColumns = (
-  productName: string
+  productName: string,
+  onEdit?: (pkg: ProductPackageDetails) => void
 ): TableColumn<ProductPackageDetails>[] => [
-  {
-    header: "Variant (Pack)",
-    render: (pkg) => (
-      <div className="flex flex-col gap-1">
-        <span className="text-label-l4 font-semibold text-pneutral-900">
-          {productName} {packageSmallestUnitName(pkg)}
+    {
+      header: "Variant (Pack)",
+      render: (pkg) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-label-l4 font-semibold text-pneutral-900">
+            {productName} {packageSmallestUnitName(pkg)}
+          </span>
+          <span className="text-label-l3 font-regular text-pneutral-900">
+            {pkg.purchaseUnitContains === 1
+              ? pkg.purchaseUnit
+              : `${pkg.purchaseUnit} of ${pkg.purchaseUnitContains}`}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Total Stock",
+      render: (pkg) => (
+        <span className="text-p3 font-semibold text-pneutral-900">
+          {packageStock(pkg)}
         </span>
-        <span className="text-label-l3 font-regular text-pneutral-900">
-          {pkg.purchaseUnitContains === 1
-            ? pkg.purchaseUnit
-            : `${pkg.purchaseUnit} of ${pkg.purchaseUnitContains}`}
+      ),
+    },
+    {
+      header: "Overall Status",
+      render: (pkg) => <StatusBadge status={packageStatus(pkg)} />,
+    },
+    {
+      header: "Nearest Expiry",
+      render: (pkg) => (
+        <span className="text-label-l4 font-regular text-pneutral-900">
+          {formatNearestExpiry(packageNearestExpiry(pkg))}
         </span>
-      </div>
-    ),
-  },
-  {
-    header: "Total Stock",
-    render: (pkg) => (
-      <span className="text-p3 font-semibold text-pneutral-900">
-        {packageStock(pkg)}
-      </span>
-    ),
-  },
-  {
-    header: "Overall Status",
-    render: (pkg) => <StatusBadge status={packageStatus(pkg)} />,
-  },
-  {
-    header: "Nearest Expiry",
-    render: (pkg) => (
-      <span className="text-label-l4 font-regular text-pneutral-900">
-        {formatNearestExpiry(packageNearestExpiry(pkg))}
-      </span>
-    ),
-  },
-  {
-    header: "Actions",
-    width: "w-20",
-    align: "center",
-    render: (_pkg, { expanded, toggle }) => (
-      <div className="flex items-center justify-center gap-3">
-        {/* <button type="button" aria-label="View variant">
+      ),
+    },
+    {
+      header: "Actions",
+      width: "w-20",
+      align: "center",
+      render: (pkg, { expanded, toggle }) => (
+        <div className="flex items-center justify-center gap-3">
+          {onEdit && (
+            <button
+              type="button"
+              aria-label="Edit variant"
+              title="Edit product, variant & batches"
+              onClick={() => onEdit(pkg)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-pneutral-100"
+            >
+              <Image src="/UserManagement/EditIcon.svg" alt="" width={16} height={16} />
+            </button>
+          )}
+          {/* <button type="button" aria-label="View variant">
           <Image
             src="/ProductManagement/ViewIcon.svg"
             alt=""
@@ -360,17 +376,17 @@ const buildPackageColumns = (
             height={16}
           />
         </button> */}
-        <button
-          type="button"
-          aria-label={expanded ? "Collapse batches" : "Expand batches"}
-          onClick={toggle}
-        >
-          <Chevron open={expanded} />
-        </button>
-      </div>
-    ),
-  },
-];
+          <button
+            type="button"
+            aria-label={expanded ? "Collapse batches" : "Expand batches"}
+            onClick={toggle}
+          >
+            <Chevron open={expanded} />
+          </button>
+        </div>
+      ),
+    },
+  ];
 
 /**
  * True when the product has sellable stock and every sellable (in-stock,
@@ -387,48 +403,48 @@ const isProductLowStock = (packages: ProductPackageDetails[]): boolean => {
 const buildProductColumns = (
   lowStockIds: Set<string>
 ): TableColumn<ProductStockSummary>[] => [
-  {
-    header: "Product Name / Variant",
-    render: (p) => (
-      <div className="flex flex-col gap-1">
-        <span className="text-label-l4 font-semibold text-pneutral-900">
-          {p.productName}
+    {
+      header: "Product Name / Variant",
+      render: (p) => (
+        <div className="flex flex-col gap-1">
+          <span className="text-label-l4 font-semibold text-pneutral-900">
+            {p.productName}
+          </span>
+          <span className="text-label-l3 font-regular text-pneutral-900">
+            {p.brandName || "—"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      header: "Total Stock",
+      render: (p) => (
+        <span className="text-p3 font-semibold text-pneutral-900">
+          {p.totalStock}
         </span>
-        <span className="text-label-l3 font-regular text-pneutral-900">
-          {p.brandName || "—"}
+      ),
+    },
+    {
+      header: "Overall Status",
+      render: (p) => (
+        <StatusBadge
+          status={
+            p.overallStatus === "ACTIVE" && lowStockIds.has(p.productId)
+              ? "Low Stock"
+              : STOCK_STATUS_BADGE[p.overallStatus]
+          }
+        />
+      ),
+    },
+    {
+      header: "Nearest Expiry",
+      render: (p) => (
+        <span className="text-label-l4 font-regular text-pneutral-900">
+          {formatNearestExpiry(p.nearestExpiryDate)}
         </span>
-      </div>
-    ),
-  },
-  {
-    header: "Total Stock",
-    render: (p) => (
-      <span className="text-p3 font-semibold text-pneutral-900">
-        {p.totalStock}
-      </span>
-    ),
-  },
-  {
-    header: "Overall Status",
-    render: (p) => (
-      <StatusBadge
-        status={
-          p.overallStatus === "ACTIVE" && lowStockIds.has(p.productId)
-            ? "Low Stock"
-            : STOCK_STATUS_BADGE[p.overallStatus]
-        }
-      />
-    ),
-  },
-  {
-    header: "Nearest Expiry",
-    render: (p) => (
-      <span className="text-label-l4 font-regular text-pneutral-900">
-        {formatNearestExpiry(p.nearestExpiryDate)}
-      </span>
-    ),
-  },
-];
+      ),
+    },
+  ];
 
 /* ------------------------------ nested tables ----------------------------- */
 
@@ -441,15 +457,15 @@ const renderPackageBatches = (pkg: ProductPackageDetails) => (
       rowKey={(b, i) => `${b.batchId}-${i}`}
       headerVariant="muted"
       container="box"
-      /* footer={
-        <button
-          type="button"
-          className="flex w-full items-center justify-center gap-2 py-3 text-label-l4 font-medium text-secondary-700"
-        >
-          <span className="text-p5 leading-none">+</span>
-          Add/View More Batches
-        </button>
-      } */
+    /* footer={
+      <button
+        type="button"
+        className="flex w-full items-center justify-center gap-2 py-3 text-label-l4 font-medium text-secondary-700"
+      >
+        <span className="text-p5 leading-none">+</span>
+        Add/View More Batches
+      </button>
+    } */
     />
   </div>
 );
@@ -462,10 +478,17 @@ const renderPackageBatches = (pkg: ProductPackageDetails) => (
 const ProductPackages = ({
   productId,
   productName,
+  onEditVariant,
 }: {
   productId: string;
   productName: string;
+  /**
+   * Opens the edit view on a variant, with the details already loaded here.
+   * Absent when the user lacks PRODUCTS / EDIT, which hides the edit button.
+   */
+  onEditVariant?: (details: ProductDetails, packagingId: string) => void;
 }) => {
+  const [details, setDetails] = useState<ProductDetails | null>(null);
   const [packages, setPackages] = useState<ProductPackageDetails[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -477,8 +500,11 @@ const ProductPackages = ({
       setLoading(true);
       setError(null);
       try {
-        const details = await getProductDetails(productId);
-        if (active) setPackages(details.packages);
+        const data = await getProductDetails(productId);
+        if (active) {
+          setDetails(data);
+          setPackages(data.packages);
+        }
       } catch (err) {
         if (active) {
           setError(
@@ -506,7 +532,14 @@ const ProductPackages = ({
   return (
     <div className="pl-10">
       <TableWithoutGrid
-        columns={buildPackageColumns(productName)}
+        columns={buildPackageColumns(
+          productName,
+          onEditVariant
+            ? (pkg) => {
+              if (details) onEditVariant(details, pkg.packagingId);
+            }
+            : undefined
+        )}
         data={packages}
         rowKey={(pkg) => pkg.packagingId}
         headerVariant="muted"
@@ -596,10 +629,23 @@ const Page = () => {
     (state) => state.selectedPharmacy?.pharmacyId ?? ""
   );
   const actingAsWarehouse = useWarehouseStore((state) => state.actingAsWarehouse);
+  // PRODUCTS / PRODUCTS / EDIT — what PUT /product/{id}/edit is guarded by.
+  // Super Admin always passes.
+  const { canEdit } = useModulePermissions("PRODUCTS");
+  // Variant open in the edit view, if any.
+  const [editing, setEditing] = useState<{
+    product: ProductStockSummary;
+    details: ProductDetails;
+    packagingId: string;
+  } | null>(null);
+  // Bumped after an edit so the list and any expanded variant tables reload.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
+      // Only the first load blanks the table; a refresh after an edit swaps
+      // the rows in place so the user keeps their page and expanded rows.
+      if (refreshKey === 0) setLoading(true);
       try {
         const data = await getProductStockSummary();
         setProducts(data);
@@ -611,7 +657,7 @@ const Page = () => {
     };
 
     load();
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     const load = async () => {
@@ -787,20 +833,41 @@ const Page = () => {
 
   const renderProductPackages = (product: ProductStockSummary) => (
     <ProductPackages
+      // A new key after an edit remounts the table so it refetches.
+      key={`${product.productId}-${refreshKey}`}
       productId={product.productId}
       productName={product.productName}
+      onEditVariant={
+        canEdit
+          ? (details, packagingId) => setEditing({ product, details, packagingId })
+          : undefined
+      }
     />
   );
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 text-h4 text-pneutral-900">
-          <span className="font-semibold">Inventory</span>
-          <span className="font-normal">/ Stock with Expiry Status</span>
-        </div>
+  const handleProductSaved = () => {
+    const id = editing?.product.productId;
+    setEditing(null);
+    // Batch prices / levels may have moved, so re-check low stock for it.
+    if (id)
+      setLowStockChecked((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    setRefreshKey((k) => k + 1);
+  };
 
-        {/* <Button
+  return (
+    <>
+      <div className={editing && canEdit ? "hidden" : "flex flex-col gap-4"}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1 text-h4 text-pneutral-900">
+            <span className="font-semibold">Inventory</span>
+            <span className="font-normal">/ Stock with Expiry Status</span>
+          </div>
+
+          {/* <Button
           variant="primary"
           className="h-9! min-w-[108px] gap-2 px-3 bg-primary-800! text-label-l3! font-medium! shadow-[-1px_1px_4px_0px_#00000040]"
         >
@@ -813,126 +880,141 @@ const Page = () => {
           />
           Add Product
         </Button> */}
-      </div>
+        </div>
 
-      <div className="flex flex-wrap gap-3">
-        {statCards.map(({ key, label, sublabel, icon: Icon, iconBg, iconColor }) => (
-          <div
-            key={label}
-            className={`flex items-center gap-2 flex-1 min-w-[204px] h-[118px] p-3 rounded-xl border border-pneutral-100 bg-white ${!Icon ? "justify-center" : ""
-              }`}
-          >
-            {Icon && (
-              <div
-                className={`flex items-center justify-center w-13 h-13 rounded-full shrink-0 ${iconBg}`}
-              >
-                {Icon && (
-                  <div
-                    className={`flex items-center justify-center w-13 h-13 rounded-full shrink-0 ${iconBg}`}
-                  >
-                    <Image
-                      src={Icon}
-                      alt={label}
-                      width={20}
-                      height={20}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
+        <div className="flex flex-wrap gap-3">
+          {statCards.map(({ key, label, sublabel, icon: Icon, iconBg, iconColor }) => (
             <div
-              className="flex flex-col justify-between self-stretch">
-              <span className="text-label-l3 font-medium text-pneutral-900">
-                {label}
-              </span>
-              <span className="text-h4 font-medium text-pneutral-900 leading-9">
-                {kpi ? kpi[key] : 0}
-              </span>
-              <span className="text-label-l2 font-normal text-base-black">
-                {sublabel}
-              </span>
+              key={label}
+              className={`flex items-center gap-2 flex-1 min-w-[204px] h-[118px] p-3 rounded-xl border border-pneutral-100 bg-white ${!Icon ? "justify-center" : ""
+                }`}
+            >
+              {Icon && (
+                <div
+                  className={`flex items-center justify-center w-13 h-13 rounded-full shrink-0 ${iconBg}`}
+                >
+                  {Icon && (
+                    <div
+                      className={`flex items-center justify-center w-13 h-13 rounded-full shrink-0 ${iconBg}`}
+                    >
+                      <Image
+                        src={Icon}
+                        alt={label}
+                        width={20}
+                        height={20}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div
+                className="flex flex-col justify-between self-stretch">
+                <span className="text-label-l3 font-medium text-pneutral-900">
+                  {label}
+                </span>
+                <span className="text-h4 font-medium text-pneutral-900 leading-9">
+                  {kpi ? kpi[key] : 0}
+                </span>
+                <span className="text-label-l2 font-normal text-base-black">
+                  {sublabel}
+                </span>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
 
-      <div className="flex flex-row items-start gap-4 w-full">
-        <div className="flex items-center w-[286px] shrink-0 h-[43px] rounded-lg border border-pneutral-200 bg-white overflow-hidden">
-          <div className="flex-1 min-w-0">
-            <Input
-              type="text"
-              placeholder="Search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-[43px]! border-0! rounded-none bg-transparent"
+        <div className="flex flex-row items-start gap-4 w-full">
+          <div className="flex items-center w-[286px] shrink-0 h-[43px] rounded-lg border border-pneutral-200 bg-white overflow-hidden">
+            <div className="flex-1 min-w-0">
+              <Input
+                type="text"
+                placeholder="Search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-[43px]! border-0! rounded-none bg-transparent"
+              />
+            </div>
+            <Button
+              type="button"
+              className="h-[43px]! w-[43px] shrink-0 rounded-none! border-l border-pneutral-200 bg-[#E4D6FB]! text-primary-900!"
+            >
+              <Image
+                src="/ProductManagement/Search.svg"
+                alt="Search"
+                width={18}
+                height={18}
+              />
+            </Button>
+          </div>
+
+          <div className="flex-1 min-w-[166px]">
+            <Dropdown
+              options={categoryOptions}
+              value={category}
+              onChange={setCategory}
+              placeholder="All Categories"
             />
           </div>
-          <Button
-            type="button"
-            className="h-[43px]! w-[43px] shrink-0 rounded-none! border-l border-pneutral-200 bg-[#E4D6FB]! text-primary-900!"
-          >
-            <Image
-              src="/ProductManagement/Search.svg"
-              alt="Search"
-              width={18}
-              height={18}
+
+          <div className="flex-1 min-w-[166px]">
+            <Dropdown
+              options={statusOptions}
+              value={status}
+              onChange={setStatus}
+              placeholder="All Status"
             />
-          </Button>
-        </div>
+          </div>
 
-        <div className="flex-1 min-w-[166px]">
-          <Dropdown
-            options={categoryOptions}
-            value={category}
-            onChange={setCategory}
-            placeholder="All Categories"
+          <div className="flex-1 min-w-[190px]">
+            <Dropdown
+              options={manufacturerOptions}
+              value={manufacturer}
+              onChange={setManufacturer}
+              placeholder="All Manufacturers"
+            />
+          </div>
+
+          <FilterPanel
+            sections={PRODUCT_FILTER_SECTIONS}
+            value={advancedFilters}
+            defaults={DEFAULT_ADVANCED_FILTERS}
+            onApply={(v) => setAdvancedFilters(v as AdvancedFilters)}
+            onReset={() => setAdvancedFilters(DEFAULT_ADVANCED_FILTERS)}
           />
         </div>
 
-        <div className="flex-1 min-w-[166px]">
-          <Dropdown
-            options={statusOptions}
-            value={status}
-            onChange={setStatus}
-            placeholder="All Status"
-          />
-        </div>
-
-        <div className="flex-1 min-w-[190px]">
-          <Dropdown
-            options={manufacturerOptions}
-            value={manufacturer}
-            onChange={setManufacturer}
-            placeholder="All Manufacturers"
-          />
-        </div>
-
-        <FilterPanel
-          sections={PRODUCT_FILTER_SECTIONS}
-          value={advancedFilters}
-          defaults={DEFAULT_ADVANCED_FILTERS}
-          onApply={(v) => setAdvancedFilters(v as AdvancedFilters)}
-          onReset={() => setAdvancedFilters(DEFAULT_ADVANCED_FILTERS)}
+        <TableWithoutGrid
+          columns={productColumns}
+          data={pageData}
+          rowKey={(p) => p.productId}
+          headerVariant="primary"
+          container="card"
+          loading={loading || (status === "SLOW_MOVING" && unitsSoldLoading)}
+          renderExpanded={renderProductPackages}
+          pagination={{
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+            totalItems: filteredProducts.length,
+            onPageChange: setCurrentPage,
+          }}
         />
       </div>
 
-      <TableWithoutGrid
-        columns={productColumns}
-        data={pageData}
-        rowKey={(p) => p.productId}
-        headerVariant="primary"
-        container="card"
-        loading={loading || (status === "SLOW_MOVING" && unitsSoldLoading)}
-        renderExpanded={renderProductPackages}
-        pagination={{
-          page: currentPage,
-          pageSize: PAGE_SIZE,
-          totalItems: filteredProducts.length,
-          onPageChange: setCurrentPage,
-        }}
-      />
-    </div>
+      {/* Editing takes over the page, laid out like the purchase flow's Add
+          Item step. The list above stays mounted (just hidden) so its filters,
+          page and expanded rows are as they were on the way back. */}
+      {editing && canEdit && (
+        <EditProductView
+          key={editing.packagingId}
+          details={editing.details}
+          packagingId={editing.packagingId}
+          manufacturerName={editing.product.manufacturerName}
+          onCancel={() => setEditing(null)}
+          onSaved={handleProductSaved}
+        />
+      )}
+    </>
   );
 };
 

@@ -7,6 +7,7 @@ import Button from "@/app/components/common/Button";
 import ProductDetails from "@/app/dashboard/products/component/ProductDetails";
 import PackagingDetails, { PackagingDetailsRef, PackagingUnits } from "@/app/dashboard/products/component/PackagingDetails";
 import BatchDetails, { BatchDetailsRef } from "@/app/dashboard/products/component/BatchDetails";
+import { PRODUCT_CATEGORIES } from "@/app/dashboard/products/component/productCategories";
 import PurchaseSuccessModal from "@/app/components/common/PurchaseSuccessModal";
 import ConfirmDialog from "@/app/components/common/ConfirmDialog";
 import InvoiceSummary from "./InvoiceSummary";
@@ -49,13 +50,6 @@ const getApiErrorMessage = (error: unknown, fallback: string): string => {
   return fallback;
 };
 
-const PRODUCT_CATEGORIES = [
-  { id: 1, label: 'Drugs', iconPath: '/ProductManagement/Drug.svg', width: 'w-[178px]' },
-  { id: 2, label: 'Supplements /\nNutraceuticals', iconPath: '/ProductManagement/Suppliments.svg', width: 'w-[246px]' },
-  { id: 4, label: 'Cosmetic &\nPersonal Use', iconPath: '/ProductManagement/Cosmetics.svg', width: 'w-[233px]' },
-  { id: 3, label: 'Food & Infant\nNutrition', iconPath: '/ProductManagement/Food&Infant.svg', width: 'w-[242px]' },
-  { id: 5, label: 'Medical\nDevices & Equipment', iconPath: '/ProductManagement/MedicalDevices.svg', width: 'w-[200px]' },
-];
 
 // A step form counts as "touched" if any of its fields holds a real value.
 // Auto-generated row ids (e.g. the blank molecule row's id) are ignored so a

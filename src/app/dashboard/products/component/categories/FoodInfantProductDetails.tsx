@@ -20,9 +20,12 @@ export interface ProductDetailsRef {
  */
 export interface FoodInfantProductDetailsProps {
   initialData?: Record<string, any>;
+  /** Fields shown read-only (editing a saved product). */
+  lockedFields?: string[];
 }
 
-const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProductDetailsProps>(({ initialData }, ref) => {
+const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProductDetailsProps>(({ initialData, lockedFields }, ref) => {
+  const isLocked = (field: string) => !!lockedFields?.includes(field);
   const [formData, setFormData] = useState(() => {
     const blank = {
       productName: "",
@@ -158,6 +161,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
           handleChange('productCategory', val);
           handleChange('productSubCategory', ""); // Reset sub-category when category changes
         }}
+        disabled={isLocked('productCategory')}
       />
       
       <Dropdown
@@ -193,6 +197,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
         value={formData.ageGroup}
         onChange={(val) => handleChange('ageGroup', val)}
         multiple
+        disabled={isLocked('ageGroup')}
       />
       
       <div className="flex flex-col gap-1 w-full">
@@ -203,10 +208,11 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
           <div className="flex-1">
             <input 
               type="text" 
-              placeholder="e.g. 500" 
+              placeholder="e.g. 500"
               value={formData.netQuantity}
               onChange={(e) => handleChange('netQuantity', e.target.value)}
-              className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 ${
+              disabled={isLocked('netQuantity')}
+              className={`w-full h-12 rounded-l-md border border-r-0 px-3 outline-none text-p4 text-pneutral-900 focus:border-pneutral-500 disabled:cursor-not-allowed disabled:bg-sneutral-100 disabled:text-pneutral-500 ${
                 errors.netQuantity ? "border-warning-500" : "border-pneutral-300"
               }`} 
             />
@@ -219,7 +225,8 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
               <path d="M6 9l6 6 6-6" />
             </svg>
             <select
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+              disabled={isLocked('netQuantityUnit')}
               value={formData.netQuantityUnit}
               onChange={(e) => handleChange('netQuantityUnit', e.target.value)}
             >
@@ -252,6 +259,7 @@ const FoodInfantProductDetails = forwardRef<ProductDetailsRef, FoodInfantProduct
         value={formData.gst}
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
+        disabled={isLocked('gst')}
       />
       
       <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} />

@@ -19,9 +19,12 @@ export interface ProductDetailsRef {
  */
 export interface NonConsumableProductDetailsProps {
   initialData?: Record<string, any>;
+  /** Fields shown read-only (editing a saved product). */
+  lockedFields?: string[];
 }
 
-const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableProductDetailsProps>(({ initialData }, ref) => {
+const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableProductDetailsProps>(({ initialData, lockedFields }, ref) => {
+  const isLocked = (field: string) => !!lockedFields?.includes(field);
   const [formData, setFormData] = useState(() => {
     const blank = {
       productName: "",
@@ -141,6 +144,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
           handleChange('deviceSubCategory', ""); // Reset subcategory when category changes
         }}
         error={errors.deviceCategory}
+        disabled={isLocked('deviceCategory')}
       />
       
       <Dropdown
@@ -168,6 +172,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
         value={formData.deviceClassification}
         onChange={(val) => handleChange('deviceClassification', val)}
         error={errors.deviceClassification}
+        disabled={isLocked('deviceClassification')}
       />
       
       <Input label="Intended Use / Purpose" placeholder="Enter Intended Use" value={formData.intendedUse} onChange={(e) => handleChange('intendedUse', e.target.value)} error={errors.intendedUse} maxLength={100} />
@@ -188,7 +193,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
         onChange={(val) => handleChange('powerSource', val)}
       />
       
-      <Input label="Warranty Period (in months)" required placeholder="Enter Warranty" value={formData.warrantyPeriod} onChange={(e) => handleChange('warrantyPeriod', e.target.value)} error={errors.warrantyPeriod} maxLength={3} />
+      <Input label="Warranty Period (in months)" required placeholder="Enter Warranty" value={formData.warrantyPeriod} onChange={(e) => handleChange('warrantyPeriod', e.target.value)} error={errors.warrantyPeriod} maxLength={3} disabled={isLocked('warrantyPeriod')} />
       
       <Dropdown
         label="AMC / Service Availability"
@@ -201,6 +206,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
         value={formData.amcServiceAvailability}
         onChange={(val) => handleChange('amcServiceAvailability', val)}
         error={errors.amcServiceAvailability}
+        disabled={isLocked('amcServiceAvailability')}
       />
       
       <Input label="Manufacturer Name" required placeholder="Enter Manufacturer Name" value={formData.manufacturerName} onChange={(e) => handleChange('manufacturerName', e.target.value)} error={errors.manufacturerName} maxLength={60} />
@@ -226,6 +232,7 @@ const NonConsumableProductDetails = forwardRef<ProductDetailsRef, NonConsumableP
         onChange={(val) => handleChange('gst', val)}
         menuPlacement="top"
         error={errors.gst}
+        disabled={isLocked('gst')}
       />
       
       <Input label="Hsn code" required placeholder="Enter HSN Code" value={formData.hsnCode} onChange={(e) => handleChange('hsnCode', e.target.value)} error={errors.hsnCode} />
