@@ -126,6 +126,7 @@ const Login = ({ onSubmit }: LoginProps) => {
           Send OTP
         </Button>
 
+        {/* TODO: Register link hidden for now — re-enable when registration is opened up
         <div className="flex font-noto-sans text-p3 font-normal gap-3 justify-center">
           <span className="text-pneutral-900">Don't have an account?</span>
           <Link
@@ -135,6 +136,7 @@ const Login = ({ onSubmit }: LoginProps) => {
             Register
           </Link>
         </div>
+        */}
       </div>
     </div>
   );
