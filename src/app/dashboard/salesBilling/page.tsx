@@ -38,6 +38,8 @@ import {
   type DiscountType,
 } from "@/utils/billingTotals";
 import { formatDate } from "@/utils/formatDate";
+import { getUserById } from "@/services/UserManagementService";
+import { useCurrentUserName } from "@/app/dashboard/wearhouseStockReturn/useCurrentUserName";
 import {
   buildBillingPayload,
   createBilling,
@@ -298,6 +300,9 @@ interface BillDraft {
   authorizedBy?: string;
   /** Full name of the authorizer, as saved on the bill. */
   authorizedByName?: string;
+  /** Set only for a saved bill: full name of the user who raised it. A new bill
+   *  is billed by whoever is signed in. */
+  billedBy?: string;
   payment?: PaymentDetails;
   /** Uploaded once the bill has an id. */
   prescriptionFile?: File | null;
@@ -347,6 +352,8 @@ const SalesBillingContent = () => {
     returnAdjustment?: { returnedAmount: number; pendingBeforeReturns: number };
   } | null>(null);
   const [summaryMode, setSummaryMode] = useState<"create" | "view" | "download">("create");
+  /** "Billed by" on a bill being raised now. */
+  const currentUserName = useCurrentUserName("");
   /**
    * A saved bill being written to PDF. It never takes over the page — the copy
    * it is captured from renders off-screen, so the list stays interactive.
@@ -441,7 +448,20 @@ const SalesBillingContent = () => {
     try {
       const bill = await getBillingById(billingId);
       const payment = bill.billingPayments?.[0];
-      const lines = await withBatchExpiry(toBillLines(bill));
+      // createdBy is the billing user's raw id. Resolved before the invoice
+      // renders, so a PDF capture never lands without it; a failed lookup just
+      // leaves the line blank rather than blocking the bill.
+      const [lines, billedBy] = await Promise.all([
+        withBatchExpiry(toBillLines(bill)),
+        bill.createdBy
+          ? getUserById(bill.createdBy)
+              .then((user) => (user?.fullName as string | undefined) ?? "")
+              .catch((err) => {
+                console.error("Failed to fetch the billing user:", err);
+                return "";
+              })
+          : Promise.resolve(""),
+      ]);
 
       const savedDraft: BillDraft = {
         customer: {
@@ -481,6 +501,7 @@ const SalesBillingContent = () => {
         // Only set on bills that carried a discount.
         discountReason: bill.discountReason ?? "",
         authorizedByName: bill.discountAuthorizedBy ?? "",
+        billedBy,
         // Whatever was uploaded against the bill, so the invoice screen can
         // offer it beside Print.
         prescriptionUrl: bill.prescriptionUrl,
@@ -793,6 +814,7 @@ const SalesBillingContent = () => {
         prescriptionUrl={draft.prescriptionUrl}
         discountReason={draft.discountReason}
         discountAuthorizedBy={draft.authorizedByName}
+        billedBy={draft.billedBy ?? currentUserName}
         onBack={() => {
           if (summaryMode === "view" && returnTo) {
             // Reached from another screen's link — go back there
@@ -882,6 +904,7 @@ const SalesBillingContent = () => {
           pharmacy={downloading.pharmacy}
           discountReason={downloading.draft.discountReason}
           discountAuthorizedBy={downloading.draft.authorizedByName}
+          billedBy={downloading.draft.billedBy}
           onDone={() => setDownloading(null)}
         />
       )}

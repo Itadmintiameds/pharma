@@ -296,6 +296,17 @@ body { margin: 0 !important; padding: 0 !important; }
 
 [data-print="footer"] span { font-size: 7.5pt !important; }
 
+/* On paper the footer drops "Billed By" and goes back to two ends: terms in
+   the left corner, branding on the right. The screen's three-track grid is
+   swapped for a plain row so nothing is left holding the empty first track. */
+[data-print="footer"] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+[data-print="billed-by"] { display: none !important; }
+[data-print="terms"] { text-align: left !important; }
+
 /* The mark is a cropping window, so the window and the artwork inside it have
    to be resized together or the crop lands somewhere else. One scale, 14/42,
    applied to the same 126x43 / 40x42 geometry the component documents. */

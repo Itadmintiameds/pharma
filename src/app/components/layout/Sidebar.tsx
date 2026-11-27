@@ -26,6 +26,9 @@ import {
 } from "lucide-react";
 import { logout } from "@/services/AuthService";
 import Image from "next/image";
+
+/** Shown above Logout. Update this on every release. */
+const APP_VERSION = "1.0.1";
 import { usePharmacyStore } from "@/store/pharmacyStore";
 import { useWarehouseStore } from "@/store/warehouseStore";
 import { useAccess } from "@/app/components/providers/AccessProvider";
@@ -401,7 +404,7 @@ const Sidebar = () => {
       {/* Bottom Section: User & Logout. Outside the scroll area and shrink-0,
           so it stays on screen whatever the nav above it does — signing out is
           not something to have to scroll for. */}
-      <div className="shrink-0 flex flex-col gap-4 border-t border-white/10 px-[20px] pt-3 pb-[24px]">
+      <div className="shrink-0 flex flex-col gap-2 border-t border-white/10 px-[20px] pt-3 pb-[24px]">
         {/* Logout Button */}
         <button
           onClick={handleLogout}
@@ -410,6 +413,11 @@ const Sidebar = () => {
           <LogOut size={18} className="text-warning-500 shrink-0" />
           <span>Logout</span>
         </button>
+
+        {/* App version — bump APP_VERSION on each release. */}
+        <span className="self-end px-[12px] text-[12px] font-normal text-pneutral-50/70 select-none">
+          V {APP_VERSION}
+        </span>
       </div>
     </aside>
   );

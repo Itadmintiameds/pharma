@@ -313,6 +313,8 @@ export interface BillingRecord {
   billingId: number;
   billNo: string;
   createdAt: string;
+  /** The billing user's raw id — resolve it to a name before showing it. */
+  createdBy?: string | null;
   customerId: number | null;
   customerName: string | null;
   customerPhoneNo: string | null;
