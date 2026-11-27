@@ -1,4 +1,12 @@
-import { EmailOtpRequest, EmailOtpVerifyRequest, LoginRequest, RegisterRequest, VerifyOtpRequest } from "@/types/AuthData";
+import {
+  EmailOtpRequest,
+  EmailOtpVerifyRequest,
+  ForgotPasswordRequest,
+  LoginRequest,
+  RegisterRequest,
+  ResetPasswordRequest,
+  VerifyOtpRequest,
+} from "@/types/AuthData";
 import api from "@/utils/api";
 import { handleApiError } from "@/utils/errorHandler";
 
@@ -62,6 +70,25 @@ export const verifyEmailOtp = async (data: EmailOtpVerifyRequest) => {
       error?.response?.data ||
       "Invalid OTP"
     );
+  }
+};
+
+/** Emails a password-reset OTP. The reply is the same whether or not the account exists. */
+export const forgotPassword = async (data: ForgotPasswordRequest) => {
+  try {
+    const response = await api.post("/auth/forgot-password", data);
+    return response.data;
+  } catch (error) {
+    handleApiError(error, "Failed to send reset OTP.");
+  }
+};
+
+export const resetPassword = async (data: ResetPasswordRequest) => {
+  try {
+    const response = await api.post("/auth/reset-password", data);
+    return response.data;
+  } catch (error) {
+    handleApiError(error, "Failed to reset password.");
   }
 };
 
