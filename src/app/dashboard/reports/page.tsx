@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Search } from "lucide-react";
+import { Heart, Search } from "lucide-react";
 import Input from "@/app/components/common/Input";
+import { useReportFavourites } from "./components/useReportFavourites";
 
 const CARD_SHADOW =
   "shadow-[4px_4px_12px_0px_rgba(213,213,212,0.2),-4px_-4px_12px_0px_rgba(213,213,212,0.2),0px_0px_12px_0px_rgba(192,193,190,0.2)]";
@@ -305,18 +306,35 @@ const REPORT_SECTIONS: ReportSection[] = [
 const countReports = (groups: ReportGroup[]) =>
   groups.reduce((sum, g) => sum + g.reports.length, 0);
 
-const TABS: { key: Category | "all"; label: string; count: number }[] = [
-  {
-    key: "all",
-    label: "All reports",
-    count: REPORT_SECTIONS.reduce((sum, s) => sum + countReports(s.groups), 0),
-  },
-  ...REPORT_SECTIONS.map((s) => ({
-    key: s.category,
-    label: s.title,
-    count: countReports(s.groups),
-  })),
-];
+// A report's stable identity is its route segment (e.g. "BillSummary"):
+// titles repeat across groups ("Sales Summary"), hrefs don't.
+const reportKey = (report: Report) => report.href.slice(report.href.lastIndexOf("/") + 1);
+
+// Every report by key, for the Favourites tab.
+const REPORTS_BY_KEY = new Map(
+  REPORT_SECTIONS.flatMap((s) =>
+    s.groups.flatMap((g) => g.reports.map((r) => [reportKey(r), r] as const))
+  )
+);
+
+const matchesQuery = (report: Report, q: string) =>
+  !q || report.title.toLowerCase().includes(q) || report.description.toLowerCase().includes(q);
+
+type TabKey = Category | "all" | "favourites";
+
+type Tab = { key: TabKey; label: string; count: number };
+
+const ALL_TAB: Tab = {
+  key: "all",
+  label: "All reports",
+  count: REPORT_SECTIONS.reduce((sum, s) => sum + countReports(s.groups), 0),
+};
+
+const CATEGORY_TABS: Tab[] = REPORT_SECTIONS.map((s) => ({
+  key: s.category,
+  label: s.title,
+  count: countReports(s.groups),
+}));
 
 const CountBadge = ({ count }: { count: number }) => (
   <span className="rounded-sm bg-primary-100 px-xsm py-xxsm text-p2 font-medium text-primary-800">
@@ -324,36 +342,88 @@ const CountBadge = ({ count }: { count: number }) => (
   </span>
 );
 
-const ReportCard = ({ report }: { report: Report }) => {
+type ReportCardProps = {
+  report: Report;
+  isFavourite: boolean;
+  onToggleFavourite: () => void;
+};
+
+// The whole card opens the report, but a button can't sit inside a link, so
+// the link is stretched over the card (absolute inset-0) and the heart button
+// is lifted above it (relative z-10).
+const ReportCard = ({ report, isFavourite, onToggleFavourite }: ReportCardProps) => {
   return (
-    <Link
-      href={report.href}
-      className={`group flex h-full flex-col gap-sm rounded-2xl bg-white p-md transition-colors hover:ring-1 hover:ring-secondary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary-700 ${CARD_SHADOW}`}
+    <div
+      className={`group relative flex h-full flex-col gap-sm rounded-2xl bg-white p-md transition-colors hover:ring-1 hover:ring-secondary-300 has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-secondary-700 ${CARD_SHADOW}`}
     >
+      <Link
+        href={report.href}
+        aria-label={report.title}
+        className="absolute inset-0 rounded-2xl focus-visible:outline-none"
+      />
       <div className="flex w-full items-center justify-between">
         <span className="flex size-11 items-center justify-center rounded-2xl bg-secondary-100">
           <Image src={`/Reports/ReportCard/${report.icon}.svg`} alt="" width={24} height={24} />
         </span>
+        <button
+          type="button"
+          onClick={onToggleFavourite}
+          aria-pressed={isFavourite}
+          aria-label={
+            isFavourite
+              ? `Remove ${report.title} from favourites`
+              : `Add ${report.title} to favourites`
+          }
+          title={isFavourite ? "Remove from favourites" : "Add to favourites"}
+          className="relative z-10 -mr-xsm -mt-xsm flex size-9 items-center justify-center rounded-full transition-colors hover:bg-warning-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning-200"
+        >
+          {/* "warning" is this theme's red palette ("danger" is yellow). */}
+          <Heart
+            className={`size-5 transition-all active:scale-90 ${
+              isFavourite
+                ? "fill-warning-500 text-warning-500"
+                : "fill-transparent text-pneutral-400 hover:text-warning-500"
+            }`}
+            strokeWidth={1.75}
+          />
+        </button>
+      </div>
+      <p className="text-label-l4 font-semibold text-pneutral-900">{report.title}</p>
+      <p className="text-p3 text-pneutral-500">{report.description}</p>
+      <div className="mt-auto flex w-full items-center justify-between gap-sm">
+        <p className="text-p2 text-pneutral-500">{report.formats ?? ALL_FORMATS}</p>
         <Image
           src="/Reports/ReportCard/OpenReport.svg"
           alt=""
           width={24}
           height={24}
-          className="transition-transform group-hover:translate-x-0.5"
+          className="shrink-0 transition-transform group-hover:translate-x-0.5"
         />
       </div>
-      <p className="text-label-l4 font-semibold text-pneutral-900">{report.title}</p>
-      <p className="text-p3 text-pneutral-500">{report.description}</p>
-      <p className="mt-auto text-p2 text-pneutral-500">{report.formats ?? ALL_FORMATS}</p>
-    </Link>
+    </div>
   );
 };
 
 export default function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<Category | "all">("all");
+  const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [query, setQuery] = useState("");
+  const { favouriteKeys, isFavourite, toggleFavourite } = useReportFavourites();
+
+  // Favourited reports in the order they were added. Keys for reports that
+  // no longer exist are skipped.
+  const favouriteReports = useMemo(
+    () => favouriteKeys.map((key) => REPORTS_BY_KEY.get(key)).filter((r) => r !== undefined),
+    [favouriteKeys]
+  );
+
+  const tabs: Tab[] = [
+    ALL_TAB,
+    { key: "favourites", label: "Favourites", count: favouriteReports.length },
+    ...CATEGORY_TABS,
+  ];
 
   const visibleSections = useMemo(() => {
+    if (activeTab === "favourites") return [];
     const q = query.trim().toLowerCase();
     return REPORT_SECTIONS.filter((s) => activeTab === "all" || s.category === activeTab)
       .map((s) => ({
@@ -361,18 +431,29 @@ export default function ReportsPage() {
         groups: s.groups
           .map((g) => ({
             ...g,
-            reports: q
-              ? g.reports.filter(
-                  (r) =>
-                    r.title.toLowerCase().includes(q) ||
-                    r.description.toLowerCase().includes(q)
-                )
-              : g.reports,
+            reports: g.reports.filter((r) => matchesQuery(r, q)),
           }))
           .filter((g) => g.reports.length > 0),
       }))
       .filter((s) => s.groups.length > 0);
   }, [activeTab, query]);
+
+  const visibleFavourites = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return favouriteReports.filter((r) => matchesQuery(r, q));
+  }, [favouriteReports, query]);
+
+  const renderCard = (report: Report) => {
+    const key = reportKey(report);
+    return (
+      <ReportCard
+        key={report.href}
+        report={report}
+        isFavourite={isFavourite(key)}
+        onToggleFavourite={() => toggleFavourite(key)}
+      />
+    );
+  };
 
   return (
     <div className="flex w-full flex-col gap-md">
@@ -399,8 +480,9 @@ export default function ReportsPage() {
           aria-label="Report categories"
           className="flex min-w-0 flex-1 items-start overflow-x-auto"
         >
-          {TABS.map((tab) => {
+          {tabs.map((tab) => {
             const active = tab.key === activeTab;
+            const isFavouritesTab = tab.key === "favourites";
             return (
               <button
                 key={tab.key}
@@ -411,10 +493,17 @@ export default function ReportsPage() {
                 className="flex shrink-0 flex-col items-center gap-xsm pt-xsm"
               >
                 <span
-                  className={`whitespace-nowrap px-sm text-label-l3 font-semibold ${
+                  className={`flex items-center gap-xxsm whitespace-nowrap px-sm text-label-l3 font-semibold ${
                     active ? "text-secondary-700" : "text-pneutral-500 hover:text-pneutral-700"
                   }`}
                 >
+                  {isFavouritesTab && (
+                    <Heart
+                      className="size-4 fill-warning-500 text-warning-500"
+                      strokeWidth={1.75}
+                      aria-hidden
+                    />
+                  )}
                   {tab.label} ({tab.count})
                 </span>
                 <span
@@ -437,8 +526,33 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Report sections */}
-      {visibleSections.length === 0 ? (
+      {/* Favourites tab */}
+      {activeTab === "favourites" ? (
+        favouriteReports.length === 0 ? (
+          <div className="flex flex-col items-center gap-sm py-hg text-center">
+            <Heart className="size-8 text-warning-500" strokeWidth={1.5} aria-hidden />
+            <p className="text-label-l4 font-semibold text-pneutral-900">No favourites yet</p>
+            <p className="text-p3 text-pneutral-500">
+              Tap the heart on any report card to add it here.
+            </p>
+          </div>
+        ) : visibleFavourites.length === 0 ? (
+          <p className="py-hg text-center text-p3 text-pneutral-500">
+            No favourite reports match &ldquo;{query}&rdquo;.
+          </p>
+        ) : (
+          <section className="flex w-full flex-col gap-md">
+            <div className="flex flex-wrap items-center gap-sm">
+              <h2 className="text-label-l5 font-semibold text-pneutral-900">Favourites</h2>
+              <CountBadge count={visibleFavourites.length} />
+            </div>
+            <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
+              {visibleFavourites.map(renderCard)}
+            </div>
+          </section>
+        )
+      ) : /* Report sections */
+      visibleSections.length === 0 ? (
         <p className="py-hg text-center text-p3 text-pneutral-500">
           No reports match &ldquo;{query}&rdquo;.
         </p>
@@ -462,9 +576,7 @@ export default function ReportsPage() {
                   />
                 </div>
                 <div className="grid w-full grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
-                  {group.reports.map((report) => (
-                    <ReportCard key={report.href} report={report} />
-                  ))}
+                  {group.reports.map(renderCard)}
                 </div>
               </div>
             ))}
